@@ -1,5 +1,7 @@
 # KarstNSim_Public
-Public version of KarstNSim, a C++ code for 3D Karst Network Simulation.
+Public version of KarstNSim, a C++ code for graph-based and geologically-driven simulation of 3D karst networks.
+
+* Linked publication : INSERT DOI.
 
 Its inputs and outputs are ASCII files and it can be run through a single command.
 It adapts the Karst simulation code proposed by <b> Paris, A., Guérin, E., Peytavie, A., Collon, P., Galin, E., 2021. Synthesizing Geologically Coherent Cave Networks. Comput. Graph. Forum 40, 277–287. https://doi.org/10.1111/cgf.14420 which is available on Github at : https://github.com/aparis69/Karst-Synthesis. </b>
@@ -7,9 +9,8 @@ This implementation includes modifications as compared to this initial independa
 
 The first version of KarstNSim was done in the frame of <b> Benoit Thebault </b> master's thesis, supervised by Pauline Collon. It was presented in the 2022 RINGMeeting in: <b> Thebault, B., Collon, P., Antoine, C., Paris, A., Galin, E., 2022. Karstic network simulation with γ -graphs, in: 2022 RING Meeting. </b>
 Since 2022 summer, KarstNSim is developed in the frame of <b> Augustin Gouy</b> PhD thesis, supervised by Pauline Collon and Vincent Bailly-Comte.
-This public version corresponds to the version of KarstNSim used to generate results of the following article :
-
-**Gouy et al., 2024, Journal of Hydrology.**
+This public version corresponds to the version of KarstNSim used to generate results of the publication proposed by <b> Gouy A., Collon P., Bailly-Comte V., Galin E., Antoine C., Thebault B., Landrein P., 2024. KarstNSim: a graph-based method for 3D geologically-driven
+simulation of karst networks. [insert DOI here] </b>
 
 It is recommended to read the methodology presented in the article to better apprehend the code.
 
