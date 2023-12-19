@@ -51,8 +51,6 @@ We provide here a synthetic dataset and instruction file in the correct format u
   <img src="vadose_contexts_example.png" alt="Figure 12 (Gouy et al., 2023)" width="100%">
     <p><em style="color:#555; font-size: smaller;">Title:</em> Figure 12 from Gouy et al. (2024). Networks generated in different geological media (in green: vadose conduits, in purple: phreatic conduits).
   Top: homogeneous medium. Middle: fractured medium with main orientations N00 and N60, both with same weight. Bottom:medium with an inception horizon.</p>
-  <p style="font-style: italic; color: #555; font-size: smaller;">Figure 12 (Gouy et al., 2023). Networks generated in different geological media (in green: vadose conduits, in purple: phreatic conduits).
-  Top: homogeneous medium. Middle: fractured medium with main orientations N00 and N60, both with same weight. Bottom:medium with an inception horizon.</p>
 </div>
 
 If you want to make modifications to the input parameters, open the instructions.txt file and change options as needed.
