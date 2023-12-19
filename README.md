@@ -45,8 +45,9 @@ A doxyfile is present in the archive. To automatically generate the documentatio
 
 ## Testing
 
-We provide here a synthetic dataset and instruction file in the correct format used for KarstNSim, which corresponds to inputs close to those used to generate examples of figure 12 in **[insert DOI]**.
+We provide here a synthetic dataset and instruction file in the correct format used for KarstNSim, which corresponds to inputs close to those used to generate examples of figure 12 in **[insert DOI]**. You can find those data in the Input_files folder.
 
+If you want to make modifications to the input parameters, open the instructions.txt file and change options as needed.
 
 <b>For any information </b>, please contact : 
 * Augustin Gouy : augustin.gouy@univ-lorraine.fr
