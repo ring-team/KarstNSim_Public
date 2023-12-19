@@ -47,9 +47,17 @@ A doxyfile is present in the archive. To automatically generate the documentatio
 
 We provide here a synthetic dataset and instruction file in the correct format used for KarstNSim, which corresponds to inputs used to generate examples similar to those of figure 12 in **[insert DOI]**. By default the generated example is the homogeneous medium one. You can find those data in the Input_files folder.
 
+<style>
+  .figure-title {
+    font-style: italic;
+    color: #555;
+    font-size: smaller;
+  }
+</style>
+
 <div style="text-align:center">
   <img src="vadose_contexts_example.png" alt="Figure 12 (Gouy et al., 2023)" width="100%">
-    <p><em style="color:#555; font-size: smaller;">Title:</em> Figure 12 from Gouy et al. (2024). Networks generated in different geological media (in green: vadose conduits, in purple: phreatic conduits).
+  <p class="figure-title">Figure 12: from Gouy et al. (2024). Networks generated in different geological media (in green: vadose conduits, in purple: phreatic conduits).
   Top: homogeneous medium. Middle: fractured medium with main orientations N00 and N60, both with same weight. Bottom:medium with an inception horizon.</p>
 </div>
 
