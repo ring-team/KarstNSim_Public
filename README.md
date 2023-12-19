@@ -45,9 +45,9 @@ A doxyfile is present in the archive. To automatically generate the documentatio
 
 ## Testing
 
-We provide here a synthetic dataset and instruction file in the correct format used for KarstNSim, which corresponds to inputs used to generate examples of figure 12 in **[insert DOI]**. By default the generated example is the homogeneous medium one. You can find those data in the Input_files folder.
+We provide here a synthetic dataset and instruction file in the correct format used for KarstNSim, which corresponds to inputs used to generate examples similar to those of figure 12 in **[insert DOI]**. By default the generated example is the homogeneous medium one. You can find those data in the Input_files folder.
 
-<img src="vadose_contexts_examples.png" alt="Figure 12 (Gouy et al., 2023)" width="200" align="center">
+<img src="vadose_contexts_example.png" alt="Figure 12 (Gouy et al., 2023)" width="200" align="center">
 
 If you want to make modifications to the input parameters, open the instructions.txt file and change options as needed.
 
