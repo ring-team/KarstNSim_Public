@@ -17,7 +17,7 @@ If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
 
 ## Requirements
 
-* CMake 3.8 to 3.28 or newer
+* CMake 3.8 to 3.28
 * Visual Studio 2017 or newer (for Windows)
 * C++14 or newer
 * (Optional) Doxygen 1.9.6 or newer for generating documentation
