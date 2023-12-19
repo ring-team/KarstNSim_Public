@@ -51,6 +51,8 @@ We provide here a synthetic dataset and instruction file in the correct format u
 
 <img src="vadose_contexts_example.png" alt="Figure 12 (Gouy et al., 2023)" width="100%" align="center">
 
+<b> Please note that to use the instruction file and run KarstNSim, you will have to precise the name of the simulation and the KarstNSim repertory path in the instructions.txt file. </b>
+
 If you want to make modifications to the input parameters, open the instructions.txt file and change options as needed.
 
 It is advised to use a 3D viewer software to visualize complex inputs and outputs (the viewer is not provided in the archive).
