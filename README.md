@@ -30,7 +30,7 @@ KarstNSim is designed to operate on Windows 10. While it hasn't been directly te
 
 * Download the archive and unzip it somewhere (avoid spaces and special characters in the path).
 * Go to the KarstNSim folder and run the batch file "build.bat", which will create a build folder and run CMake to generate build files and build the project (including compilation).
-* An executable should have been generated in build/build/karstnsim.exe. To run the code, open a command prompt anywhere and type :
+* An executable should have been generated in build/release/karstnsim.exe. To run the code, open a command prompt anywhere and type :
 
 ```
 cd path/to/your/executable
@@ -45,7 +45,9 @@ A doxyfile is present in the archive. To automatically generate the documentatio
 
 ## Testing
 
-We provide here a synthetic dataset and instruction file in the correct format used for KarstNSim, which corresponds to inputs close to those used to generate examples of figure 12 in **[insert DOI]**. You can find those data in the Input_files folder.
+We provide here a synthetic dataset and instruction file in the correct format used for KarstNSim, which corresponds to inputs used to generate examples of figure 12 in **[insert DOI]**. By default the generated example is the homogeneous medium one. You can find those data in the Input_files folder.
+
+<img src="vadose_context_examples.png" alt="Figure 12 (Gouy et al., 2023)" width="200" align="center">
 
 If you want to make modifications to the input parameters, open the instructions.txt file and change options as needed.
 

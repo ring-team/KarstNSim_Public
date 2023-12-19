@@ -6,6 +6,7 @@
 *.lo
 *.o
 *.obj
+*.bak
 
 # Precompiled Headers
 *.gch
@@ -25,8 +26,11 @@
 *.la
 *.a
 *.lib
+*.user
 
 # Executables
 *.exe
 *.out
 *.app
+LOG.txt
+KarstNSim/build/*
