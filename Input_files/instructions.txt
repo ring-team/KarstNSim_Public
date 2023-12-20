@@ -8,7 +8,7 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
-// Name of generated outputs and path of the directory where i) outputs directory and ii) inputs directory 
+// Name of generated outputs and path of the directory where i) outputs directory and ii) inputs directory are located (normally, the root of the archive)
 // (ALWAYS keep at the beginning of the file):
 
 karstic_network_name: example
