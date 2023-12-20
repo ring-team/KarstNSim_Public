@@ -41,6 +41,8 @@ karstnsim.exe path/to/instructions.txt
 
 The instruction file is in the Input_files directory in the root of the archive.
 
+Outputs are stored in the outputs directory.
+
 ## Generate documentation files
 
 A doxyfile is present in the archive. To automatically generate the documentation, type `doxygen path/to/YourDoxyfile` in a command prompt, or simply `doxygen doxyfile` if already in the root folder.
