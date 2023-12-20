@@ -263,7 +263,7 @@ namespace KarstNSim {
 
 	void KarsticNetwork::read_connectivity_matrix(std::vector<Vector3>* sinks, std::vector<Vector3>* springs) {
 
-		std::string connectivity_matrix_path = params.directoryname + "/connectivity_matrix.txt";
+		std::string connectivity_matrix_path = params.directoryname + "/Inputs_files/connectivity_matrix.txt";
 		std::ifstream myfile(connectivity_matrix_path);
 		int nb_sinks = int(sinks->size());
 		int nb_springs = int(springs->size());
