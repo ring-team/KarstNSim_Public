@@ -25,7 +25,10 @@ Find the corresponding code at https://github.com/aparis69/Karst-Synthesis
 #include <time.h>
 #include <vector>
 #include <algorithm>
+#ifdef _WIN32
+// Only include windows.h on Windows
 #include <windows.h>
+#endif
 
 namespace KarstNSim {
 // Random (Dirty, C-style)
