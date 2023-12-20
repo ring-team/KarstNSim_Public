@@ -8,11 +8,11 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
-// Name of generated outputs and path of the directory where i) outputs directory ii) inputs directory 
-// and iii) connectivity_matrix.txt are present (ALWAYS keep at the beginning of the file):
+// Name of generated outputs and path of the directory where i) outputs directory and ii) inputs directory 
+// (ALWAYS keep at the beginning of the file):
 
-karstic_network_name:
-save_repertory:
+karstic_network_name: example
+save_repertory: absolute/path/to/your/save/repository/containing/outputs/directory
 
 // General parameters :
 
