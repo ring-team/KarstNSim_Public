@@ -30,7 +30,7 @@ KarstNSim is designed to operate on Windows 10. While it hasn't been directly te
 ## Installation
 
 * Download the archive and unzip it somewhere (avoid spaces and special characters in the path).
-* Go to the Input_files folder and edit the instructions.txt file with the name of the karstic network and the path to your save repository.
+* Go to the Input_files folder and edit the instructions.txt file with the name of the karstic network and the path to the save repository (root repository).
 * Go to the KarstNSim folder and run the batch file "build.bat", which will create a build folder and run CMake to generate build files and build the project (including compilation).
 * An executable should have been generated in build/release/karstnsim.exe. To run the code, open a command prompt anywhere and type :
 
