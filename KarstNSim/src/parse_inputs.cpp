@@ -74,7 +74,7 @@ KarstNSim::ParamsSource ParseInputs::parse(const std::string& filename) {
 		if (paramType == "karstic_network_name:") {
 			iss >> params.karstic_network_name;
 		}
-		else if (paramType == "save_repertory:") {
+		else if (paramType == "main_repository:") {
 			iss >> params.save_repertory;
 		}
 
