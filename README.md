@@ -18,10 +18,10 @@ If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
 
 ## Requirements
 
-* CMake 3.8 to 3.28
-* Visual Studio 2017 or newer (for Windows)
-* C++14 or newer
-* (Optional) Doxygen 1.9.6 or newer for generating documentation
+* [CMake](https://cmake.org/download/) 3.8 to 3.28
+* [Visual Studio 2017](https://my.visualstudio.com/Downloads?q=visual%20studio%202017&wt.mc_id=o~msft~vscom~older-downloads) or newer (for Windows)
+* C++14 or newer (can be installed from Visual Studio)
+* (Optional) [Doxygen 1.9.6](https://www.doxygen.nl/download.html) or newer for generating documentation
 
 ## Compatibility
 
