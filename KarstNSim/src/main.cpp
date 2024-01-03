@@ -11,7 +11,6 @@ If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
 #include "KarstNSim/parse_inputs.h"
 #include "KarstNSim/run_code.h"
 #include <chrono>
-#include <conio.h>
 
 int main(int argc, char* argv[]) {
 	if (argc != 2) {
@@ -42,7 +41,9 @@ int main(int argc, char* argv[]) {
 
 	std::cout << "Simulation completed successfully. Elapsed time: " << duration << " seconds." << std::endl;
 
-    std::cout << "\nPress any key to exit..." << std::endl;
-    _getch();  // Wait for any key without Enter
+
+    std::cout << "\nPress Enter to exit...";
+    std::cin.get();  // Wait for Enter key
+	
     return 0;
 }
