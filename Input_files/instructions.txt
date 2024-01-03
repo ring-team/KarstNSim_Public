@@ -12,8 +12,7 @@
 // (ALWAYS keep at the beginning of the file):
 
 karstic_network_name: example
-main_repository: C:/Users/gouy2/Desktop/Articles/Article2023/KarstNSim_Public
-//main_repository: absolute/path/to/your/save/repository/containing/outputs/directory
+main_repository: absolute/path/to/your/save/repository/containing/outputs/directory
 
 // General parameters :
 
