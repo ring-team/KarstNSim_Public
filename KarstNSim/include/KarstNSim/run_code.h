@@ -39,7 +39,8 @@ namespace KarstNSim {
 		std::string karstic_network_name;
 		std::string save_repertory;
 
-		// Other parameters. Those can be defined in any order. If an optional parameter is not used, don't add the tag.
+		// Other parameters. Those can be defined in any order. If an optional parameter is not used, you can either add nothing after
+		// its tag or don't add the tag altogether.
 		// Some parameters are always mandatory, others sometimes mandatory, others completely optional.
 
 		Box domain;

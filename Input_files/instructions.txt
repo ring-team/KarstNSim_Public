@@ -12,7 +12,8 @@
 // (ALWAYS keep at the beginning of the file):
 
 karstic_network_name: example
-main_repository: absolute/path/to/your/save/repository/containing/outputs/directory
+main_repository: C:/Users/gouy2/Desktop/Articles/Article2023/KarstNSim_Public
+//main_repository: absolute/path/to/your/save/repository/containing/outputs/directory
 
 // General parameters :
 
@@ -58,7 +59,7 @@ use_waypoints: false
 
 add_inception_surfaces: true
 refine_surface_sampling: 2
-inception_surfaces: Input_files/example_inception_surf2.txt Input_files/example_inception_surf3.txt
+inception_surfaces: Input_files/example_inception_surf0.txt Input_files/example_inception_surf1.txt Input_files/example_inception_surf2.txt Input_files/example_inception_surf3.txt
 inception_surface_constraint_weight: 1.0
 max_inception_surface_distance: 50.0
 
@@ -76,7 +77,7 @@ fracture_constraint_weight: 0.5
 
 // Water tables (one for each spring) and vadose and phreatic trends (mandatory) :
 
-surf_wat_table: Input_files/example_watertable_surf0.txt Input_files/example_watertable_surf1.txt
+surf_wat_table: Input_files/example_watertable_surf1.txt Input_files/example_watertable_surf2.txt
 water_table_constraint_weight_vadose: 1.0
 water_table_constraint_weight_phreatic: 1.0
 

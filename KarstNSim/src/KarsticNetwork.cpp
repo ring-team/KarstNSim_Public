@@ -264,14 +264,59 @@ namespace KarstNSim {
 	void KarsticNetwork::read_connectivity_matrix(std::vector<Vector3>* sinks, std::vector<Vector3>* springs) {
 
 		std::string connectivity_matrix_path = params.directoryname + "/Inputs_files/connectivity_matrix.txt";
+		// std::cout << "File path: " << connectivity_matrix_path << std::endl;
+
 		std::ifstream myfile(connectivity_matrix_path);
-		int nb_sinks = int(sinks->size());
-		int nb_springs = int(springs->size());
+
+		if (!myfile.is_open()) {
+			std::cerr << "Error opening file: " << strerror(errno) << std::endl;
+		}
+
+		int nb_sinks = static_cast<int>(sinks->size());
+		int nb_springs = static_cast<int>(springs->size());
+		// std::cout << "Number of sinks: " << nb_sinks << ", Number of springs: " << nb_springs << std::endl;
+
 		params.connectivity_matrix.resize(nb_sinks, std::vector<int>(nb_springs));
-		for (int row = 0; row < nb_sinks; ++row)
-			for (int col = 0; col < nb_springs; ++col)
-				myfile >> params.connectivity_matrix[row][col];
-	}
+
+		for (int row = 0; row < nb_sinks; ++row) {
+			std::string line;
+			if (std::getline(myfile, line)) {
+				// std::cout << "Reading line: " << line << std::endl;
+
+				std::istringstream iss(line);
+				for (int col = 0; col < nb_springs; ++col) {
+					std::string value;
+					if (std::getline(iss, value, '\t')) {
+						try {
+							params.connectivity_matrix[row][col] = std::stoi(value);
+							// std::cout << "Value at row " << row << " column " << col << ": "
+							//           << params.connectivity_matrix[row][col] << std::endl;
+						} catch (const std::invalid_argument& e) {
+							std::cerr << "Error converting string to integer: " << e.what() << std::endl;
+						}
+					} else {
+						if (iss.eof()) {
+							std::cerr << "Error reading value at row " << row << " column " << col
+									  << ": End of file reached unexpectedly." << std::endl;
+						} else {
+							std::cerr << "Error reading value at row " << row << " column " << col
+									  << ": " << strerror(errno) << std::endl;
+						}
+					}
+				}
+			} else {
+				if (myfile.eof()) {
+					std::cerr << "Error reading line " << row << ": End of file reached unexpectedly." << std::endl;
+				} else {
+					std::cerr << "Error reading line " << row << ": " << strerror(errno) << std::endl;
+				}
+			}
+		}
+
+    myfile.close();
+
+    }
+	
 
 	void KarsticNetwork::run_simulation(const bool create_nghb_graph, const bool create_nghb_graph_property, const bool use_amplification_phase_vadose, const bool use_amplification_phase_phreatic,
 		const bool use_sampling_points, const double fraction_karst_perm, const double fraction_old_karst_perm, const double max_inception_surface_distance,

@@ -9,7 +9,6 @@ If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
 Copyright (c) 2021 Axel Paris
 Author : Axel Paris, for original versions of methods Compute_Edge_Cost, NodeIndex, BuildNearestNeighborGraph, ComputeKarsticSkeleton
 If you use this code, pleace cite : Paris et al., 2021, Computer Graphic Forum.
-Find the corresponding code at https://github.com/aparis69/Karst-Synthesis
 
 ***************************************************************/
 
@@ -268,8 +267,9 @@ namespace KarstNSim {
 		Vector3 nearest_point_on_surface(0.,0.,0.);
 		Triangle nearest_trgl(0,0,0);
 		double distance = 0.0;
-		double largest_edge_squared = surface->get_largest_edge_length() *  surface->get_largest_edge_length();
+		
 		for (int i = 0; i < surface->get_nb_trgls();i++) {
+			double largest_edge_squared = surface->get_circumradii(i) * surface->get_circumradii(i);
 			Triangle trgl_i = surface->get_triangle(i);
 			int pt1= trgl_i.point(0), pt2= trgl_i.point(1), pt3 = trgl_i.point(2);
 			Vector3 p1 = surface->get_node(pt1), p2 = surface->get_node(pt2), p3 = surface->get_node(pt3);
@@ -526,6 +526,9 @@ namespace KarstNSim {
 				}
 			}
 		}
+		
+
+		const clock_t time2 = clock();
 
 		if (params.karstificationCost.used) {
 			const Vector3 u = box->get_u();
@@ -564,20 +567,26 @@ namespace KarstNSim {
 			}
 			propikp.clear();
 		}
+		const clock_t time21 = clock();
 		// For each sampling point, this defines whether the point is below or above each water table surface
 		DefineWSurfaceFlags(water_tables);
 
 		// For each sampling point, this computes the distance of each point to each water table
-
+		const clock_t time22 = clock();
 		std::vector<double> max_dist_wt;
 		max_dist_wt = compute_euclidian_distance_from_wt(water_tables, max_inception_surface_distance);
 		double max_dist_surf = 0;
 		if (inception_horizons != nullptr) {
 			max_dist_surf = compute_euclidian_distance_from_surfaces(inception_horizons, max_inception_surface_distance);
 		}
+		const clock_t time23 = clock();
+
+		const clock_t time3 = clock();
 
 		// Nearest neighbour graph initialization
 		BuildNearestNeighbourGraphAdapted(box, fraction_old_karst_perm, max_dist_wt, max_dist_surf);
+
+		const clock_t time4 = clock();
 
 		//create_nghb_graph
 		if (create_nghb_graph) {
@@ -676,6 +685,45 @@ namespace KarstNSim {
 		}
 	}
 
+
+	// Constructor for PointCloud
+	PointCloud::PointCloud(const std::vector<Vector3>& cloud)
+		: cloud(cloud),
+		index(nullptr)
+	{
+		// Create the index outside of the initialization list
+		index = std::make_unique<my_kd_tree_t>(3, *this, nanoflann::KDTreeSingleIndexAdaptorParams(10));
+		//index->buildIndex();
+	}
+
+	// Function to find nearest neighbors
+	void PointCloud::findNearestNeighbors(const Vector3& queryPoint,int querryidx, int N, double distmax, std::vector<Neighbour>& result) {
+		// Initialize the results structure
+		std::vector<int> indices(N);
+		std::vector<double> dists(N);
+
+		// Search for the nearest neighbors
+		nanoflann::KNNResultSet<double, int> resultSet(N);
+		resultSet.init(&indices[0], &dists[0]);
+		nanoflann::SearchParameters params;
+		params.sorted = true; // Sort the results based on distance
+
+		//index.buildIndex();
+		index->findNeighbors(resultSet, &queryPoint.x, params);
+
+		// Process the results
+		for (size_t i = 0; i < indices.size(); ++i) {
+			int index = indices[i];
+			double distance = dists[i];
+
+			// Check if the distance is within the specified range
+			if (distance <= distmax && querryidx != index) {
+				// Add the neighbor to the result vector
+				result.push_back(Neighbour{ index, distance });
+			}
+		}
+	}
+
 	/*!
 	\brief Builds the nearest neighbour graph from the set of samples.
 	*/
@@ -694,31 +742,13 @@ namespace KarstNSim {
 		double delta_x_abs = std::abs(ptmax.x - ptmin.x);
 		double delta_z_abs = std::abs(ptmax.z - ptmin.z);
 		double dim_max = std::max({ delta_y_abs, delta_x_abs, delta_z_abs });
-		double one_over_delta_y_squared = 1 / (delta_y_abs*delta_y_abs);
-		double one_over_delta_x_squared = 1 / (delta_x_abs*delta_x_abs);
-		double one_over_delta_z_squared = 1 / (delta_z_abs*delta_z_abs);
-
-		// if inception horizons are used, create a property corresponding to the distance of the cells of background grid to
-		// surfaces.
-
-		// Build nearest neighbor graph
-		struct Neighbour
-		{
-			int i; 
-			double d;
-			bool operator<(const Neighbour& nei) const
-			{
-				return d < nei.d;
-			}
-			bool operator>(const Neighbour& nei) const
-			{
-				return d > nei.d;
-			}
-		};
+		double one_over_delta_y = 1 / (delta_y_abs);
+		double one_over_delta_x = 1 / (delta_x_abs);
+		double one_over_delta_z = 1 / (delta_z_abs);
 
 		adj.resize(samples.size());
 		double R = 0.; // std::numeric_limits<double>::infinity();
-		double distmax = 0.;
+		double distmax = 1e50;
 		if (params.graphuse_max_nghb_radius) {
 			R = params.graphNeighbourRadius * params.graphNeighbourRadius; // Precise the value of R if it has been defined by the user
 			distmax = (R / (dim_max*dim_max));
@@ -726,43 +756,72 @@ namespace KarstNSim {
 		const int N = params.graphNeighbourCount;
 		double dmin = std::numeric_limits<double>::infinity();
 		double dmax = 0.;
+
+		// We want to use a stretched version of the point cloud for perfect scaling :
+
+		std::vector<Vector3> samples_stretched;
+		for (int i = 0; i < samples.size(); i++) {
+			// Stretch the points based on scaling factors
+			Vector3 p_stretched{
+				samples[i].x * one_over_delta_x,
+				samples[i].y * one_over_delta_y,
+				samples[i].z *one_over_delta_z
+			};
+			samples_stretched.push_back(p_stretched);
+		}
+
+		PointCloud pointCloud(samples_stretched);
+		
 		for (int i = 0; i < samples.size(); i++) {
 			const clock_t time0 = clock();
 			Vector3 p = samples[i];
-			std::priority_queue<Neighbour> queue;
+			Vector3 p_stretched = samples_stretched[i];
 			std::vector<Neighbour> candidates;
-			for (int j = 0; j < samples.size(); j++) {
-				if (i == j) continue;
-				Vector3 pn = samples[j];
-				Vector3 dp = p - pn;
-				double d = (dp.x * dp.x)*one_over_delta_x_squared + (dp.y * dp.y)*one_over_delta_y_squared + (dp.z * dp.z)*one_over_delta_z_squared;
 
-				if (params.graphuse_max_nghb_radius && d >= distmax)
-					continue;
+			// Use the k-d tree to find nearest neighbors
+			
+			pointCloud.findNearestNeighbors(p_stretched,i, N, distmax, candidates);
 
-				if (queue.size() < N) {
-					queue.push({ j,d });
-					continue;
-				}
-
-				if (d > queue.top().d)
-					continue;
-
-				queue.pop();
-				queue.push({ j,d });
-			}
-			while (!queue.empty()) {
-				candidates.push_back(queue.top());
-				queue.pop();
-			}
-			if (N >= candidates.size()) {
-				std::sort(candidates.begin(), candidates.end());
-			}
-			else {
-				std::partial_sort(candidates.begin(), candidates.begin() + N, candidates.end());
-			}
 			const clock_t time1 = clock();
 			int n = KarstNSim::Min((int)candidates.size(), N);
+
+
+			//const clock_t time0 = clock();
+			//Vector3 p = samples[i];
+			//std::priority_queue<Neighbour> queue;
+			//std::vector<Neighbour> candidates;
+			//for (int j = 0; j < samples.size(); j++) {
+			//	if (i == j) continue;
+			//	Vector3 pn = samples[j];
+			//	Vector3 dp = p - pn;
+			//	double d = (dp.x * dp.x)*one_over_delta_x_squared + (dp.y * dp.y)*one_over_delta_y_squared + (dp.z * dp.z)*one_over_delta_z_squared;
+
+			//	if (params.graphuse_max_nghb_radius && d >= distmax)
+			//		continue;
+
+			//	if (queue.size() < N) {
+			//		queue.push({ j,d });
+			//		continue;
+			//	}
+
+			//	if (d > queue.top().d)
+			//		continue;
+
+			//	queue.pop();
+			//	queue.push({ j,d });
+			//}
+			//while (!queue.empty()) {
+			//	candidates.push_back(queue.top());
+			//	queue.pop();
+			//}
+			//if (N >= candidates.size()) {
+			//	std::sort(candidates.begin(), candidates.end());
+			//}
+			//else {
+			//	std::partial_sort(candidates.begin(), candidates.begin() + N, candidates.end());
+			//}
+			//const clock_t time1 = clock();
+			//int n = KarstNSim::Min((int)candidates.size(), N);
 			for (int j = 0; j < n; j++) {
 				Vector3 pn = samples[candidates[j].i];
 				std::pair<std::vector<double>, std::vector<bool>> pair = ComputeEdgeCostAdapted(i, p, pn, dmin, dmax, max_dist_surf, max_dist_wt);
@@ -777,7 +836,7 @@ namespace KarstNSim {
 		// add distance cost (has to be added at the end before it depends on the max distance)
 
 		//double min_val = std::numeric_limits<double>::min();
-		double min_val = 1e-100;
+		double min_val = 1e-50;
 		double eps_zero = 1e-20;
 		for (int i = 0; i < samples.size(); i++) {
 			Vector3 p = samples[i];
@@ -977,12 +1036,9 @@ namespace KarstNSim {
 		}
 
 		// Iterate on all sinks points
-
 		for (int i = 0; i < keyptssinks.size(); i++) {
 			int source = keyptssinks[i].index;
-
 			// Pick the inlet/outlet connections when val = 2 in connectivity matrix
-
 			std::vector<int> list_of_two;
 			for (int j = 0; j < keyptssprings.size(); j++) {
 				int connectivity_flag = params.connectivity_matrix[params.sinks_index[i]-1][j];
@@ -993,7 +1049,9 @@ namespace KarstNSim {
 				std::size_t random_idx_number = generateRandomIndex(list_of_two.size());
 				int random_idx = list_of_two[random_idx_number];
 				for (int j = 0; j < keyptssprings.size(); j++) {
+
 					int connectivity_flag = params.connectivity_matrix[params.sinks_index[i]-1][j];
+					
 						if (connectivity_flag == 2 && j != random_idx)
 							params.connectivity_matrix[params.sinks_index[i]-1][j] = 0;
 						else if (connectivity_flag == 2 && j == random_idx)
@@ -1004,7 +1062,6 @@ namespace KarstNSim {
 			// now iterate on springs, and look for path only if connectivity flag is equal to 1
 
 			for (int j = 0; j < keyptssprings.size(); j++) {
-
 				int connectivity_flag = params.connectivity_matrix[params.sinks_index[i] - 1][j];
 				if (connectivity_flag == 0) continue; // skip springs for which flag equals 0 (no connection)
 
@@ -1022,7 +1079,6 @@ namespace KarstNSim {
 				std::pair<std::vector<int>, std::vector<double>> pair_vadose = DijkstraGetShortestPathTo(reach, previous_vadose, distances_vadose, pathSize_vadose);
 				std::vector<int> path_vadose = pair_vadose.first;
 				std::vector<double> path_cost_vadose = pair_vadose.second;
-
 				// 2) GENERATING PHREATIC ZONE CONDUIT
 
 				std::vector<double> distances;
@@ -1037,7 +1093,7 @@ namespace KarstNSim {
 					path = pair.first;
 					path_cost = pair.second;
 				}
-
+				std::cout << path_vadose.size()<<" "<<path.size() << std::endl;
 				// Concatenation of vadose and phreatic conduit graphs
 				std::vector<int> path_full;
 				std::vector<double> path_cost_full;

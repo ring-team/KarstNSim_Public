@@ -9,7 +9,6 @@ If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
 Copyright (c) 2021 Axel Paris
 Author : Axel Paris, for some elements of class CostGraph and GraphOperations
 If you use this code, pleace cite : Paris et al., 2021, Computer Graphic Forum.
-Find the corresponding code at https://github.com/aparis69/Karst-Synthesis
 
 ***************************************************************/
 
@@ -20,7 +19,8 @@ Find the corresponding code at https://github.com/aparis69/Karst-Synthesis
 \brief Declaration of various classes representing the cost graph and the skeleton graph.
 \author Augustin GOUY
 */
-#define NOMINMAX
+
+
 #include <limits>       // for numeric_limits
 #include <set>          // for set
 #include <utility>      // for pair
@@ -33,6 +33,7 @@ Find the corresponding code at https://github.com/aparis69/Karst-Synthesis
 #include <stdlib.h>
 #include <queue>
 #include <unordered_map>
+#include <KarstNSim/nanoflann.hpp>
 #include "KarstNSim/surface_sampling.h"
 #include "KarstNSim/basics.h"
 #include "KarstNSim/vec.h"
@@ -40,7 +41,6 @@ Find the corresponding code at https://github.com/aparis69/Karst-Synthesis
 #include "KarstNSim/KarsticNetwork.h"
 #include "KarstNSim/write_files.h"
 #include "KarstNSim/randomgenerator.h"
-#include "KarstNSim/write_files.h"
 
 namespace KarstNSim {
 	/*!
@@ -148,6 +148,58 @@ namespace KarstNSim {
 		void DijkstraComputePathsNoCostRed(int, int, std::vector<double>&, std::vector<int>&) const;
 		void DijkstraComputePathsSurface(int, int, int&, std::vector<double>&, std::vector<int>&, std::vector<std::vector<bool>>, int, int, bool&) const;
 		std::pair<std::vector<int>, std::vector<double>> DijkstraGetShortestPathTo(int, const std::vector<int>&, const std::vector<double>&, double&) const;
+	};
+
+	struct Neighbour {
+		int i;
+		double d;
+		bool operator<(const Neighbour& nei) const {
+			return d < nei.d;
+		}
+		bool operator>(const Neighbour& nei) const {
+			return d > nei.d;
+		}
+	};
+
+	struct PointCloud {
+
+		const std::vector<Vector3>& cloud;
+		using my_kd_tree_t = nanoflann::KDTreeSingleIndexAdaptor<nanoflann::L2_Simple_Adaptor<double, PointCloud>, PointCloud, 3>;
+		std::unique_ptr<my_kd_tree_t> index;
+
+		PointCloud(const std::vector<Vector3>& cloud);
+
+		// Must return the number of data points
+		inline size_t kdtree_get_point_count() const { return cloud.size(); }
+
+		// Returns the dim'th component of the idx'th point in the class:
+		// Since this is inlined and the "dim" argument is typically an immediate
+		// value, the
+		//  "if/else's" are actually solved at compile time.
+		inline double kdtree_get_pt(const size_t idx, const size_t dim) const
+		{
+			if (dim == 0)
+				return cloud[idx].x;
+			else if (dim == 1)
+				return cloud[idx].y;
+			else
+				return cloud[idx].z;
+		}
+
+		// Optional bounding-box computation: return false to default to a standard
+		// bbox computation loop.
+		//   Return true if the BBOX was already computed by the class and returned
+		//   in "bb" so it can be avoided to redo it again. Look at bb.size() to
+		//   find out the expected dimensionality (e.g. 2 or 3 for point clouds)
+		template <class BBOX>
+		bool kdtree_get_bbox(BBOX& /* bb */) const
+		{
+			return false;
+		}
+
+		// Function to find nearest neighbors
+		void findNearestNeighbors(const Vector3& queryPoint, int querryidx, int N, double distmax, std::vector<Neighbour>& result);
+
 	};
 
 	/*!

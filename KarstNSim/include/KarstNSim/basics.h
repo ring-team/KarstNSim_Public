@@ -9,7 +9,6 @@ If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
 Copyright (c) 2021 Axel Paris 
 Author : Axel Paris, for classes Random, Ray, Plane, Box2D, Sphere, ScalarField2D, Circle2D, Circle
 If you use this code, pleace cite : Paris et al., 2021, Computer Graphic Forum.
-Find the corresponding code at https://github.com/aparis69/Karst-Synthesis
 
 ***************************************************************/
 
@@ -25,10 +24,7 @@ Find the corresponding code at https://github.com/aparis69/Karst-Synthesis
 #include <time.h>
 #include <vector>
 #include <algorithm>
-#ifdef _WIN32
-// Only include windows.h on Windows
 #include <windows.h>
-#endif
 
 namespace KarstNSim {
 // Random (Dirty, C-style)
@@ -378,7 +374,7 @@ private:
 	std::vector<Triangle> trgls_;
 	Vector3 b_min_;
 	Vector3 b_max_;
-	double largest_edge_length_;
+	std::vector<double> circumradii_; // one per triangle
 
 public:
 	Surface();
@@ -394,7 +390,7 @@ public:
 	Vector3 nearest(Vector3 p1, Vector3 p2, Vector3 p3, Vector3 ptest);
 	Vector3 get_boundbox_min();
 	Vector3 get_boundbox_max();
-	double get_largest_edge_length();
+	double get_circumradii(const int& i);
 	//Vector3 Center() const;
 	//Vector3 Normal() const;
 	//Vector3 Point(int i) const;
@@ -415,7 +411,33 @@ inline Surface::Surface()
 inline Surface::Surface(std::vector<Vector3> pts, std::vector<Triangle> trgls)
 {
 	pts_ = pts;
-	trgls_ = trgls;
+	// phase of trimming to remove bad triangles (3 points aligned, or worse...)
+	// another parameter that is practical for TINs is the length of the largest circumradius among all its triangles (in map view)
+	// We compute it directly when creating the surface.
+	double eps = 1e-5;
+	//circumradii_.resize(trgls.size(), 0.);
+	for (int trgl = 0; trgl < trgls.size(); trgl++) {
+		Triangle trgl_i = trgls[trgl];
+		int pt1 = trgl_i.point(0), pt2 = trgl_i.point(1), pt3 = trgl_i.point(2);
+		Vector3 p1 = pts[pt1], p2 = pts[pt2], p3 = pts[pt3];
+		// 2D dist between p1 and p2
+		double dist1 = magnitude2D(p1 - p2);
+		// 2D dist between p2 and p3
+		double dist2 = magnitude2D(p2 - p3);
+		// 2D dist between p1 and p3
+		double dist3 = magnitude2D(p1 - p3);
+		// compute circumradius (proxy of the max distance Fermat-Torricelli point in the triangle)
+		// Simple meaning = if you pick any random point in the domain, if it is less than a circumradius away in aerial view
+		// from any vertex of the TIN, then it is very probably inside the TIN, or at least very close from it.
+		// From my research it is the quickest way to make this test while keeping (very) good precision.
+		if (isTriangleValid(dist1, dist2, dist3)) {
+			double circum = calculateCircumradius(dist1, dist2, dist3);
+			if ((circum - dist1) < eps && (circum - dist2) < eps && (circum - dist3) < eps) {
+				circumradii_.push_back(circum);
+				trgls_.push_back(trgl_i);
+			}
+		}
+	}
 	double x_min = pts[0].x;
 	double x_max = pts[0].x;
 	double y_min = pts[0].y;
@@ -433,31 +455,7 @@ inline Surface::Surface(std::vector<Vector3> pts, std::vector<Triangle> trgls)
 	b_min_ = Vector3(x_min, y_min, z_min); // this is the coordinates of the bottom corner in all 3 directions
 	b_max_ = Vector3(x_max, y_max, z_max); // this is the coordinates of the top corner in all 3 directions
 
-	// another parameter that is practical for TINs is the length of the largest circumradius among all its triangles (in map view)
-	// We compute it directly when creating the surface.
 
-	double largest_found = 0.;
-	for (int trgl = 0; trgl < trgls.size(); trgl++) {
-		Triangle trgl_i = trgls[trgl];
-		int pt1 = trgl_i.point(0), pt2 = trgl_i.point(1), pt3 = trgl_i.point(2);
-		Vector3 p1 = pts[pt1], p2 = pts[pt2], p3 = pts[pt3];
-		// 2D dist between p1 and p2
-		double dist1 = magnitude2D(p1-p2);
-		// 2D dist between p2 and p3
-		double dist2 = magnitude2D(p2 - p3);
-		// 2D dist between p1 and p3
-		double dist3 = magnitude2D(p1 - p3);
-		// compute circumradius (proxy of the max distance Fermat-Torricelli point in the triangle)
-		// Simple meaning = if you pick any random point in the domain, if it is less than a circumradius away in aerial view
-		// from any vertex of the TIN, then it is very probably inside the TIN, or at least very close from it.
-		// From my research it is the quickest way to make this test while keeping (very) good precision, without relying on
-		// background grid / octree / subdivision.
-		if (isTriangleValid(dist1, dist2, dist3)) {
-			double circum = calculateCircumradius(dist1, dist2, dist3);
-			if (circum > largest_found && circum<dist1 && circum<dist2 && circum<dist3) largest_found = circum;
-		}
-	}
-	largest_edge_length_ = largest_found;
 }
 
 inline int Surface::get_nb_trgls() {
@@ -503,8 +501,8 @@ inline Vector3 Surface::get_boundbox_max() {
 	return b_max_;
 }
 
-inline double Surface::get_largest_edge_length() {
-	return largest_edge_length_;
+inline double Surface::get_circumradii(const int& i) {
+	return circumradii_[i];
 }
 
 //*!
