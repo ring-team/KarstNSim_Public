@@ -224,7 +224,7 @@ namespace KarstNSim {
 		dist = distances[n];
 		double dist1 = dist;
 		double dist2 = dist;
-		double eps = 1e-4;
+		double eps = 1e-100;
 		int tocopy = 0;
 		for (; n != -1; n = previous[n])
 		{
