@@ -18,7 +18,7 @@ If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
 
 ## Requirements
 
-* [CMake](https://cmake.org/download/) 3.8 to 3.28 (select the Windows x64 Installer)
+* [CMake](https://cmake.org/download/) 3.8 to 3.28 (select the Windows x64 Installer). During installation, check the option add CMake to the system PATH
 * [Visual Studio 2017](https://my.visualstudio.com/Downloads?q=visual%20studio%202017&wt.mc_id=o~msft~vscom~older-downloads) or newer (for Windows)
 * C++14 or newer (can be installed from Visual Studio)
 * (Optional) [Doxygen 1.9.6](https://www.doxygen.nl/download.html) or newer for generating documentation
