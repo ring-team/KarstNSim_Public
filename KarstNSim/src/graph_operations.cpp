@@ -1093,7 +1093,6 @@ namespace KarstNSim {
 					path = pair.first;
 					path_cost = pair.second;
 				}
-				std::cout << path_vadose.size()<<" "<<path.size() << std::endl;
 				// Concatenation of vadose and phreatic conduit graphs
 				std::vector<int> path_full;
 				std::vector<double> path_cost_full;
