@@ -24,6 +24,7 @@ If you use this code, pleace cite : Paris et al., 2021, Computer Graphic Forum.
 #include <time.h>
 #include <vector>
 #include <algorithm>
+#include <windows.h>
 
 namespace KarstNSim {
 // Random (Dirty, C-style)
@@ -374,6 +375,7 @@ private:
 	Vector3 b_min_;
 	Vector3 b_max_;
 	std::vector<double> circumradii_; // one per triangle
+	//PointCloud centers_;
 
 public:
 	Surface();
@@ -390,6 +392,8 @@ public:
 	Vector3 get_boundbox_min();
 	Vector3 get_boundbox_max();
 	double get_circumradii(const int& i);
+	Vector3 get_trgl_center(const int& trgl_idx);
+	PointCloud get_centers_cloud( int dim) const;
 	//Vector3 Center() const;
 	//Vector3 Normal() const;
 	//Vector3 Point(int i) const;
@@ -409,6 +413,7 @@ inline Surface::Surface()
 */
 inline Surface::Surface(std::vector<Vector3> pts, std::vector<Triangle> trgls)
 {
+	std::vector<Vector3> centers;
 	pts_ = pts;
 	// phase of trimming to remove bad triangles (3 points aligned, or worse...)
 	// another parameter that is practical for TINs is the length of the largest circumradius among all its triangles (in map view)
@@ -425,6 +430,10 @@ inline Surface::Surface(std::vector<Vector3> pts, std::vector<Triangle> trgls)
 		double dist2 = magnitude2D(p2 - p3);
 		// 2D dist between p1 and p3
 		double dist3 = magnitude2D(p1 - p3);
+		Vector3 center;
+		center.x = (p1.x + p2.x + p3.x) / 3.0;
+		center.y = (p1.y + p2.y + p3.y) / 3.0;
+		center.z = (p1.z + p2.z + p3.z) / 3.0;
 		// compute circumradius (proxy of the max distance Fermat-Torricelli point in the triangle)
 		// Simple meaning = if you pick any random point in the domain, if it is less than a circumradius away in aerial view
 		// from any vertex of the TIN, then it is very probably inside the TIN, or at least very close from it.
@@ -434,9 +443,13 @@ inline Surface::Surface(std::vector<Vector3> pts, std::vector<Triangle> trgls)
 			if ((circum - dist1) < eps && (circum - dist2) < eps && (circum - dist3) < eps) {
 				circumradii_.push_back(circum);
 				trgls_.push_back(trgl_i);
+				centers.push_back(center);
 			}
 		}
 	}
+
+	//centers_ = centers;
+
 	double x_min = pts[0].x;
 	double x_max = pts[0].x;
 	double y_min = pts[0].y;
@@ -454,7 +467,22 @@ inline Surface::Surface(std::vector<Vector3> pts, std::vector<Triangle> trgls)
 	b_min_ = Vector3(x_min, y_min, z_min); // this is the coordinates of the bottom corner in all 3 directions
 	b_max_ = Vector3(x_max, y_max, z_max); // this is the coordinates of the top corner in all 3 directions
 
+}
 
+inline PointCloud Surface::get_centers_cloud( int dim=3) const {
+	std::vector<Vector3> centers;
+	for (int trgl_idx = 0; trgl_idx < trgls_.size(); ++trgl_idx) {
+		int pt1 = trgls_[trgl_idx].point(0), pt2 = trgls_[trgl_idx].point(1), pt3 = trgls_[trgl_idx].point(2);
+		Vector3 p1 = get_node(pt1), p2 = get_node(pt2), p3 = get_node(pt3);
+		Vector3 center(0.,0.,0.);
+		center.x = (p1.x + p2.x + p3.x) / 3.0;
+		center.y = (p1.y + p2.y + p3.y) / 3.0;
+		if (dim == 3) {
+			center.z = (p1.z + p2.z + p3.z) / 3.0;
+		}
+		centers.push_back(center);
+	}
+	return PointCloud(centers);
 }
 
 inline int Surface::get_nb_trgls() {
@@ -490,6 +518,17 @@ inline Vector3 Surface::nearest(Vector3 p1, Vector3 p2, Vector3 p3, Vector3 ptes
 		return p2;
 	}
 	return p3;
+}
+
+inline Vector3 Surface::get_trgl_center(const int& trgl_idx) {
+
+	int pt1 = trgls_[trgl_idx].point(0), pt2 = trgls_[trgl_idx].point(1), pt3 = trgls_[trgl_idx].point(2);
+	Vector3 p1 = get_node(pt1), p2 = get_node(pt2), p3 = get_node(pt3);
+	Vector3 center;
+	center.x = (p1.x + p2.x + p3.x) / 3.0;
+	center.y = (p1.y + p2.y + p3.y) / 3.0;
+	center.z = (p1.z + p2.z + p3.z) / 3.0;
+	return center;
 }
 
 inline Vector3 Surface::get_boundbox_min() {

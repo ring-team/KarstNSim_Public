@@ -237,12 +237,12 @@ namespace KarstNSim {
 		double x_center = (max_pt.x + min_pt.x) / 2;
 		double y_center = (max_pt.y + min_pt.y) / 2;
 
-		Vector3 minp(min_pt.x + delta_x / 4, min_pt.y + delta_y / 4, min_pt.z + delta_z / 4);
-		Vector3 maxp(max_pt.x - delta_x / 4, max_pt.y - delta_y / 4, max_pt.z - delta_z / 4);
+		Vector3 min(min_pt.x + delta_x / 4, min_pt.y + delta_y / 4, min_pt.z + delta_z / 4);
+		Vector3 max(max_pt.x - delta_x / 4, max_pt.y - delta_y / 4, max_pt.z - delta_z / 4);
 
 		params.heightfield = ScalarField2D(256, 256, Box2D(Vector2(x_center, y_center), delta_x / 2), 0.0);
-		params.elevationOffsetMin = sqrt(minp.z*minp.z);
-		params.elevationOffsetMax = sqrt(maxp.z*maxp.z);
+		params.elevationOffsetMin = sqrt(min.z*min.z);
+		params.elevationOffsetMax = sqrt(max.z*max.z);
 		params.maxsize = (std::abs(max_pt.x - min_pt.x) + std::abs(max_pt.y - min_pt.y)) / 2;
 	}
 
@@ -260,7 +260,6 @@ namespace KarstNSim {
 		}
 		return 0;
 	}
-
 	void KarsticNetwork::read_connectivity_matrix(std::vector<Vector3>* sinks, std::vector<Vector3>* springs) {
 
 		std::string connectivity_matrix_path = params.directoryname + "/Input_files/connectivity_matrix.txt";
@@ -316,7 +315,6 @@ namespace KarstNSim {
     myfile.close();
 
     }
-	
 
 	void KarsticNetwork::run_simulation(const bool create_nghb_graph, const bool create_nghb_graph_property, const bool use_amplification_phase_vadose, const bool use_amplification_phase_phreatic,
 		const bool use_sampling_points, const double fraction_karst_perm, const double fraction_old_karst_perm, const double max_inception_surface_distance,
@@ -326,33 +324,34 @@ namespace KarstNSim {
 
 			params.scenename = karstic_network_name;
 		// Cost due to distance
-
+		const clock_t time1 = clock();
 			if (is_simulation_parametrized) {
 
 				// Compute 3D cost graph
-				std::cout << "Step 1: Initializing cost graph..." << std::endl;
 				GraphOperations graph;
 				graph.InitializeCostGraphAdapted(create_nghb_graph, create_nghb_graph_property, keypts, params, nodes_on_densify_surface, inception_horizons, water_tables, use_sampling_points, box,
 					max_inception_surface_distance, sampling_points, create_vset_sampling, use_density_property, k_pts, fraction_old_karst_perm, propdensity, propikp, topo_surface_);
+				const clock_t time2 = clock();
+					// Compute karstic skeleton
+					KarsticSkeleton skel = graph.ComputeKarsticSkeleton(keypts, fraction_karst_perm);
 
-				// Compute karstic skeleton
-				std::cout << "Step 2: Computing karstic skeleton..." << std::endl;
-				KarsticSkeleton skel = graph.ComputeKarsticSkeleton(keypts, fraction_karst_perm);
+				const clock_t time3 = clock();
+					// Procedural amplification
+					if (use_amplification_phase_vadose) {
+						skel.Amplify_vadose(&graph, params);
+					}
+				const clock_t time4 = clock();
 
-				// Procedural amplification
-				if (use_amplification_phase_vadose) {
-					std::cout << "Step 3a: Amplifying vadose zone..." << std::endl;
-					skel.Amplify_vadose(&graph, params);
-				}
+					if (use_amplification_phase_phreatic) {
+						skel.Amplify_phreatic(&graph, params);
+					}
+				const clock_t time5 = clock();
 
-				if (use_amplification_phase_phreatic) {
-					std::cout << "Step 3b: Amplifying phreatic zone..." << std::endl;
-					skel.Amplify_phreatic(&graph, params);
-				}
-
-				// Save network
-				std::cout << "Saving network..." << std::endl;
+				// save network
 				skel.CreateLine(params, karstic_network_name);
+
+				const clock_t time6 = clock();
+
 			}
 	}
 

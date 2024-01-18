@@ -9,7 +9,6 @@ If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
 Copyright (c) 2021 Axel Paris
 Author : Axel Paris, for classes KeyPointType, KeyPoint and CostTerm
 If you use this code, pleace cite : Paris et al., 2021, Computer Graphic Forum.
-Find the corresponding code at https://github.com/aparis69/Karst-Synthesis
 
 ***************************************************************/
 

@@ -30,16 +30,15 @@ KarstNSim is designed to operate on Windows 10. While it hasn't been directly te
 ## Installation
 
 * Download the archive and unzip it somewhere (avoid spaces and special characters in the path).
-* Go to the Input_files folder and edit the instructions.txt file with the name of the karstic network and the path to the main repository (root repository = KarstNSim_Public). *Make sure to use "/" or "\\\\" but never "\\" for the path.*
 * Go to the KarstNSim folder and run the batch file "build.bat", which will create a build folder and run CMake to generate build files and build the project (including compilation).
-* An executable should have been generated in build/release/karstnsim.exe. To run the code, open a command prompt anywhere and type :
+* An executable should have been generated in build/release/karstnsim.exe. To run the code, you can either double-click on karstnsim.exe, or open a command prompt anywhere and type :
 
 ```
 cd path/to/your/executable
-karstnsim.exe path/to/instructions.txt
+karstnsim.exe ../../../Input_files/instructions.txt
 ```
 
-The instruction file is in the Input_files directory in the root of the archive.
+The instruction file is in the Input_files directory in the root of the archive. *Make sure to use "/" or "\\\\" but never "\\" for the paths.*
 
 Outputs are stored in the outputs directory.
 
@@ -53,8 +52,6 @@ We provide here a synthetic dataset and instruction file in the correct format u
 
 
 <img src="vadose_contexts_example.png" alt="Figure 12 (Gouy et al., 2023)" width="100%" align="center">
-
-<b> Please note that to use the instruction file and run KarstNSim, you will have to precise the name of the simulation and the KarstNSim main repository path in the instructions.txt file. </b>
 
 If you want to make modifications to the input parameters, open the instructions.txt file and change options as needed.
 

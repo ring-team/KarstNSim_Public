@@ -9,7 +9,6 @@ If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
 Copyright (c) 2021 Axel Paris
 Author : Axel Paris, for classes Vector2i, Vector2, Vector3, Vector4
 If you use this code, pleace cite : Paris et al., 2021, Computer Graphic Forum.
-Find the corresponding code at https://github.com/aparis69/Karst-Synthesis
 
 ***************************************************************/
 
@@ -21,6 +20,7 @@ Find the corresponding code at https://github.com/aparis69/Karst-Synthesis
 @authors Axel PARIS, Augustin GOUY
 **/
 
+#include <KarstNSim/nanoflann.hpp>
 #include <cmath>
 #include <iostream>
 #include <vector>
@@ -42,7 +42,7 @@ namespace KarstNSim
 	\param a, b Interval values.
 	\return Real.
 	*/
-	inline double Clamp(double x, double a = 0.0f, double b = 1.0f)
+	inline double Clamp(const double& x, const double& a = 0.0f, const double& b = 1.0f)
 	{
 		return x < a ? a : x > b ? b : x;
 	}
@@ -53,7 +53,7 @@ namespace KarstNSim
 	\param a, b Interval values.
 	\return Real in unit inverval.
 	*/
-	inline double Step(double x, double a, double b)
+	inline double Step(const double& x, const double& a, const double& b)
 	{
 		if (x < a)
 		{
@@ -400,8 +400,17 @@ inline double squaredmagnitudeNormalized(const Vector3& u,double one_over_delta_
 
 inline Vector3 Normalize(const Vector3& v)
 {
-	double kk = 1.0f / magnitude(v);
-	return v * kk;
+	double mag = magnitude(v);
+
+	// Check if the magnitude is not zero before dividing
+	if (mag > 0.0) {
+		double kk = 1.0 / mag;
+		return v * kk;
+	}
+	else {
+		// Handle the case when the magnitude is zero
+		return Vector3(0.0, 0.0, 0.0);
+	}
 }
 inline Vector3 operator-(const Vector3& v)
 {
@@ -445,32 +454,58 @@ inline int flatten_indices(int dim1, int dim2, int dim3, const Vector3& point) {
 	return flattened_index;
 }
 
-inline int flatten_indices2(int dim1, int dim2, int dim3, double dimx, double dimy, double dimz, const Vector3& point) {
-	int flattened_index = 0;
-	int x = ((int)(ceil(point.x*dim1 / dimx))) - 1; // values are ceiled (rounded up)
-	int y = ((int)(ceil(point.y*dim2 / dimy))) - 1;
-	int z = ((int)(ceil(point.z*dim3 / dimz))) - 1;
-	flattened_index = x + y * dim1 + z * dim1 * dim2;
-	return flattened_index;
+inline int flatten_indices2(const int& dim1, const int& dim2, const int& dim3, const double& dimx, const double& dimy, const double& dimz, const Vector3& point) {
+	int x = static_cast<int>(std::ceil(point.x * dim1 / dimx)) - 1;
+	int y = static_cast<int>(std::ceil(point.y * dim2 / dimy)) - 1;
+	int z = static_cast<int>(std::ceil(point.z * dim3 / dimz)) - 1;
+
+	return x + y * dim1 + z * dim1 * dim2;
 }
+
+//inline int flatten_indices2(int dim1, int dim2, int dim3, double dimx, double dimy, double dimz, const Vector3& point) {
+//	int flattened_index = 0;
+//	int x = ((int)(ceil(point.x*dim1 / dimx))) - 1; // values are ceiled (rounded up)
+//	int y = ((int)(ceil(point.y*dim2 / dimy))) - 1;
+//	int z = ((int)(ceil(point.z*dim3 / dimz))) - 1;
+//	flattened_index = x + y * dim1 + z * dim1 * dim2;
+//	return flattened_index;
+//}
 
 // This method allows to get the indices in a 3D grid from a flattened array index
 // This operation is often called unraveling. Note : you don't really need the 3rd dimension (the smallest one)
 
-inline Vector3 unravel3D(int idx_in, int intdim1, int intdim2, int index_init_norm = 0) {
+inline Vector3 unravel3D(const int& idx_in, const int& intdim1, const int& intdim2, int index_init_norm = 0) {
 	int i, j, k;
+
 	if (index_init_norm == 0) {
-		k = (int)(idx_in / (intdim1*intdim2));
-		j = (int)((idx_in - k * intdim1*intdim2) / intdim1);
-		i = (int)(idx_in - k * intdim1*intdim2 - j * intdim1);
+		k = idx_in / (intdim1 * intdim2);
+		j = (idx_in - k * intdim1 * intdim2) / intdim1;
+		i = idx_in - k * intdim1 * intdim2 - j * intdim1;
 	}
 	else {
-		k = (int)(ceil(idx_in / (intdim1*intdim2)));
-		j = (int)(ceil((idx_in - k * intdim1*intdim2) / intdim1));
-		i = (int)(ceil(idx_in - k * intdim1*intdim2 - j * intdim1));
+		k = static_cast<int>(std::ceil(idx_in / (intdim1 * intdim2)));
+		j = static_cast<int>(std::ceil((idx_in - k * intdim1 * intdim2) / intdim1));
+		i = static_cast<int>(std::ceil(idx_in - k * intdim1 * intdim2 - j * intdim1));
 	}
-	return 	Vector3(i, j, k);
+
+	return Vector3(i, j, k);
 }
+
+
+//inline Vector3 unravel3D(int idx_in, int intdim1, int intdim2, int index_init_norm = 0) {
+//	int i, j, k;
+//	if (index_init_norm == 0) {
+//		k = (int)(idx_in / (intdim1*intdim2));
+//		j = (int)((idx_in - k * intdim1*intdim2) / intdim1);
+//		i = (int)(idx_in - k * intdim1*intdim2 - j * intdim1);
+//	}
+//	else {
+//		k = (int)(ceil(idx_in / (intdim1*intdim2)));
+//		j = (int)(ceil((idx_in - k * intdim1*intdim2) / intdim1));
+//		i = (int)(ceil(idx_in - k * intdim1*intdim2 - j * intdim1));
+//	}
+//	return 	Vector3(i, j, k);
+//}
 
 // This allows to get the equivalent index of a grid in a new grid, in a raveled context (1D).
 //You can define if the indices start at 0 or 1 in option (0 by default)
@@ -510,7 +545,38 @@ inline std::vector<int> scan_area(double r, double r_min, const Vector3& point, 
 
 // version with varying dimensions
 
-inline std::vector<int> scan_area2(double r, double r_min, const Vector3& point, int dim1, int dim2, int dim3, double dimx, double dimy, double dimz) {
+//inline std::vector<int> scan_area2(const double& r, const double& r_min, const Vector3& point, const int& dim1, const int& dim2,
+//	const int& dim3, const double& dimx, const double& dimy, const double& dimz) {
+//
+//	int flattened_index = flatten_indices2(dim1, dim2, dim3, dimx, dimy, dimz, point);
+//	Vector3 coord = unravel3D(flattened_index, dim1, dim2);
+//	std::vector<int> scanned_indices;
+//
+//	int region_size = static_cast<int>(ceil(2 * r * sqrt(3) / r_min));
+//
+//	int x_start = std::max(0, static_cast<int>(coord.x - region_size));
+//	int x_end = std::min(dim1, static_cast<int>(coord.x + region_size)) + 1;
+//	int y_start = std::max(0, static_cast<int>(coord.y - region_size));
+//	int y_end = std::min(dim2, static_cast<int>(coord.y + region_size)) + 1;
+//	int z_start = std::max(0, static_cast<int>(coord.z - region_size));
+//	int z_end = std::min(dim3, static_cast<int>(coord.z + region_size)) + 1;
+//
+//	//scanned_indices.reserve((x_end - x_start) * (y_end - y_start) * (z_end - z_start));
+//
+//	for (int x_i = x_start; x_i < x_end; x_i++) {
+//		for (int y_i = y_start; y_i < y_end; y_i++) {
+//			for (int z_i = z_start; z_i < z_end; z_i++) {
+//				scanned_indices.push_back(flattened_index + x_i + y_i * dim1 + z_i * dim1 * dim2);
+//			}
+//		}
+//	}
+//
+//	return scanned_indices;
+//}
+
+
+inline std::vector<int> scan_area2(const double& r, const double& r_min, const Vector3& point, const int& dim1, const int& dim2,
+	const int& dim3, const double& dimx, const double& dimy, const double& dimz) {
 	int flattened_index = flatten_indices2(dim1, dim2, dim3, dimx, dimy, dimz, point);
 	Vector3 coord = unravel3D(flattened_index, dim1, dim2);
 	std::vector<int> scanned_indices;
@@ -529,6 +595,7 @@ inline std::vector<int> scan_area2(double r, double r_min, const Vector3& point,
 			}
 		}
 	}
+
 	return scanned_indices;
 }
 
@@ -556,13 +623,13 @@ inline double scalar_product(Vector3 v1, Vector3 v2) {
 	return v1.x*v2.x + v1.y*v2.y + v1.z*v2.z;
 }
 
-inline bool is_point_under_triangle(Vector3& new_horizon_pt, Vector3& P0, Vector3& P1, Vector3& P2) {
+inline bool is_point_under_triangle(const Vector3& new_horizon_pt, const Vector3& P0, const Vector3& P1, const Vector3& P2, const double tolerance = 1e-5) {
 
-	// preliminary test : if all 3 z values are above or below the point, no need to go further :
-	if (P0.z >= new_horizon_pt.z && P1.z >= new_horizon_pt.z && P2.z >= new_horizon_pt.z) { // pz = z(triangle) is also accepted as under the triangle
+	// preliminary test: if all 3 z values are above or below the point, no need to go further
+	if (P0.z >= new_horizon_pt.z + tolerance && P1.z >= new_horizon_pt.z + tolerance && P2.z >= new_horizon_pt.z + tolerance) {
 		return true;
 	}
-	if (P0.z < new_horizon_pt.z && P1.z < new_horizon_pt.z && P2.z < new_horizon_pt.z) {
+	if (P0.z < new_horizon_pt.z - tolerance && P1.z < new_horizon_pt.z - tolerance && P2.z < new_horizon_pt.z - tolerance) {
 		return false;
 	}
 
@@ -572,21 +639,57 @@ inline bool is_point_under_triangle(Vector3& new_horizon_pt, Vector3& P0, Vector
 	vect_product(vec1, vec2, normal);
 	Vector3 P0_new_horizon_pt(new_horizon_pt.x - P0.x, new_horizon_pt.y - P0.y, new_horizon_pt.z - P0.z);
 	double res = scalar_product(P0_new_horizon_pt, normal);
-	if (normal.z < 0) {//check orientation of the normal
-		if (res >= 0) {
-			return true;
+
+	// Check orientation of the normal
+	if (normal.z < -tolerance) {
+		if (res >= -tolerance) {
+			return true;  // Point is below the triangle
 		}
 		else {
-			return false;
+			return false;  // Point is above the triangle
 		}
 	}
-	else if (res <= 0) {
-		return true;
+	else if (normal.z > tolerance) {
+		if (res <= tolerance) {
+			return true;  // Point is below the triangle
+		}
+		else {
+			return false;  // Point is above the triangle
+		}
 	}
 	else {
-		return false;
+		// Triangle is (nearly) horizontal, check the point's position in 2D space
+		if (std::abs(res) <= tolerance) {
+			return true;  // Point is coplanar or very close
+		}
+		else if (res > tolerance) {
+			return true;  // Point is below the triangle
+		}
+		else {
+			return false;  // Point is above the triangle
+		}
 	}
+}
 
+// Function to compute barycentric coordinates of a point in a triangle
+inline void barycentric(const Vector3& pt, const Vector3& A, const Vector3& B, const Vector3& C,
+	double& bary1, double& bary2, double& bary3) {
+	Vector3 v0 = B - A, v1 = C - A, v2 = pt - A;
+	double d00 = Dot(v0,v0);
+	double d01 = Dot(v0, v1);
+	double d11 = Dot(v1, v1);
+	double d20 = Dot(v2, v0);
+	double d21 = Dot(v2, v1);
+	double denom = d00 * d11 - d01 * d01;
+	bary2 = (d11 * d20 - d01 * d21) / denom;
+	bary3 = (d00 * d21 - d01 * d20) / denom;
+	bary1 = 1.0 - bary2 - bary3;
+}
+
+// Function to compute the signed distance from a point to the plane defined by a triangle
+inline double signed_distance_to_plane(const Vector3& pt, const Vector3& A, const Vector3& B, const Vector3& C) {
+	Vector3 normal = Normalize(Cross((B - A),(C - A)));
+	return Dot(normal,pt - A);
 }
 
 /* Vector2 */
@@ -857,4 +960,114 @@ inline double Matrix4::Determinant() const
 		- M(1, 0) * Matrix3(M(0, 1), M(0, 2), M(0, 3), M(2, 1), M(2, 2), M(2, 3), M(3, 1), M(3, 2), M(3, 3)).Determinant()
 		+ M(2, 0) * Matrix3(M(0, 1), M(0, 2), M(0, 3), M(1, 1), M(1, 2), M(1, 3), M(3, 1), M(3, 2), M(3, 3)).Determinant()
 		- M(3, 0) * Matrix3(M(0, 1), M(0, 2), M(0, 3), M(1, 1), M(1, 2), M(1, 3), M(2, 1), M(2, 2), M(2, 3)).Determinant();
+}
+
+struct Neighbour {
+	int i;
+	double d;
+	bool operator<(const Neighbour& nei) const {
+		return d < nei.d;
+	}
+	bool operator>(const Neighbour& nei) const {
+		return d > nei.d;
+	}
+};
+
+struct PointCloud {
+
+public:
+		std::vector<Vector3> cloud;
+		using my_kd_tree_t = nanoflann::KDTreeSingleIndexAdaptor<nanoflann::L2_Simple_Adaptor<double, PointCloud>, PointCloud, 3>;
+		std::unique_ptr<my_kd_tree_t> index;
+		static const std::vector<Vector3> defaultCloud;
+
+		PointCloud();
+		PointCloud(const std::vector<Vector3>& cloud);
+		//PointCloud(const PointCloud &) = default;
+		PointCloud(const PointCloud& other);
+		size_t kdtree_get_point_count() const;
+		double kdtree_get_pt(const size_t idx, const size_t dim) const;
+		template <class BBOX>
+		bool kdtree_get_bbox(BBOX&) const;
+		void findNearestNeighbors(const Vector3& queryPoint, int querryidx, int N, double distmax, std::vector<Neighbour>& result) const;
+};
+
+// Constructor for PointCloud
+inline PointCloud::PointCloud():cloud(defaultCloud)
+{
+}
+
+// Constructor for PointCloud
+inline PointCloud::PointCloud(const std::vector<Vector3>& cloud)
+	: cloud(cloud),
+	index(nullptr)
+{
+	// Create the index outside of the initialization list
+	index = std::make_unique<my_kd_tree_t>(3, *this, nanoflann::KDTreeSingleIndexAdaptorParams(10));
+	//index->buildIndex();
+}
+
+inline PointCloud::PointCloud(const PointCloud& other)
+	: cloud(other.cloud),
+	index(nullptr)
+{
+	// Create the index outside of the initialization list
+	index = std::make_unique<my_kd_tree_t>(3, *this, nanoflann::KDTreeSingleIndexAdaptorParams(10));
+	//index->buildIndex(); // Uncomment if building the index is necessary after copying
+}
+
+// Must return the number of data points
+inline size_t PointCloud::kdtree_get_point_count() const { return cloud.size(); }
+
+// Returns the dim'th component of the idx'th point in the class:
+// Since this is inlined and the "dim" argument is typically an immediate
+// value, the
+//  "if/else's" are actually solved at compile time.
+inline double PointCloud::kdtree_get_pt(const size_t idx, const size_t dim) const
+{
+	if (dim == 0)
+		return cloud[idx].x;
+	else if (dim == 1)
+		return cloud[idx].y;
+	else
+		return cloud[idx].z;
+}
+
+// Optional bounding-box computation: return false to default to a standard
+// bbox computation loop.
+//   Return true if the BBOX was already computed by the class and returned
+//   in "bb" so it can be avoided to redo it again. Look at bb.size() to
+//   find out the expected dimensionality (e.g. 2 or 3 for point clouds)
+template <class BBOX>
+inline bool PointCloud::kdtree_get_bbox(BBOX& /* bb */) const
+{
+	return false;
+}
+
+// Function to find nearest neighbors
+inline void PointCloud::findNearestNeighbors(const Vector3& queryPoint, int querryidx, int N, double distmax, std::vector<Neighbour>& result) const {
+	// Initialize the results structure
+	std::vector<int> indices(N);
+	std::vector<double> dists(N);
+
+	// Search for the nearest neighbors
+	nanoflann::KNNResultSet<double, int> resultSet(N);
+	resultSet.init(&indices[0], &dists[0]);
+	nanoflann::SearchParameters params;
+	params.sorted = true; // Sort the results based on distance
+
+	//index.buildIndex();
+	index->findNeighbors(resultSet, &queryPoint.x, params);
+
+	// Process the results
+	for (size_t i = 0; i < indices.size(); ++i) {
+		int index = indices[i];
+		double distance = dists[i];
+
+		// Check if the distance is within the specified range
+		if (distance <= distmax && querryidx != index) {
+			// Add the neighbor to the result vector
+			result.push_back(Neighbour{ index, distance });
+		}
+	}
 }

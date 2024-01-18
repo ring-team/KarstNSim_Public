@@ -41,6 +41,7 @@ If you use this code, pleace cite : Paris et al., 2021, Computer Graphic Forum.
 #include "KarstNSim/KarsticNetwork.h"
 #include "KarstNSim/write_files.h"
 #include "KarstNSim/randomgenerator.h"
+#include "KarstNSim/write_files.h"
 
 namespace KarstNSim {
 	/*!
@@ -150,58 +151,6 @@ namespace KarstNSim {
 		std::pair<std::vector<int>, std::vector<double>> DijkstraGetShortestPathTo(int, const std::vector<int>&, const std::vector<double>&, double&) const;
 	};
 
-	struct Neighbour {
-		int i;
-		double d;
-		bool operator<(const Neighbour& nei) const {
-			return d < nei.d;
-		}
-		bool operator>(const Neighbour& nei) const {
-			return d > nei.d;
-		}
-	};
-
-	struct PointCloud {
-
-		const std::vector<Vector3>& cloud;
-		using my_kd_tree_t = nanoflann::KDTreeSingleIndexAdaptor<nanoflann::L2_Simple_Adaptor<double, PointCloud>, PointCloud, 3>;
-		std::unique_ptr<my_kd_tree_t> index;
-
-		PointCloud(const std::vector<Vector3>& cloud);
-
-		// Must return the number of data points
-		inline size_t kdtree_get_point_count() const { return cloud.size(); }
-
-		// Returns the dim'th component of the idx'th point in the class:
-		// Since this is inlined and the "dim" argument is typically an immediate
-		// value, the
-		//  "if/else's" are actually solved at compile time.
-		inline double kdtree_get_pt(const size_t idx, const size_t dim) const
-		{
-			if (dim == 0)
-				return cloud[idx].x;
-			else if (dim == 1)
-				return cloud[idx].y;
-			else
-				return cloud[idx].z;
-		}
-
-		// Optional bounding-box computation: return false to default to a standard
-		// bbox computation loop.
-		//   Return true if the BBOX was already computed by the class and returned
-		//   in "bb" so it can be avoided to redo it again. Look at bb.size() to
-		//   find out the expected dimensionality (e.g. 2 or 3 for point clouds)
-		template <class BBOX>
-		bool kdtree_get_bbox(BBOX& /* bb */) const
-		{
-			return false;
-		}
-
-		// Function to find nearest neighbors
-		void findNearestNeighbors(const Vector3& queryPoint, int querryidx, int N, double distmax, std::vector<Neighbour>& result);
-
-	};
-
 	/*!
 	\class GraphOperations
 	\brief Class inheriting from CostGraph, containing methods allowing to create the sampling cloud, generate the nearest neighbor graph onto it, apply costs to each edge and prune the graph to generate the karstic network
@@ -232,11 +181,11 @@ namespace KarstNSim {
 	public:
 		explicit GraphOperations();
 		double ComputeEdgeDistanceCost(const Vector3& p, const Vector3& pn, const double dmin, const double dmax);
-		std::pair<std::vector<double>, std::vector<bool>> ComputeEdgeCostAdapted(const int index, const Vector3& p, const Vector3& pn, double& dmin, double& dmax, const double  dist_max, std::vector<double> max_dist_wt) const;
-		bool CheckBelowSurf(Vector3, Surface*);
-		double distsurf(Vector3 pt, Surface* surface, const double max_inception_surface_distance);
+		std::pair<std::vector<double>, std::vector<bool>> ComputeEdgeCostAdapted(const int index, const Vector3& p, const Vector3& pn, double& dmin, double& dmax, const double  dist_max, std::vector<double> min_dist_wt, std::vector<double> max_dist_wt) const;
+		bool CheckBelowSurf(const Vector3&, Surface*, const PointCloud&,const PointCloud& centers2D);
+		double distsurf(const Vector3& pt, Surface* surface, const double& max_inception_surface_distance, const PointCloud& centers, const PointCloud& centers2D);
 		double compute_euclidian_distance_from_surfaces(std::vector<Surface>*, const double);
-		std::vector<double> compute_euclidian_distance_from_wt(std::vector<Surface>*, const double);
+		std::pair< std::vector<double>, std::vector<double>> compute_euclidian_distance_from_wt(std::vector<Surface>*, const double);
 		void InitializeCostGraphAdapted(const bool create_nghb_graph, const bool create_nghb_graph_property, const std::vector<KeyPoint>& keypts, const GeologicalParameters& geologicalparams, const std::vector<Vector3>& Points, std::vector<Surface>* inception_horizons,
 		std::vector<Surface>* water_tables, const bool use_sampling_points, Box* Box, const double max_inception_surface_distance, std::vector<Vector3>* sampling_points,
 		const bool create_surf_sampling, const bool use_density_property, int k_pts, const double fraction_karst_perm, std::vector<double> propdensity, std::vector<double> propikp, Surface* topo_surface);
@@ -251,6 +200,6 @@ namespace KarstNSim {
 	protected:
 		void SampleSpaceDwork(std::vector<Vector3>& Points, Box* Box, const bool use_density_property, const int k, std::vector<double> propdensity, Surface* topo_surface);
 		void DefineWSurfaceFlags(std::vector<Surface>* water_tables);
-		void BuildNearestNeighbourGraphAdapted(Box*, const double fraction_old_karst_perm, const std::vector<double> max_dist_wt, double max_dist_surf);
+		void BuildNearestNeighbourGraphAdapted(Box*, const double fraction_old_karst_perm, const std::vector<double> min_dist_wt, const std::vector<double> max_dist_wt, double max_dist_surf);
 	};
 }

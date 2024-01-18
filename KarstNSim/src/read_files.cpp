@@ -72,7 +72,6 @@ namespace KarstNSim {
 		// don't forget to reset to beginning, to not skip first line after header!
 		in.clear();                 // clear fail and eof bits
 		in.seekg(0, std::ios::beg); // back to the start!
-
 		// go through lines
 
 		std::vector<Vector3> nodes;
@@ -83,7 +82,6 @@ namespace KarstNSim {
 		while (std::getline(in, line)) { // get line
 			std::istringstream iss2(line);
 			iss2 >> tag;
-
 			if (tag == "VRTX") { 			// if we're reading the vertices
 				// initialize all params of each line
 				int idx;

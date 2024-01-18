@@ -28,6 +28,7 @@ If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
 #include <algorithm>
 #include <string>
 #include <random>
+#include <iomanip>
 
 namespace KarstNSim {
 	/*!

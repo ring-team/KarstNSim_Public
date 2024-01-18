@@ -32,7 +32,7 @@ namespace KarstNSim {
 		out << 1 << "	" << u[0] << "	" << u[1] << "	" << u[2];
 		if (properties.size()) {
 			for (int j = 0; j < int(properties.size()); j++) { // iterate on properties (if any)
-				out << "	" << properties[j]; // get element of property j
+				out << "	" << std::fixed << std::setprecision(10) <<  properties[j];
 			}
 			out << "\n";
 		}
@@ -65,7 +65,7 @@ namespace KarstNSim {
 			out << "VRTX " << i + 1 << "	" << v[0] << "	" << v[1] << "	" << v[2];
 			if (properties.size()) {
 				for (int j = 0; j < properties[0].size(); j++) { // iterate on properties (if any)
-					out << "	" << properties[i][j]; // get first element of property j at segment i
+					out << "	" << std::fixed << std::setprecision(10) << properties[i][j];
 				}
 			}
 			out << "\n";
@@ -103,7 +103,7 @@ namespace KarstNSim {
 			out << i + 1 << "	" << v[0] << "	" << v[1] << "	" << v[2];
 			if (properties.size()) {
 				for (int j = 0; j < properties[0].size(); j++) { // iterate on properties (if any)
-					out << "	" << properties[i][j]; // get first element of property j at segment i
+					out << "	" << std::fixed << std::setprecision(10) << properties[i][j];
 				}
 			}
 			out << "\n";
@@ -140,14 +140,14 @@ namespace KarstNSim {
 			out << i + 1 << "	" << start[0] << "	" << start[1] << "	" << start[2];
 			if (properties.size()) {
 				for (int j = 0; j < properties[0].size(); j++) { // iterate on properties (if any)
-					out << "	" << properties[i][j][0]; // get first element of property j at segment i
+					out << "	" << std::fixed << std::setprecision(10) <<  properties[i][j][0];
 				}
 			}
 			out << "\n";
 			out << i + 1 << "	" << end[0] << "	" << end[1] << "	" << end[2];
 			if (properties.size()) {
 				for (int j = 0; j < properties[0].size(); j++) { // iterate on properties (if any)
-					out << "	" << properties[i][j][1]; // get second element of property j at segment i
+					out << "	" << std::fixed << std::setprecision(10) <<properties[i][j][1];
 				}
 			}
 			out << "\n";
@@ -196,7 +196,7 @@ namespace KarstNSim {
 					int index = uk + vk * nu + wk * nu * nv;
 					out << index;
 					for (int p = 0; p < int(properties[0].size()); p++) { // iterate on properties (if any)
-						out << "	" << properties[index][p]; // get element of property j
+						out << "	" << std::fixed << std::setprecision(10) << properties[index][p];
 					}
 					out << "\n";
 				}

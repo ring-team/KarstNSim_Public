@@ -28,8 +28,6 @@ If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
 #include <algorithm>    // std::random_shuffle
 #include <fstream>
 #include <assert.h>
-#include <string>
-#include <fstream>
 #include <sstream>
 #include <vector>
 #include <cstring>

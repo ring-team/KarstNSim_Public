@@ -13,12 +13,20 @@ If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
 #include <chrono>
 
 int main(int argc, char* argv[]) {
-	if (argc != 2) {
-		std::cerr << "Usage: " << argv[0] << " <instruction_file>" << std::endl;
-		return 1;
-	}
-
-	std::string instructionFile = argv[1];
+	//if (argc != 2) {
+	//	std::cerr << "Usage: " << argv[0] << " <instruction_file>" << std::endl;
+	//	return 1;
+	//}
+	std::string instructionFile;
+	
+    // Check if a command-line argument is provided
+    if (argc > 1) {
+        // Use the provided file name
+        instructionFile = argv[1];
+    } else {
+        // Use a default file name
+        instructionFile = "../../../Input_files/instructions.txt";
+    }
 
 	std::cout << "Parsing instruction file: " << instructionFile << std::endl;
 

@@ -224,7 +224,7 @@ namespace KarstNSim {
 		dist = distances[n];
 		double dist1 = dist;
 		double dist2 = dist;
-		double eps = 1e-100;
+		double eps = 1e-50;
 		int tocopy = 0;
 		for (; n != -1; n = previous[n])
 		{
@@ -234,11 +234,11 @@ namespace KarstNSim {
 			path.insert(path.begin(), n);
 			if (abs(dist1 - dist2) < eps) {
 				prev = false;
-				tocopy ++;
+				tocopy++;
 			}
 			if (prev) {
 				path_cost.insert(path_cost.begin(), dist1 - dist2);
-				if (tocopy>0) {
+				if (tocopy > 0) {
 					for (int copy = 0; copy < tocopy; copy++) {
 						path_cost.insert(path_cost.begin(), dist1 - dist2);
 					}

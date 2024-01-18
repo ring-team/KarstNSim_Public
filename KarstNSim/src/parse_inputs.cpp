@@ -70,7 +70,6 @@ KarstNSim::ParamsSource ParseInputs::parse(const std::string& filename) {
 		std::istringstream iss(line);
 		std::string paramType;
 		iss >> paramType;
-
 		if (paramType == "karstic_network_name:") {
 			iss >> params.karstic_network_name;
 		}
@@ -356,7 +355,6 @@ KarstNSim::ParamsSource ParseInputs::parse(const std::string& filename) {
 		params.multiply_costs = parseBoolean(flag);
 		}
 	}
-
 	inputFile.close();
 	return params;
 }

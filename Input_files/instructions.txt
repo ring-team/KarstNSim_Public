@@ -12,7 +12,7 @@
 // (ALWAYS keep at the beginning of the file):
 
 karstic_network_name: example
-main_repository: absolute/path/to/your/main/repository
+main_repository: ../../..
 
 // General parameters :
 
@@ -56,7 +56,7 @@ use_waypoints: false
 
 // Inception surfaces :
 
-add_inception_surfaces: true
+add_inception_surfaces: false
 refine_surface_sampling: 2
 inception_surfaces: Input_files/example_inception_surf0.txt Input_files/example_inception_surf1.txt Input_files/example_inception_surf2.txt Input_files/example_inception_surf3.txt
 inception_surface_constraint_weight: 1.0
@@ -64,12 +64,12 @@ max_inception_surface_distance: 50.0
 
 // Karstification potential (property scanned from grid/box) :
 
-use_karstification_potential: true
+use_karstification_potential: false
 karstification_potential_weight: 1.0
 
 // Fractures (orientations, as angles to the north, and angular tolerance for each family) :
 
-use_fracture_constraints: true
+use_fracture_constraints: false
 fracture_families_orientations: 0 60
 fracture_families_tolerance: 5 5
 fracture_constraint_weight: 0.5
@@ -89,5 +89,5 @@ multiply_costs: false
 // Save parameters (if you want to save sampling points, cost graph and cost property) :
 
 create_vset_sampling: true
-create_nghb_graph: true
-create_nghb_graph_property: true
+create_nghb_graph: false
+create_nghb_graph_property: false
