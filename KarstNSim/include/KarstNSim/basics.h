@@ -24,7 +24,6 @@ If you use this code, pleace cite : Paris et al., 2021, Computer Graphic Forum.
 #include <time.h>
 #include <vector>
 #include <algorithm>
-#include <windows.h>
 
 namespace KarstNSim {
 // Random (Dirty, C-style)
