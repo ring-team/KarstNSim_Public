@@ -13,7 +13,7 @@ This public version corresponds to the version of KarstNSim used to generate res
 
 It is recommended to read the methodology presented in the article to better apprehend the code.
 
-If you use this code, please cite it :
+If you use this code, please cite the associated article :
 
 ```
 @article{Gouy2024,
