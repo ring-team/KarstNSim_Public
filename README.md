@@ -15,6 +15,7 @@ It is recommended to read the methodology presented in the article to better app
 
 If you use this code, please cite it :
 
+```
 @article{Gouy2024,
 author = {Gouy, Augustin and Collon, Pauline and Bailly-Comte, Vincent and Galin, Eric and Antoine, Christophe and Thebault, Beno{\^{i}}t and Landrein, Philippe},
 doi = {10.1016/j.jhydrol.2024.130878},
@@ -24,6 +25,7 @@ month = {feb},
 title = {{KarstNSim: A graph-based method for 3D geologically-driven simulation of karst networks}},
 year = {2024}
 }
+```
 
 ## Requirements
 
