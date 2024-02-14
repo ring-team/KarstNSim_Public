@@ -65,7 +65,7 @@ We provide here a synthetic dataset and instruction file in the correct format u
 
 If you want to make modifications to the input parameters, open the instructions.txt file and change options as needed.
 
-It is advised to use a 3D viewer software to visualize complex inputs and outputs (the viewer is not provided in the archive).
+It is advised to use a 3D viewer software (e.g., [ParaView](https://www.paraview.org/download/) ) to visualize complex inputs and outputs (the viewer is not provided in the archive).
 
 <b>For any information </b>, please contact : 
 * Augustin Gouy : augustin.gouy@univ-lorraine.fr
