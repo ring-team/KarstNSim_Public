@@ -1,7 +1,7 @@
 # KarstNSim_Public
 Public version of KarstNSim, a C++ code for graph-based and geologically-driven simulation of 3D karst networks.
 
-* Linked publication : INSERT DOI.
+* [Linked publication](10.1016/j.jhydrol.2024.130878)
 
 Its inputs and outputs are ASCII files and it can be run through a single command.
 It adapts the Karst simulation code proposed by <b> Paris, A., Guérin, E., Peytavie, A., Collon, P., Galin, E., 2021. Synthesizing Geologically Coherent Cave Networks. Comput. Graph. Forum 40, 277–287. https://doi.org/10.1111/cgf.14420 which is available on Github at : https://github.com/aparis69/Karst-Synthesis. </b>
@@ -9,12 +9,21 @@ This implementation includes modifications as compared to this initial independa
 
 The first version of KarstNSim was done in the frame of <b> Benoit Thebault </b> master's thesis, supervised by Pauline Collon. It was presented in the 2022 RINGMeeting in: <b> Thebault, B., Collon, P., Antoine, C., Paris, A., Galin, E., 2022. Karstic network simulation with γ -graphs, in: 2022 RING Meeting. </b>
 Since 2022 summer, KarstNSim is developed in the frame of <b> Augustin Gouy</b> PhD thesis, supervised by Pauline Collon and Vincent Bailly-Comte.
-This public version corresponds to the version of KarstNSim used to generate results of the publication proposed by <b> Gouy A., Collon P., Bailly-Comte V., Galin E., Antoine C., Thebault B., Landrein P., 2024. KarstNSim: a graph-based method for 3D geologically-driven
-simulation of karst networks. [insert DOI here] </b>
+This public version corresponds to the version of KarstNSim used to generate results presented in <b> Gouy, A., Collon, P., Bailly-Comte, V., Galin, E., Antoine, C., Thebault, B., & Landrein, P. (2024). KarstNSim: A graph-based method for 3D geologically-driven simulation of karst networks. Journal of Hydrology. https://doi.org/10.1016/j.jhydrol.2024.130878 </b>
 
 It is recommended to read the methodology presented in the article to better apprehend the code.
 
-If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
+If you use this code, please cite it :
+
+@article{Gouy2024,
+author = {Gouy, Augustin and Collon, Pauline and Bailly-Comte, Vincent and Galin, Eric and Antoine, Christophe and Thebault, Beno{\^{i}}t and Landrein, Philippe},
+doi = {10.1016/j.jhydrol.2024.130878},
+issn = {00221694},
+journal = {Journal of Hydrology},
+month = {feb},
+title = {{KarstNSim: A graph-based method for 3D geologically-driven simulation of karst networks}},
+year = {2024}
+}
 
 ## Requirements
 
@@ -48,8 +57,7 @@ A doxyfile is present in the archive. To automatically generate the documentatio
 
 ## Testing
 
-We provide here a synthetic dataset and instruction file in the correct format used for KarstNSim, which corresponds to inputs used to generate examples similar to those of figure 12 in **[insert DOI]** (see figure below). By default the generated example is the homogeneous medium one. You can find those data in the Input_files folder.
-
+We provide here a synthetic dataset and instruction file in the correct format used for KarstNSim, which corresponds to inputs used to generate examples similar to those of figure 12 in **10.1016/j.jhydrol.2024.130878** (see figure below). By default the generated example is the homogeneous medium one. You can find those data in the Input_files folder.
 
 <img src="vadose_contexts_example.png" alt="Figure 12 (Gouy et al., 2023)" width="100%" align="center">
 
