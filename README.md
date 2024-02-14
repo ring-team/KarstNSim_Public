@@ -1,7 +1,7 @@
 # KarstNSim_Public
 Public version of KarstNSim, a C++ code for graph-based and geologically-driven simulation of 3D karst networks.
 
-* [Linked publication](10.1016/j.jhydrol.2024.130878)
+* [Linked publication](https://doi.org/10.1016/j.jhydrol.2024.130878)
 
 Its inputs and outputs are ASCII files and it can be run through a single command.
 It adapts the Karst simulation code proposed by <b> Paris, A., Guérin, E., Peytavie, A., Collon, P., Galin, E., 2021. Synthesizing Geologically Coherent Cave Networks. Comput. Graph. Forum 40, 277–287. https://doi.org/10.1111/cgf.14420 which is available on Github at : https://github.com/aparis69/Karst-Synthesis. </b>
@@ -59,7 +59,7 @@ A doxyfile is present in the archive. To automatically generate the documentatio
 
 ## Testing
 
-We provide here a synthetic dataset and instruction file in the correct format used for KarstNSim, which corresponds to inputs used to generate examples similar to those of figure 12 in **10.1016/j.jhydrol.2024.130878** (see figure below). By default the generated example is the homogeneous medium one. You can find those data in the Input_files folder.
+We provide here a synthetic dataset and instruction file in the correct format used for KarstNSim, which corresponds to inputs used to generate examples similar to those of figure 12 in **[the publication] (https://doi.org/10.1016/j.jhydrol.2024.130878) ** (see figure below). By default the generated example is the homogeneous medium one. You can find those data in the Input_files folder.
 
 <img src="vadose_contexts_example.png" alt="Figure 12 (Gouy et al., 2023)" width="100%" align="center">
 
