@@ -24,6 +24,7 @@ If you use this code, pleace cite : Paris et al., 2021, Computer Graphic Forum.
 #include <time.h>
 #include <vector>
 #include <algorithm>
+#include <windows.h>
 
 namespace KarstNSim {
 // Random (Dirty, C-style)
@@ -307,10 +308,9 @@ private:
 public:
 	Triangle();
 	Triangle(const int& a, const int& b, const int& c);
-	//Vector3 Center() const;
-	//Vector3 Normal() const;
-	int point(int i) const;
-	//Vector3 Closest(Vector3 pt) const;
+	const int& point(const int& i) const;
+	// Method to check if a vertex index is in the triangle
+	bool containsVertex(const int& vertexIndex) const;
 };
 
 /*!
@@ -331,40 +331,19 @@ inline Triangle::Triangle(const int& a, const int& b, const int& c)
 	pts[2] = c;
 }
 
-///*!
-//\brief Computes and returns the center of the triangle.
-//*/
-//inline Vector3 Triangle::Center() const
-//{
-//	return (pts[0] + pts[1] + pts[2]) / 3.0f;
-//}
-//
-///*!
-//\brief Computes and returns the normal of the triangle.
-//*/
-//inline Vector3 Triangle::Normal() const
-//{
-//	return Normalize(Cross(pts[1] - pts[0], pts[2] - pts[0]));
-//}
-
 /*!
 \brief Returns one of the point of the triangle.
 \param i point index
 */
-inline int Triangle::point(int i) const
+inline const int& Triangle::point(const int& i) const
 {
 	return pts[i];
 }
 
-//inline Vector3 Triangle::Closest(Vector3 pt) const
-//{
-//	double dist1 = (pt.x-pts[0].x)*(pt.x - pts[0].x)+(pt.y - pts[0].y)*(pt.y - pts[0].y)+(pt.z - pts[0].z)*(pt.z - pts[0].z);
-//	double dist2 = (pt.x - pts[1].x)*(pt.x - pts[1].x) + (pt.y - pts[1].y)*(pt.y - pts[1].y) + (pt.z - pts[1].z)*(pt.z - pts[1].z);
-//	double dist3 = (pt.x - pts[2].x)*(pt.x - pts[2].x) + (pt.y - pts[2].y)*(pt.y - pts[2].y) + (pt.z - pts[2].z)*(pt.z - pts[2].z);
-//	if (dist1<dist2 && dist1<dist3) return pt[0]
-//	else if (dist2<dist3) return pt[1]
-//	else return pt[2]
-//}
+// Method to check if a vertex index is in the triangle
+inline bool Triangle::containsVertex(const int& vertexIndex) const {
+	return (vertexIndex == pts[0] || vertexIndex == pts[1] || vertexIndex == pts[2]);
+}
 
 class Surface
 {
@@ -374,15 +353,21 @@ private:
 	Vector3 b_min_;
 	Vector3 b_max_;
 	std::vector<double> circumradii_; // one per triangle
+	std::vector<Vector3> centers_;
+	std::string name_;
 	//PointCloud centers_;
 
 public:
-	Surface();
-	Surface(std::vector<Vector3>, std::vector<Triangle>);
+	Surface(const std::string& name = "DefaultName");
+	Surface(std::vector<Vector3>, std::vector<Triangle>, const std::string& name = "DefaultName");
 	int get_nb_trgls();
 	int get_nb_pts();
-	Triangle get_triangle(int i);
-	const Vector3& get_node(int i) const {
+	bool is_empty() const {
+		return pts_.size() == 0 && trgls_.size() == 0; // Assuming pts_ and trgls_ are data members representing points and triangles
+	}
+	const Triangle& get_triangle(const int& i);
+	const Triangle& get_triangle(const int& i) const;
+	const Vector3& get_node(const int& i) const {
 		return pts_[i];
 	};
 	//Vector3 get_node(int i);
@@ -393,31 +378,28 @@ public:
 	double get_circumradii(const int& i);
 	Vector3 get_trgl_center(const int& trgl_idx);
 	PointCloud get_centers_cloud( int dim) const;
-	//Vector3 Center() const;
-	//Vector3 Normal() const;
-	//Vector3 Point(int i) const;
-
+	int get_nb_valid_trgls();
+	//std::vector<int> findTrianglesSharingVertex(const Vector3& vertex) const;
+	//size_t findVertexIndex(const Vector3& vertex) const;
 };
 
 /*!
 \brief Default Constructor.
 */
-inline Surface::Surface()
-{
-}
+inline Surface::Surface(const std::string& name) : name_(name) {}
 
 /*!
 \brief Constructor from a vector of triangles.
 \param trgls, vector of triangles
 */
-inline Surface::Surface(std::vector<Vector3> pts, std::vector<Triangle> trgls)
-{
+inline Surface::Surface(std::vector<Vector3> pts, std::vector<Triangle> trgls, const std::string& name)
+	: name_(name) {
 	std::vector<Vector3> centers;
 	pts_ = pts;
 	// phase of trimming to remove bad triangles (3 points aligned, or worse...)
 	// another parameter that is practical for TINs is the length of the largest circumradius among all its triangles (in map view)
 	// We compute it directly when creating the surface.
-	double eps = 1e-5;
+	//double eps = 1e-5;
 	//circumradii_.resize(trgls.size(), 0.);
 	for (int trgl = 0; trgl < trgls.size(); trgl++) {
 		Triangle trgl_i = trgls[trgl];
@@ -439,15 +421,15 @@ inline Surface::Surface(std::vector<Vector3> pts, std::vector<Triangle> trgls)
 		// From my research it is the quickest way to make this test while keeping (very) good precision.
 		if (isTriangleValid(dist1, dist2, dist3)) {
 			double circum = calculateCircumradius(dist1, dist2, dist3);
-			if ((circum - dist1) < eps && (circum - dist2) < eps && (circum - dist3) < eps) {
-				circumradii_.push_back(circum);
-				trgls_.push_back(trgl_i);
-				centers.push_back(center);
-			}
+			//if ((circum - dist1) < eps && (circum - dist2) < eps && (circum - dist3) < eps) {
+			circumradii_.push_back(circum);
+			trgls_.push_back(trgl_i);
+			centers.push_back(center);
+			//}
 		}
 	}
 
-	//centers_ = centers;
+	centers_ = centers;
 
 	double x_min = pts[0].x;
 	double x_max = pts[0].x;
@@ -467,6 +449,31 @@ inline Surface::Surface(std::vector<Vector3> pts, std::vector<Triangle> trgls)
 	b_max_ = Vector3(x_max, y_max, z_max); // this is the coordinates of the top corner in all 3 directions
 
 }
+
+//// Helper function to find the index of a vertex in pts_
+//size_t Surface::findVertexIndex(const Vector3& vertex) const {
+//	for (size_t i = 0; i < pts_.size(); ++i) {
+//		if (pts_[i].x == vertex.x && pts_[i].y == vertex.y && pts_[i].z == vertex.z) {
+//			return i;
+//		}
+//	}
+//	return static_cast<size_t>(-1); // Return an invalid index if the vertex is not found
+//}
+//
+//inline std::vector<int> Surface::findTrianglesSharingVertex(const Vector3& vertex) const {
+//	std::vector<int> sharedTriangleIndices;
+//
+//	for (size_t i = 0; i < trgls_.size(); ++i) {
+//		const Triangle& triangle = trgls_[i];
+//
+//		// Check if the vertex is part of the current triangle
+//		if (trgls_[i].containsVertex(this->findVertexIndex(vertex))) {
+//			sharedTriangleIndices.push_back(i);
+//		}
+//	}
+//
+//	return sharedTriangleIndices;
+//}
 
 inline PointCloud Surface::get_centers_cloud( int dim=3) const {
 	std::vector<Vector3> centers;
@@ -492,7 +499,11 @@ inline int Surface::get_nb_pts() {
 	return int(pts_.size());
 }
 
-inline Triangle Surface::get_triangle(int i) {
+inline const Triangle& Surface::get_triangle(const int& i) {
+	return trgls_[i];
+}
+
+inline const Triangle& Surface::get_triangle(const int& i) const {
 	return trgls_[i];
 }
 
@@ -500,6 +511,10 @@ inline Vector3 Surface::nearest(Vector3 p1, Vector3 p2, Vector3 ptest) {
 	double dist = squaredmagnitude(p1 - ptest);
 	double dist2 = squaredmagnitude(p2 - ptest);
 	return (dist<=dist2) ? p1 : p2;
+}
+
+inline int Surface::get_nb_valid_trgls() {
+	return int(circumradii_.size());
 }
 
 inline Vector3 Surface::nearest(Vector3 p1, Vector3 p2, Vector3 p3, Vector3 ptest) {
@@ -521,13 +536,7 @@ inline Vector3 Surface::nearest(Vector3 p1, Vector3 p2, Vector3 p3, Vector3 ptes
 
 inline Vector3 Surface::get_trgl_center(const int& trgl_idx) {
 
-	int pt1 = trgls_[trgl_idx].point(0), pt2 = trgls_[trgl_idx].point(1), pt3 = trgls_[trgl_idx].point(2);
-	Vector3 p1 = get_node(pt1), p2 = get_node(pt2), p3 = get_node(pt3);
-	Vector3 center;
-	center.x = (p1.x + p2.x + p3.x) / 3.0;
-	center.y = (p1.y + p2.y + p3.y) / 3.0;
-	center.z = (p1.z + p2.z + p3.z) / 3.0;
-	return center;
+	return centers_[trgl_idx];
 }
 
 inline Vector3 Surface::get_boundbox_min() {
@@ -601,11 +610,21 @@ public:
 	Line();
 	Line(std::vector<Segment> segs);
 	void append(Segment seg);
+
 	int size();
-	Segment get_seg(int i);
-	std::vector<Vector3> get_unique_nodes();
-	int get_nb_unique_nodes();
-	int get_nb_segs();
+	int size() const;
+
+	Segment get_seg(int i) const;
+	Segment& get_seg(int i);  // Non-const version
+
+	std::vector<Vector3> get_unique_nodes() const;
+	std::vector<Vector3>& get_unique_nodes();  // Non-const version
+
+	int get_nb_unique_nodes() const;
+	int get_nb_unique_nodes(); // Non-const version
+
+	int get_nb_segs() const;
+	int get_nb_segs();  // Non-const version
 };
 
 inline Line::Line(){}
@@ -635,16 +654,36 @@ inline int Line::size() {
 	return int(segs_.size());
 }
 
-inline Segment Line::get_seg(int i) {
+inline int Line::size() const {
+	return int(segs_.size());
+}
+
+inline Segment Line::get_seg(int i) const {
 	return segs_[i];
 }
 
-inline std::vector<Vector3> Line::get_unique_nodes() {
+inline Segment& Line::get_seg(int i) {
+	return segs_[i];
+}
+
+inline std::vector<Vector3> Line::get_unique_nodes() const {
 	return unique_nodes_;
+}
+
+inline std::vector<Vector3>& Line::get_unique_nodes() {
+	return unique_nodes_;
+}
+
+inline int Line::get_nb_unique_nodes() const {
+	return nb_unique_nodes_;
 }
 
 inline int Line::get_nb_unique_nodes() {
 	return nb_unique_nodes_;
+}
+
+inline int Line::get_nb_segs() const {
+	return int(segs_.size());
 }
 
 inline int Line::get_nb_segs() {
@@ -659,8 +698,8 @@ protected:
 	Vector3 end;
 	Vector3 u, v, w;
 	int nu, nv, nw;
-	std::vector<double> mat;
-	std::vector<double> mat_t;
+	std::vector<double> mat; // matrix (3x3) of coordinates of u,v,w step vectors
+	std::vector<double> mat_t; // inverse of mat (useful for coordinates transformations)
 
 public:
 	inline Box() { }
@@ -683,7 +722,11 @@ public:
 	int get_nu() const;
 	int get_nv() const;
 	int get_nw() const;
+	Vector3 uvw2xyz(int up, int vp, int wp, bool cellcentered = false) const;
 	void xyz2uvw(const Vector3& pt, int &u, int &v, int &w);
+	void xyz2uvw_with_limits_conditions(const Vector3& pt, int &u1, int &v1, int &w1);
+	void ravel(int u, int v, int w, int& idx) const;
+	void unravel(int& u, int& v, int& w, int idx) const;
 
 	void Poisson(std::vector<Vector3>& samples, double r, int n) const;
 	void Poisson_adapted(std::vector<Vector3>& p, double r, int n, std::vector<Sphere>& spheres) const;
@@ -872,9 +915,57 @@ inline void Box::xyz2uvw(const Vector3& pt, int &up, int &vp, int &wp) {
 
 	// 2: get u/v/w coordinates in normalized domain
 
-	up = ((int)(ceil(ptn.x*nu))) - 1; // values are ceiled (rounded up)
-	vp = ((int)(ceil(ptn.y*nv))) - 1;
-	wp = ((int)(ceil(ptn.z*nw))) - 1;
+	up = static_cast<int>(std::floor(ptn.x * nu));
+	vp = static_cast<int>(std::floor(ptn.y * nv));
+	wp = static_cast<int>(std::floor(ptn.z * nw));
+
+	// Ensure that the indices are within bounds
+	up = std::max(0, std::min(up, nu - 1));
+	vp = std::max(0, std::min(vp, nv - 1));
+	wp = std::max(0, std::min(wp, nw - 1));
+}
+
+inline Vector3 Box::uvw2xyz(int up, int vp, int wp, bool cellcentered) const {
+
+	// if cell centered, the returned point is the center of the corresponding cell.
+	// if not, the grid is corner centered, and then the returned value is the cell corner (the one closer to the origin)
+	double offset = cellcentered ? 0.5 : 0.0;
+
+	// Calculate the position of the cell corner or center in the normalized domain
+	double u_normalized = (static_cast<double>(up) + offset) / nu;
+	double v_normalized = (static_cast<double>(vp) + offset) / nv;
+	double w_normalized = (static_cast<double>(wp) + offset) / nw;
+
+	// Transform back to the original coordinate system
+	Vector3 point;
+	point.x = u_normalized * u.x + v_normalized * v.x + w_normalized * w.x + basis.x;
+	point.y = u_normalized * u.y + v_normalized * v.y + w_normalized * w.y + basis.y;
+	point.z = u_normalized * u.z + v_normalized * v.z + w_normalized * w.z + basis.z;
+
+
+	return point;
+}
+
+inline void Box::xyz2uvw_with_limits_conditions(const Vector3& pt, int &u1, int &v1, int &w1) {
+	xyz2uvw(pt, u1, v1, w1);
+	if (u1 < 0) {
+		u1 = 0;
+	}
+	if (u1 >= nu) {
+		u1 = nu - 1;
+	}
+	if (v1 < 0) {
+		v1 = 0;
+	}
+	if (v1 >= nv) {
+		v1 = nv - 1;
+	}
+	if (w1 < 0) {
+		w1 = 0;
+	}
+	if (w1 >= nw) {
+		w1 = nw - 1;
+	}
 }
 
 /*!
@@ -937,6 +1028,19 @@ inline void Box::Poisson_adapted(std::vector<Vector3>& p, double r, int n, std::
 		if (! hit)
 			p.push_back(t);
 	}
+}
+
+inline void Box::ravel(int u, int v, int w, int& idx) const {
+	// Compute the index based on the cell indices and grid dimensions
+	idx = u + nu * (v + nv * w);
+}
+
+inline void Box::unravel(int& u, int& v, int& w, int idx) const {
+	// Compute the cell indices from the index and grid dimensions
+	w = idx / (nu * nv);
+	idx %= (nu * nv);
+	v = idx / nu;
+	u = idx % nu;
 }
 
 // AABB 2D

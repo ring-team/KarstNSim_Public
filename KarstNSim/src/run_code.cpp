@@ -11,7 +11,7 @@ If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
 #include "KarstNSim/run_code.h"
 
 namespace KarstNSim {
-	void run_simulation_full(ParamsSource parameters) {
+	void run_simulation_full( ParamsSource parameters) {
 
 		// Uncomment to save inputs for special use
 
@@ -72,12 +72,11 @@ namespace KarstNSim {
 		//full_dir_name = parameters.save_repertory + "/outputs";
 		//save_pointset(full_name, full_dir_name, springs, property_names_springs, properties_springs);
 
-		// save waypoints
+		//// save waypoints
 		//std::vector<Vector3> waypoints = parameters.waypoints;
 		//full_name = parameters.karstic_network_name + "_waypoints.txt";
 		//full_dir_name = parameters.save_repertory + "/outputs";
 		//save_pointset(full_name, full_dir_name, waypoints);
-
 
 		for (int i = 0; i < parameters.number_of_iterations; i++) {
 
@@ -119,9 +118,15 @@ namespace KarstNSim {
 				karst.set_karstification_potential_parameters(parameters.karstification_potential_weight);
 			}
 
+			if (parameters.create_grid) {
+				karst.save_painted_box(parameters.propdensity, parameters.propikp);
+			}
+
+			karst.set_wt_surfaces_sampling(sim_name_iter, &parameters.surf_wat_table, parameters.refine_surface_sampling);
+
 			if ((parameters.add_inception_surfaces)) {
 				if (!parameters.use_sampling_points) {
-					karst.set_surfaces_to_densify( sim_name_iter, &parameters.inception_surfaces, parameters.refine_surface_sampling, parameters.create_vset_sampling);
+					karst.set_inception_surfaces_sampling( sim_name_iter, &parameters.inception_surfaces, parameters.refine_surface_sampling, parameters.create_vset_sampling);
 				}
 				karst.set_inception_horizons_parameters(&parameters.inception_surfaces, parameters.inception_surface_constraint_weight);
 			}
@@ -129,9 +134,7 @@ namespace KarstNSim {
 				karst.disable_inception_horizon();
 			}
 
-			//if (!parameters.use_sampling_points) {
 			karst.set_topo_surface(&parameters.topo_surface);
-			//}
 
 			if (parameters.use_fracture_constraints) {
 				karst.set_fracture_constraint_parameters(&parameters.fracture_families_orientations, &parameters.fracture_families_tolerance, parameters.fracture_constraint_weight);
@@ -153,7 +156,7 @@ namespace KarstNSim {
 			}
 
 			karst.set_water_table_level(parameters.water_table_constraint_weight_vadose, parameters.water_table_constraint_weight_phreatic);
-			karst.set_simulation_parameters(parameters.nghb_count, parameters.use_max_nghb_radius, parameters.nghb_radius, parameters.poisson_radius, parameters.gamma, parameters.multiply_costs);
+			karst.set_simulation_parameters(parameters.nghb_count, parameters.use_max_nghb_radius, parameters.nghb_radius, parameters.poisson_radius, parameters.gamma, parameters.multiply_costs,parameters.vadose_cohesion);
 
 			karst.read_connectivity_matrix(&parameters.sinks, &parameters.springs);
 

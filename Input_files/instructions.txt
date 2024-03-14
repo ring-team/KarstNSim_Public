@@ -29,7 +29,6 @@ use_sampling_points: false
 
 // ...Or sample new points (constant density OR density property scanned from grid/box) :
 
-use_constant_density: false
 //poisson_radius:
 use_density_property: true
 k_pts: 10
@@ -42,7 +41,7 @@ use_previous_networks: false
 
 // N nearest-neighbor graph parameters :
 
-nghb_count: 25
+nghb_count: 100
 use_max_nghb_radius: false
 //nghb_radius:
 
@@ -56,20 +55,20 @@ use_waypoints: false
 
 // Inception surfaces :
 
-add_inception_surfaces: false
+add_inception_surfaces: true
 refine_surface_sampling: 2
-inception_surfaces: Input_files/example_inception_surf0.txt Input_files/example_inception_surf1.txt Input_files/example_inception_surf2.txt Input_files/example_inception_surf3.txt
+inception_surfaces: Input_files/example_inception_surf2.txt Input_files/example_inception_surf3.txt
 inception_surface_constraint_weight: 1.0
 max_inception_surface_distance: 50.0
 
 // Karstification potential (property scanned from grid/box) :
 
-use_karstification_potential: false
+use_karstification_potential: true
 karstification_potential_weight: 1.0
 
 // Fractures (orientations, as angles to the north, and angular tolerance for each family) :
 
-use_fracture_constraints: false
+use_fracture_constraints: true
 fracture_families_orientations: 0 60
 fracture_families_tolerance: 5 5
 fracture_constraint_weight: 0.5
@@ -84,6 +83,7 @@ water_table_constraint_weight_phreatic: 1.0
 
 gamma: 2.0
 fraction_karst_perm: 0.9
+vadose_cohesion: true
 multiply_costs: false
 
 // Save parameters (if you want to save sampling points, cost graph and cost property) :

@@ -18,7 +18,6 @@ If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
 
 #include <random>
 #include <vector>
-#include <algorithm>
 
 // Declare the random number generator and seed globally
 extern std::mt19937 globalRng;

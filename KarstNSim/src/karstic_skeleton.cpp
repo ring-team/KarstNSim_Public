@@ -43,7 +43,7 @@ namespace KarstNSim {
 	Calling this method with an empty parameter will procedurally place ten key points in the scene, and amplify the skeleton in the same way.
 	\param keypts new key points.
 	*/
-	void KarsticSkeleton::Amplify_vadose(GraphOperations* graph, GeologicalParameters params)
+	void KarsticSkeleton::Amplify_vadose(GraphOperations* graph, const GeologicalParameters& params)
 	{
 		int vadose_nodes = count_vadose_nodes();
 		int max_loops = int(params.loop_density_vadose * vadose_nodes); // number of loops is number of vadose nodes times the density fraction defined by the user
@@ -88,7 +88,7 @@ namespace KarstNSim {
 	Calling this method with an empty parameter will procedurally place ten key points in the scene, and amplify the skeleton in the same way.
 	\param keypts new key points.
 	*/
-	void KarsticSkeleton::Amplify_phreatic(GraphOperations* graph, GeologicalParameters params)
+	void KarsticSkeleton::Amplify_phreatic(GraphOperations* graph, const GeologicalParameters& params)
 	{
 
 		int vadose_nodes = count_vadose_nodes();
@@ -266,6 +266,20 @@ namespace KarstNSim {
 		}
 	}
 
+	//void KarsticSkeleton::create_sections(GraphOperations* graph, const GeologicalParameters& params, double length, double width, const Line& polyline, const Surface& substratum_surf, int ghost_rock_weight) {
+
+	//	// TO BE COMPLETED WITH FRANTZ'S ALGORITHM RINGKARST FOR 1D CURVILINEAR SGS (UNCONDITIONNED)
+	//	//
+	//	//
+	//	//
+	//	//
+
+	//	// Finally we paint any node that is within a ghostrock to have the ghost rock width
+	//	paint_karst_sections_with_ghostrocks(this,length, width,polyline, substratum_surf, ghost_rock_weight);
+
+	//}
+
+
 	/*!
 	\brief Export the karstic skeleton using a simple format.
 	\param file filename
@@ -316,11 +330,16 @@ namespace KarstNSim {
 
 		std::vector<Segment> nghb_graph_line;
 		std::vector<double> list_cost;
+		std::vector<double> list_eq_radius;
+
 		for (int i = 0; i < nodes.size(); i++) {
 			for (int j = 0; j < nodes[i].connections.size(); j++) {
 
 				list_cost.push_back(double(nodes[i].cost));
 				list_cost.push_back(double(nodes[nodes[i].connections[j].destIndex].cost));
+
+				list_eq_radius.push_back(double(nodes[i].eq_radius));
+				list_eq_radius.push_back(double(nodes[nodes[i].connections[j].destIndex].eq_radius));
 
 				Vector3 a0 = nodes[i].p;
 				Vector3 a1 = nodes[nodes[i].connections[j].destIndex].p;
@@ -332,17 +351,20 @@ namespace KarstNSim {
 		Line full_line = nghb_graph_line;
 
 		int number_segs = full_line.get_nb_segs();
-		std::vector<std::string> property_names(1, "cost");
+		std::vector<std::string> property_names = {"cost","equivalent_radius" };
 		std::vector<std::vector<std::vector<double>>> properties;
 
 		properties.resize(number_segs);
 		for (int segi = 0; segi < int(properties.size()); segi++) {
-			properties[segi].resize(1); // there is 1 property only
+			properties[segi].resize(2); // 2 properties
 		}
 
 		for (int n = 0; n < number_segs; n++) {
 			properties[n][0].push_back(list_cost[2*n]);
 			properties[n][0].push_back(list_cost[2*n+1]);
+
+			properties[n][1].push_back(list_eq_radius[2 * n]);
+			properties[n][1].push_back(list_eq_radius[2 * n + 1]);
 		}
 		std::string full_name = network_name + "_karst.txt";
 		std::string full_dir_name = geologicalparams.directoryname + "/outputs";

@@ -1600,7 +1600,9 @@ class KDTreeSingleIndexAdaptor
         Base::size_                = dataset_.kdtree_get_point_count();
         Base::size_at_index_build_ = Base::size_;
         Base::dim_                 = dimensionality;
-        if (DIM > 0) Base::dim_ = DIM;
+		#ifdef DIM
+		if (DIM > 0) Base::dim_ = DIM; // Using preprocessor directive
+		#endif
         Base::leaf_max_size_ = params.leaf_max_size;
         if (params.n_thread_build > 0)
         {
@@ -1788,7 +1790,7 @@ class KDTreeSingleIndexAdaptor
             num_closest, radius);
         resultSet.init(out_indices, out_distances);
         findNeighbors(resultSet, query_point);
-        return resultSet.size();
+		return static_cast<Size>(resultSet.size());
     }
 
     /** @} */
@@ -1796,13 +1798,16 @@ class KDTreeSingleIndexAdaptor
    public:
     /** Make sure the auxiliary list \a vind has the same size than the current
      * dataset, and re-generate if size has changed. */
-    void init_vind()
-    {
-        // Create a permutable array of indices to the input vectors.
-        Base::size_ = dataset_.kdtree_get_point_count();
-        if (Base::vAcc_.size() != Base::size_) Base::vAcc_.resize(Base::size_);
-        for (Size i = 0; i < Base::size_; i++) Base::vAcc_[i] = i;
-    }
+	void init_vind()
+	{
+		// Create a permutable array of indices to the input vectors.
+		Base::size_ = dataset_.kdtree_get_point_count();
+		if (Base::vAcc_.size() != Base::size_) Base::vAcc_.resize(Base::size_);
+		for (Size i = 0; i < Base::size_; ++i)
+		{
+			Base::vAcc_[i] = static_cast<IndexType>(i);
+		}
+	}
 
     void computeBoundingBox(BoundingBox& bbox)
     {

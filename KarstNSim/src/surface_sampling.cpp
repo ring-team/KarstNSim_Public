@@ -45,6 +45,14 @@ namespace KarstNSim {
 					}
 				}
 
+				if (allow_refinement) {
+					for (int i = 0; i < 3; i++) {
+						if (box->contains(trgl_pts[i])) {
+							res.insert(trgl_pts[i]);
+						}
+					}
+				}
+
 				// refinement :
 				// At each refinement iteration, we consider all non-overlapping possible triplets of points inside a triangle, which describe a sub-triangle.
 				// The level of refinement is considered at :
@@ -53,15 +61,6 @@ namespace KarstNSim {
 
 				if (allow_refinement && refine_surface_sampling > 0) { // if triangle is at least partly inside the Box, try to refine it
 
-					if (box->contains(trgl_pts[0])) {
-						res.insert(trgl_pts[0]);
-					}
-					if (box->contains(trgl_pts[1])) {
-						res.insert(trgl_pts[1]);
-					}
-					if (box->contains(trgl_pts[2])) {
-						res.insert(trgl_pts[2]);
-					}
 					std::vector<std::vector<Vector3>> prev_tri;
 					prev_tri.push_back(trgl_pts);
 

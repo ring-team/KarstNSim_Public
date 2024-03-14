@@ -47,11 +47,11 @@ namespace KarstNSim {
 	public:
 		Vector3 p;
 		KeyPointType type;
+		int wt_idx; // only relevant for Spring keypoints. Keeps tracks of the index of each spring keypoint (to couple them with their water table)
 	public:
 		inline explicit KeyPoint() { }
-		inline explicit KeyPoint(const Vector3& p, KeyPointType t) : p(p), type(t)
-		{
-		}
+		inline explicit KeyPoint(const Vector3& p, KeyPointType t) : p(p), type(t) {}
+		inline explicit KeyPoint(const Vector3& p, KeyPointType t, const int& idx) : p(p), type(t),	wt_idx(idx) {}
 	};
 
 	/*!
@@ -64,7 +64,7 @@ namespace KarstNSim {
 		bool used;
 		double weight;
 	public:
-		inline explicit CostTerm() : used(false), weight(1.0) { }
+		inline explicit CostTerm() : used(false), weight(0.0) { }
 		inline explicit CostTerm(bool u, double w) : used(u), weight(w) { }
 	};
 
@@ -81,11 +81,14 @@ namespace KarstNSim {
 		double graphPoissonRadius;
 		double graphNeighbourRadius;
 		double maxsize;
+		double stretch_factor;
 		bool graphuse_max_nghb_radius;
 		int graphNeighbourCount;
 		int nb_springs;
+		int nb_inception_surf = 0;
 		bool multiply_costs;
 		bool allow_single_outlet;
+		bool vadose_cohesion;
 		std::vector<std::vector<Vector3>> PtsOldGraph;
 		std::vector<std::vector<int>> IdxOldGraph;
 		std::vector<double> z_list;
@@ -99,7 +102,6 @@ namespace KarstNSim {
 		std::vector<double> fractures_orientations;
 		std::vector<double> fractures_tolerances;
 		std::vector<double> fractures_max_lengths;
-
 
 		ScalarField2D heightfield;
 		double elevationOffsetMin;

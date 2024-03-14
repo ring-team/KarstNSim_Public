@@ -25,7 +25,7 @@ namespace KarstNSim {
 		std::stringstream iss;
 		iss << line;
 		int nb_columns = 0;
-		double value;
+		std::string value;
 		while (iss >> value) nb_columns++;
 		int prop_size = nb_columns - 4;
 		// don't forget to reset to beginning, to not skip first line after header!
@@ -72,6 +72,7 @@ namespace KarstNSim {
 		// don't forget to reset to beginning, to not skip first line after header!
 		in.clear();                 // clear fail and eof bits
 		in.seekg(0, std::ios::beg); // back to the start!
+
 		// go through lines
 
 		std::vector<Vector3> nodes;
@@ -82,6 +83,7 @@ namespace KarstNSim {
 		while (std::getline(in, line)) { // get line
 			std::istringstream iss2(line);
 			iss2 >> tag;
+
 			if (tag == "VRTX") { 			// if we're reading the vertices
 				// initialize all params of each line
 				int idx;
@@ -116,13 +118,13 @@ namespace KarstNSim {
 		std::ifstream in(full_name);
 
 		//get property size
-
+		
 		std::getline(in, line); // skip first line, which is a header !
 		std::getline(in, line);
 		std::stringstream iss;
 		iss << line;
 		int nb_columns = 0;
-		double value;
+		std::string value;
 		while (iss >> value) nb_columns++;
 		int prop_size = nb_columns - 4;
 		// don't forget to reset to beginning, to not skip first line after header!
@@ -164,7 +166,7 @@ namespace KarstNSim {
 		std::stringstream iss;
 		iss << line;
 		int nb_columns = 0;
-		double value;
+		std::string value;
 		while (iss >> value) nb_columns++;
 		int prop_size = nb_columns - 4;
 		// don't forget to reset to beginning, to not skip first line after header!

@@ -29,6 +29,11 @@ If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
 #include <string>
 #include <random>
 #include <iomanip>
+#ifdef _WIN32
+#include <direct.h> // for mkdir on Windows
+#else
+#include <sys/stat.h> // for mkdir on Unix-like systems
+#endif
 
 namespace KarstNSim {
 	/*!

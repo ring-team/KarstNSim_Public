@@ -27,6 +27,10 @@ year = {2024}
 }
 ```
 
+## Changelog
+
+Please find the link to the changelog [here](Changelog.md).
+
 ## Requirements
 
 * [CMake](https://cmake.org/download/) 3.8 to 3.28 (select the Windows x64 Installer). During installation, check the option "add CMake to the system PATH".

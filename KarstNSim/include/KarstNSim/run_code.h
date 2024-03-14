@@ -50,8 +50,8 @@ namespace KarstNSim {
 		bool allow_single_outlet_connection = true;
 		bool use_sampling_points = false;
 		std::vector<Vector3> sampling_points;
-		bool use_constant_density = false;
 		bool use_density_property = false;
+		bool create_grid = false;
 		double poisson_radius = 0.01;
 		bool use_karstification_potential = false;
 		double karstification_potential_weight = 1;
@@ -60,6 +60,7 @@ namespace KarstNSim {
 		bool use_max_nghb_radius = false;
 		double nghb_radius = 0;
 		double gamma = 2;
+		bool vadose_cohesion = true;
 		std::vector<Vector3> sinks;
 		std::vector<Vector3> springs;
 		bool use_waypoints = false;

@@ -29,31 +29,12 @@ If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
 //}
 
 namespace KarstNSim {
-	// reorder vector with given vector of indices
-	void reorder(std::vector<int> &vA, std::vector<int> vOrder)
-	{
-		assert(vA.size() == vOrder.size());
-		// for all elements to put in place
-		for (int i = 0; i < vA.size() - 1; ++i)
-		{
-			// while the element i is not yet in place 
-			while (i != vOrder[i])
-			{
-				// swap it with the element at its final place
-				int alt = vOrder[i];
-				std::swap(vA[i], vA[alt]);
-				std::swap(vOrder[i], vOrder[alt]);
-			}
-		}
-	}
 
-	//###########################################################################################################################
-
-	KarsticNetwork::KarsticNetwork(const std::string& karstic_network_name, Box* box, GeologicalParameters& params,
-		std::vector<KeyPoint>& keypts, std::vector<Surface>* water_tables) :
+	KarsticNetwork::KarsticNetwork(const std::string& karstic_network_name,  Box* box, GeologicalParameters& params,
+		const std::vector<KeyPoint>& keypts, std::vector<Surface>* water_tables) :
 		karstic_network_name(karstic_network_name), box(box), params(params), keypts(keypts), water_tables(water_tables) {};
 
-	void KarsticNetwork::set_simulation_parameters(int nghb_count, const bool use_max_nghb_radius, double nghb_radius, double poisson_radius, double gamma, const bool multiply_costs) {
+	void KarsticNetwork::set_simulation_parameters(const int& nghb_count, const bool& use_max_nghb_radius, const double& nghb_radius, const double& poisson_radius, const double& gamma, const bool& multiply_costs, const bool& vadose_cohesion) {
 		/*!
 		Sets the simulation parameters and the simulation domain geometry
 		*/
@@ -65,11 +46,12 @@ namespace KarstNSim {
 		params.graphPoissonRadius = poisson_radius;
 		params.distanceCost = CostTerm(true, 1);
 		params.multiply_costs = multiply_costs;
+		params.vadose_cohesion = vadose_cohesion;
 		is_simulation_parametrized = true;
 		set_domain_geometry();
 	}
 
-	void KarsticNetwork::set_sinks(std::vector<Vector3>* sinks, std::vector<int> propsinksindex, std::vector<int> propsinksorder) {
+	void KarsticNetwork::set_sinks(const std::vector<Vector3>* sinks, const std::vector<int>& propsinksindex, const std::vector<int>& propsinksorder) {
 		/*!
 		Adds sink points in the keypoint list
 		*/
@@ -107,11 +89,9 @@ namespace KarstNSim {
 			}
 			scanning_order++;
 		}
-		propsinksindex.clear();
-		propsinksorder.clear();
 	}
 
-	void KarsticNetwork::set_springs(std::vector<Vector3>* springs, std::vector<int> propspringsindex, const bool& allow_single_outlet_connection) {
+	void KarsticNetwork::set_springs(const std::vector<Vector3>* springs, const std::vector<int>& propspringsindex, const bool& allow_single_outlet_connection) {
 		/*!
 		Adds spring points in the keypoint list
 		*/
@@ -125,20 +105,19 @@ namespace KarstNSim {
 		{
 			int index_for_i = int(std::find(propspringsindex.begin(), propspringsindex.end(), i + 1) - propspringsindex.begin());
 			params.z_list.push_back(springs->at(index_for_i).z);
-			this->keypts.emplace_back(springs->at(index_for_i), KeyPointType::Spring);
+			this->keypts.emplace_back(springs->at(index_for_i), KeyPointType::Spring,i);
 			this->pt_spring.push_back(springs->at(index_for_i));
 		}
-		propspringsindex.clear();
 	}
 
-	void KarsticNetwork::set_water_table_order(std::vector<Surface>* surf_water_table) { // wt have to be ordered correctly
+	void KarsticNetwork::set_water_table_order(const std::vector<Surface>* surf_water_table) { // wt have to be ordered correctly
 
 		for (int i = 0; i < surf_water_table->size(); i++) {
 			params.wt_surf_index.push_back(i+1); // last element is index
 		}
 	}
 
-	void KarsticNetwork::set_previous_networks(std::vector<Line>* previous_networks) {
+	void KarsticNetwork::set_previous_networks(const std::vector<Line>* previous_networks) {
 		/*!
 		Adds previous networks to the generated Line
 		*/
@@ -163,7 +142,7 @@ namespace KarstNSim {
 		}
 	}
 
-	void KarsticNetwork::set_waypoints(std::vector<Vector3>* waypoints) {
+	void KarsticNetwork::set_waypoints(const std::vector<Vector3>* waypoints) {
 		/*!
 		Adds waypoints in the keypoint list
 		*/
@@ -173,16 +152,41 @@ namespace KarstNSim {
 		}
 	}
 
-	void KarsticNetwork::set_surfaces_to_densify(std::string network_name, std::vector<Surface>* surfaces_used_to_densify, const int refine_surface_sampling, const bool create_vset_sampling) {
-		KarstNSim::surface_sampling::multiple_surface_sampling(params.directoryname, network_name, box, surfaces_used_to_densify, nodes_on_densify_surface, refine_surface_sampling, create_vset_sampling);
+	void KarsticNetwork::set_inception_surfaces_sampling(const std::string& network_name, std::vector<Surface>* surfaces_used_to_densify, const int& refine_surface_sampling, const bool& create_vset_sampling){
+		params.nb_inception_surf = int(surfaces_used_to_densify->size());
+		KarstNSim::surface_sampling::multiple_surface_sampling(params.directoryname, network_name, box, surfaces_used_to_densify, nodes_on_inception_surfaces, refine_surface_sampling, create_vset_sampling);
+	}
+
+	void KarsticNetwork::set_wt_surfaces_sampling(const std::string& network_name, std::vector<Surface>* surfaces_used_to_densify, const int& refine_surface_sampling) {
+
+		nodes_on_wt_surfaces.resize(surfaces_used_to_densify->size()); // Resize nodes_on_wt_surfaces to match the number of water tables / springs
+
+		for (int i = 0; i < surfaces_used_to_densify->size(); i++) {
+			std::vector<Surface> wt_surface;
+			wt_surface.push_back(surfaces_used_to_densify->at(i));
+			std::vector<Vector3> nodes_on_wt_surface;
+			KarstNSim::surface_sampling::multiple_surface_sampling(params.directoryname, network_name, box, &wt_surface,nodes_on_wt_surface , refine_surface_sampling, false);
+			nodes_on_wt_surfaces[i] = nodes_on_wt_surface;
+		}
+	}
+	
+	void KarsticNetwork::save_painted_box(const std::vector<double>& propdensity, const std::vector<double>& propikp) {
+
+		std::vector<std::string> property_names = { "density","karstif_potential" };
+		std::vector<std::vector<double>> properties;
+		for (size_t i = 0; i < propdensity.size(); ++i) {
+			properties.push_back({ propdensity[i], propikp[i] });
+		}
+		std::string full_name = params.scenename + "_box.txt";
+		std::string full_dir_name = params.directoryname + "/outputs";
+		save_box(full_name, full_dir_name, *box, property_names, properties);
 	}
 
 	void KarsticNetwork::set_topo_surface(Surface* topo_surface) {
 		this->topo_surface_ = topo_surface;
 	}
 
-	void KarsticNetwork::set_inception_horizons_parameters(std::vector<Surface>* inception_horizons_list,
-		double inception_horizon_constraint_weight) {
+	void KarsticNetwork::set_inception_horizons_parameters( std::vector<Surface>* inception_horizons_list, const double& inception_horizon_constraint_weight) {
 		this->inception_horizons = inception_horizons_list;
 		params.horizonCost = CostTerm(true, inception_horizon_constraint_weight);
 
@@ -192,17 +196,11 @@ namespace KarstNSim {
 		params.horizonCost = CostTerm(false, 0.0);
 	}
 
-	void vectorial_product(Vector3 vec1, Vector3 vec2, Vector3& result) {
-		result.x = vec1.y*vec2.z - vec1.z*vec2.y;
-		result.y = vec1.z*vec2.x - vec1.x*vec2.z;
-		result.z = vec1.x*vec2.y - vec1.y*vec2.x;
-	}
-
-	void KarsticNetwork::set_karstification_potential_parameters(const double karstification_potential_weight) {
+	void KarsticNetwork::set_karstification_potential_parameters(const double& karstification_potential_weight) {
 		params.karstificationCost = CostTerm(true, karstification_potential_weight);
 	}
 
-	void KarsticNetwork::set_fracture_constraint_parameters(std::vector<double>* fracture_families_orientations, std::vector<double>* fracture_families_tolerance, const double fracture_constraint_weight) {
+	void KarsticNetwork::set_fracture_constraint_parameters(const std::vector<double>* fracture_families_orientations, const std::vector<double>* fracture_families_tolerance, const double& fracture_constraint_weight) {
 		params.fractures_orientations = *fracture_families_orientations;
 		params.fractures_tolerances = *fracture_families_tolerance;
 		params.fractureCost = CostTerm(true, fracture_constraint_weight);
@@ -212,7 +210,7 @@ namespace KarstNSim {
 		params.fractureCost = CostTerm(false, 0.0);
 	}
 
-	void KarsticNetwork::set_no_karst_spheres_parameters(std::vector<Vector3>* sphere_centers, std::vector<double> sphere_radius) {
+	void KarsticNetwork::set_no_karst_spheres_parameters(const std::vector<Vector3>* sphere_centers, const std::vector<double>& sphere_radius) {
 		if (sphere_centers->size() == sphere_radius.size()) {
 			for (int i = 0; i < sphere_centers->size(); i++) {
 				params.spheres.push_back(Sphere(Vector3(0., 0., 0.), 5.));
@@ -243,7 +241,8 @@ namespace KarstNSim {
 		params.heightfield = ScalarField2D(256, 256, Box2D(Vector2(x_center, y_center), delta_x / 2), 0.0);
 		params.elevationOffsetMin = sqrt(min.z*min.z);
 		params.elevationOffsetMax = sqrt(max.z*max.z);
-		params.maxsize = (std::abs(max_pt.x - min_pt.x) + std::abs(max_pt.y - min_pt.y)) / 2;
+		params.maxsize = (std::abs(delta_x) + std::abs(delta_y)) / 2;
+		params.stretch_factor = params.maxsize / std::abs(delta_z);
 	}
 
 	int KarsticNetwork::just_sampling() {
@@ -254,33 +253,58 @@ namespace KarstNSim {
 
 			// Initialize the graph, because the sampling is in this class
 			GraphOperations graph;
-			//graph.SamplingAdapted(nodes_on_densify_surface, Box);
+			//graph.Sampling(nodes_on_densify_surface, Box);
 
 			return graph.get_nb_sampling_pts();
 		}
 		return 0;
 	}
-	void KarsticNetwork::read_connectivity_matrix(std::vector<Vector3>* sinks, std::vector<Vector3>* springs) {
 
-		std::string connectivity_matrix_path = params.directoryname + "/Input_files/connectivity_matrix.txt";
-		// std::cout << "File path: " << connectivity_matrix_path << std::endl;
-
-		std::ifstream myfile(connectivity_matrix_path);
-
-		if (!myfile.is_open()) {
-			std::cerr << "Error opening file: " << strerror(errno) << std::endl;
+	void createConnectivityMatrix(const std::string& filename, int nb_springs, int nb_sinks) {
+		std::ofstream outfile(filename);
+		if (!outfile.is_open()) {
+			std::cerr << "Error creating file: " << strerror(errno) << std::endl;
+			return;
 		}
 
+		// Write default values to the file
+		for (int i = 0; i < nb_sinks; ++i) {
+			for (int j = 0; j < nb_springs; ++j) {
+				outfile << "2"; // Default value
+				if (j < nb_springs - 1) {
+					outfile << "\t"; // Separate columns by tabs
+				}
+			}
+			if (i < nb_sinks - 1) {
+				outfile << "\n"; // Move to the next line
+			}
+		}
+		outfile.close();
+	}
+
+	void KarsticNetwork::read_connectivity_matrix(const std::vector<Vector3>* sinks, const std::vector<Vector3>* springs) {
+
+		std::string connectivity_matrix_path = params.directoryname + "/Input_files/connectivity_matrix.txt";
 		int nb_sinks = static_cast<int>(sinks->size());
 		int nb_springs = static_cast<int>(springs->size());
-		// std::cout << "Number of sinks: " << nb_sinks << ", Number of springs: " << nb_springs << std::endl;
+		std::ifstream myfile(connectivity_matrix_path);
+
+		// Check if the file exists, if not, create it
+
+		if (!myfile.is_open()) {
+			createConnectivityMatrix(connectivity_matrix_path, nb_springs, nb_sinks);
+			myfile.open(connectivity_matrix_path);
+			if (!myfile.is_open()) {
+				std::cerr << "Error opening file after creation: " << strerror(errno) << std::endl;
+				return;
+			}
+		}
 
 		params.connectivity_matrix.resize(nb_sinks, std::vector<int>(nb_springs));
 
 		for (int row = 0; row < nb_sinks; ++row) {
 			std::string line;
 			if (std::getline(myfile, line)) {
-				// std::cout << "Reading line: " << line << std::endl;
 
 				std::istringstream iss(line);
 				for (int col = 0; col < nb_springs; ++col) {
@@ -288,8 +312,6 @@ namespace KarstNSim {
 					if (std::getline(iss, value, '\t')) {
 						try {
 							params.connectivity_matrix[row][col] = std::stoi(value);
-							// std::cout << "Value at row " << row << " column " << col << ": "
-							//           << params.connectivity_matrix[row][col] << std::endl;
 						} catch (const std::invalid_argument& e) {
 							std::cerr << "Error converting string to integer: " << e.what() << std::endl;
 						}
@@ -311,26 +333,26 @@ namespace KarstNSim {
 				}
 			}
 		}
-
     myfile.close();
-
     }
 
-	void KarsticNetwork::run_simulation(const bool create_nghb_graph, const bool create_nghb_graph_property, const bool use_amplification_phase_vadose, const bool use_amplification_phase_phreatic,
-		const bool use_sampling_points, const double fraction_karst_perm, const double fraction_old_karst_perm, const double max_inception_surface_distance,
-		std::vector<Vector3>* sampling_points, const bool create_vset_sampling, const bool use_density_property, const int k_pts, std::vector<double> propdensity, std::vector<double> propikp) {
+	void KarsticNetwork::run_simulation(const bool& create_nghb_graph, const bool& create_nghb_graph_property, const bool& use_amplification_phase_vadose, const bool& use_amplification_phase_phreatic, const bool& use_sampling_points,
+		const double& fraction_karst_perm, const double& fraction_old_karst_perm, const double& max_inception_surface_distance, std::vector<Vector3>* sampling_points, const bool& create_vset_sampling,
+		const bool& use_density_property, const int& k_pts, const std::vector<double>& propdensity, const std::vector<double>& propikp) {
 
 		const clock_t begin_time = clock(); // start clock time
 
-			params.scenename = karstic_network_name;
+
+		params.scenename = karstic_network_name;
 		// Cost due to distance
 		const clock_t time1 = clock();
 			if (is_simulation_parametrized) {
 
 				// Compute 3D cost graph
 				GraphOperations graph;
-				graph.InitializeCostGraphAdapted(create_nghb_graph, create_nghb_graph_property, keypts, params, nodes_on_densify_surface, inception_horizons, water_tables, use_sampling_points, box,
-					max_inception_surface_distance, sampling_points, create_vset_sampling, use_density_property, k_pts, fraction_old_karst_perm, propdensity, propikp, topo_surface_);
+				graph.InitializeCostGraph(create_nghb_graph, create_nghb_graph_property, keypts, params, nodes_on_inception_surfaces, nodes_on_wt_surfaces,
+					inception_horizons, water_tables, use_sampling_points, box,max_inception_surface_distance, sampling_points, create_vset_sampling,
+					use_density_property, k_pts, fraction_old_karst_perm, propdensity, propikp, topo_surface_);
 				const clock_t time2 = clock();
 					// Compute karstic skeleton
 					KarsticSkeleton skel = graph.ComputeKarsticSkeleton(keypts, fraction_karst_perm);
@@ -347,10 +369,14 @@ namespace KarstNSim {
 					}
 				const clock_t time5 = clock();
 
+				//skel.create_sections(&graph, params);
+				const clock_t time6 = clock();
+				//("we generated conduits sections (" << double(time6 - time5) / CLOCKS_PER_SEC << " s)")
+
 				// save network
 				skel.CreateLine(params, karstic_network_name);
 
-				const clock_t time6 = clock();
+				const clock_t time7 = clock();
 
 			}
 	}
@@ -360,17 +386,17 @@ namespace KarstNSim {
 		params.directoryname = repertory;
 	}
 
-	void KarsticNetwork::set_amplification_vadose_params(const double max_dist_loops_vadose, const double loop_density_vadose) {
+	void KarsticNetwork::set_amplification_vadose_params(const double& max_dist_loops_vadose, const double& loop_density_vadose) {
 		params.max_dist_loops_vadose = max_dist_loops_vadose;
 		params.loop_density_vadose = loop_density_vadose;
 	}
 
-	void KarsticNetwork::set_amplification_phreatic_params(const double max_dist_loops_phreatic, const double loop_density_phreatic) {
+	void KarsticNetwork::set_amplification_phreatic_params(const double& max_dist_loops_phreatic, const double& loop_density_phreatic) {
 		params.max_dist_loops_phreatic = max_dist_loops_phreatic;
 		params.loop_density_phreatic = loop_density_phreatic;
 	}
 
-	void KarsticNetwork::set_water_table_level(const double  water_table_constraint_weight_vadose, const double  water_table_constraint_weight_phreatic) {
+	void KarsticNetwork::set_water_table_level(const double& water_table_constraint_weight_vadose, const double& water_table_constraint_weight_phreatic) {
 		params.waterTable1 = CostTerm(true, water_table_constraint_weight_vadose); // vadose
 		params.waterTable2 = CostTerm(true, water_table_constraint_weight_phreatic); // phreatic
 	}

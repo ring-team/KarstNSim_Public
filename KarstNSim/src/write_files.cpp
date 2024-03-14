@@ -12,8 +12,29 @@ If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
 
 namespace KarstNSim {
 
+	bool directoryExists(const std::string& directory) {
+		struct stat info;
+		if (stat(directory.c_str(), &info) != 0) {
+			return false;
+		}
+		return (info.st_mode & S_IFDIR) != 0;
+	}
+
+	void createDirectory(const std::string& directory) {
+		#ifdef _WIN32
+			_mkdir(directory.c_str());
+		#else
+			mkdir(directory.c_str(), 0777);
+		#endif
+	}
+
 	void save_point(const std::string& file_name, const std::string& save_directory, Vector3 u, std::vector<std::string> property_names, std::vector<double> properties)
 	{
+
+		// Check if the save directory exists, if not, create it
+		if (!directoryExists(save_directory)) {
+			createDirectory(save_directory);
+		}
 
 		std::ofstream out;
 		out.open(save_directory + '/' + file_name);
@@ -42,6 +63,12 @@ namespace KarstNSim {
 
 	void save_surface(const std::string& file_name, const std::string& save_directory, Surface s, std::vector<std::string> property_names, std::vector<std::vector<double>> properties)
 	{
+
+		// Check if the save directory exists, if not, create it
+		if (!directoryExists(save_directory)) {
+			createDirectory(save_directory);
+		}
+
 		int nb_pts = s.get_nb_pts();
 		int nb_trgls = s.get_nb_trgls();
 
@@ -83,6 +110,11 @@ namespace KarstNSim {
 	void save_pointset(const std::string& file_name, const std::string& save_directory, std::vector<Vector3> pset, std::vector<std::string> property_names, std::vector<std::vector<double>> properties)
 	{
 
+		// Check if the save directory exists, if not, create it
+		if (!directoryExists(save_directory)) {
+			createDirectory(save_directory);
+		}
+
 		int nb_pts = int(pset.size());
 		std::ofstream out;
 		out.open(save_directory + '/' + file_name);
@@ -114,6 +146,11 @@ namespace KarstNSim {
 
 	void save_line(const std::string& file_name, const std::string& save_directory, Line pline, std::vector<std::string> property_names, std::vector<std::vector<std::vector<double>>> properties)
 	{
+
+		// Check if the save directory exists, if not, create it
+		if (!directoryExists(save_directory)) {
+			createDirectory(save_directory);
+		}
 
 		int nb_segs = pline.get_nb_segs();
 
@@ -158,6 +195,11 @@ namespace KarstNSim {
 
 	void save_box(const std::string& file_name, const std::string& save_directory, Box box, std::vector<std::string> property_names, std::vector<std::vector<double>> properties)
 	{
+
+		// Check if the save directory exists, if not, create it
+		if (!directoryExists(save_directory)) {
+			createDirectory(save_directory);
+		}
 
 		std::ofstream out;
 		out.open(save_directory + '/' + file_name);

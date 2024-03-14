@@ -123,6 +123,11 @@ KarstNSim::ParamsSource ParseInputs::parse(const std::string& filename) {
 			iss >> flag;
 			params.allow_single_outlet_connection = parseBoolean(flag);
 		}
+		else if (paramType == "vadose_cohesion:") {
+			std::string flag;
+			iss >> flag;
+			params.vadose_cohesion = parseBoolean(flag);
+		}
 		else if (paramType == "use_sampling_points:") {
 			std::string flag;
 			iss >> flag;
@@ -135,11 +140,6 @@ KarstNSim::ParamsSource ParseInputs::parse(const std::string& filename) {
 			std::vector<Vector3> ptset;
 			KarstNSim::load_pointset(pts_path, params.save_repertory,ptset, prop);
 			params.sampling_points = ptset;
-		}
-		else if (paramType == "use_constant_density:") {
-			std::string flag;
-			iss >> flag;
-			params.use_constant_density = parseBoolean(flag);
 		}
 
 		else if (paramType == "poisson_radius:") {

@@ -42,7 +42,7 @@ namespace KarstNSim
 	\param a, b Interval values.
 	\return Real.
 	*/
-	inline double Clamp(const double& x, const double& a = 0.0f, const double& b = 1.0f)
+	inline double Clamp(double x, double a = 0.0f, double b=1.0f)
 	{
 		return x < a ? a : x > b ? b : x;
 	}
@@ -96,6 +96,7 @@ namespace KarstNSim
 	{
 		return (x > r) ? 0.0f : (1.0f - x / r) * (1.0f - x / r) * (1.0f - x / r);
 	}
+	template <class T> T _square(T a) { return a * a; };
 
 	inline double CubicSigmoid(double x, double r, double t)
 	{
@@ -127,27 +128,27 @@ namespace KarstNSim
 
 	inline double CubicSmooth(double x)
 	{
-		return x * x * (3.0f - 2.0f * x);
+		return x * x * (3.0 - 2.0 * x);
 	}
 
-	inline double CubicSmooth(double x, double r)
+	inline double CubicSmooth( double x, double r)
 	{
-		return (1.0f - x / r) * (1.0f - x / r) * (1.0f - x / r);
+		return (1.0 - x / r) * (1.0 - x / r) * (1.0 - x / r);
 	}
 
 	inline double CubicSmoothStep(double x, double a, double b)
 	{
 		if (x < a)
-			return 0.0f;
+			return 0.0;
 		else if (x > b)
-			return 1.0f;
+			return 1.0;
 		else
-			return 1.0f - CubicSmooth((x - a) * (x - a), (b - a) * (b - a));
+			return 1.0 - CubicSmooth((x - a) * (x - a), (b - a) * (b - a));
 	}
 
 	inline double QuinticSmooth(double t)
 	{
-		return pow(t, 3.0f) * (t * (t * 6.0f - 15.0f) + 10.0f);
+		return pow(t, 3.0) * (t * (t * 6.0 - 15.0) + 10.0);
 	}
 
 	inline double Pow(double x, double e)
@@ -357,9 +358,48 @@ inline Vector3 Cross(const Vector3& u, const Vector3& v)
 {
 	return Vector3((u.y * v.z) - (u.z * v.y), (u.z * v.x) - (u.x * v.z), (u.x * v.y) - (u.y * v.x));
 }
+
+inline double Dot2D(const Vector3& a, const Vector3& b) {
+	return a.x * b.x + a.y * b.y;
+}
+
 inline double Dot(const Vector3& u, const Vector3& v)
 {
 	return u.x * v.x + u.y * v.y + u.z * v.z;
+}
+
+// reorder vector with given vector of indices
+inline void reorder(std::vector<int> &vA, std::vector<int> vOrder)
+{
+	assert(vA.size() == vOrder.size());
+	// for all elements to put in place
+	for (int i = 0; i < vA.size() - 1; ++i)
+	{
+		// while the element i is not yet in place 
+		while (i != vOrder[i])
+		{
+			// swap it with the element at its final place
+			int alt = vOrder[i];
+			std::swap(vA[i], vA[alt]);
+			std::swap(vOrder[i], vOrder[alt]);
+		}
+	}
+}
+
+inline std::vector<std::vector<bool>> get_flags_from_indices(const std::vector<Vector3>& samples, const std::vector<std::vector<int>>& on_wt_flags_idx) {
+
+	std::vector<std::vector<bool>> samples_on_wt_flags(samples.size(), std::vector<bool>(on_wt_flags_idx.size(), false)); // Initialize all flags to false
+
+	// Set flags to true for indices present in on_wt_flags_idx
+	for (size_t i = 0; i < on_wt_flags_idx.size(); ++i) {
+		for (int idx : on_wt_flags_idx[i]) {
+			if (idx >= 0 && idx < samples.size()) {
+				samples_on_wt_flags[idx][i] = true;
+			}
+		}
+	}
+
+	return samples_on_wt_flags;
 }
 
 inline double magnitude2D(const Vector3& u)
@@ -387,6 +427,58 @@ inline Vector3 mid(const Vector3& u, const Vector3& v)
 	return Vector3((u.x + v.x) / 2, (u.y + v.y) / 2, (u.z + v.z) / 2);
 }
 
+inline void squaredistance_to_segment(const Vector3& pt, const Vector3& p1, const Vector3& p2, double& squaredDistance, Vector3& closestPoint)
+{
+	Vector3 v = p2 - p1;
+	Vector3 w = pt - p1;
+	double eps = 1e-5;
+
+	double c1 = Dot(w, v);
+	if (c1 <= eps) {
+		squaredDistance = squaredmagnitude(w);
+		closestPoint = p1;
+		return;
+	}
+
+	double c2 = Dot(v, v);
+	if (c2 <= c1) {
+		squaredDistance = squaredmagnitude(pt - p2);
+		closestPoint = p2;
+		return;
+	}
+
+	double b = c1 / c2;
+	Vector3 pb = p1 + v * b;
+	squaredDistance = squaredmagnitude(pt - pb);
+	closestPoint = pb;
+}
+
+inline void squaredistance_to_segment2D(const Vector3& pt, const Vector3& p1, const Vector3& p2, double& squaredDistance, Vector3& closestPoint)
+{
+	Vector3 v = p2 - p1;
+	Vector3 w = pt - p1;
+	double eps = 1e-5;
+
+	double c1 = Dot2D(w, v);
+	if (c1 <= eps) {
+		squaredDistance = squaredmagnitude2D(w);
+		closestPoint = p1;
+		return;
+	}
+
+	double c2 = Dot2D(v, v);
+	if (c2 <= c1) {
+		squaredDistance = squaredmagnitude2D(pt - p2);
+		closestPoint = p2;
+		return;
+	}
+
+	double b = c1 / c2;
+	Vector3 pb = p1 + v * b;
+	squaredDistance = squaredmagnitude2D(pt - pb);
+	closestPoint = pb;
+}
+
 
 inline double magnitudeNormalized(const Vector3& u, double du, double dv, double dw)
 {
@@ -400,17 +492,10 @@ inline double squaredmagnitudeNormalized(const Vector3& u,double one_over_delta_
 
 inline Vector3 Normalize(const Vector3& v)
 {
-	double mag = magnitude(v);
+	double magSquared = v.x * v.x + v.y * v.y + v.z * v.z;
 
-	// Check if the magnitude is not zero before dividing
-	if (mag > 0.0) {
-		double kk = 1.0 / mag;
-		return v * kk;
-	}
-	else {
-		// Handle the case when the magnitude is zero
-		return Vector3(0.0, 0.0, 0.0);
-	}
+	// Avoid dividing by zero by checking if magnitude squared is non-zero
+	return (magSquared > 0.0) ? v * (1.0 / sqrt(magSquared)) : Vector3(0.0, 0.0, 0.0);
 }
 inline Vector3 operator-(const Vector3& v)
 {
@@ -441,99 +526,113 @@ inline Vector3 Abs(const Vector3& u)
 	return Vector3(u[0] > 0.0 ? u[0] : -u[0], u[1] > 0.0 ? u[1] : -u[1], u[2] > 0.0 ? u[2] : -u[2]);
 }
 
+// Function to standardize values to a specified range
+inline void standardize_to_range(std::vector<double>& vec, double min_value, double max_value) {
+	// Find the minimum and maximum values in the vector
+	double min_val = *std::min_element(vec.begin(), vec.end());
+	double max_val = *std::max_element(vec.begin(), vec.end());
+
+	// Compute the range of the vector values
+	double range = max_val - min_val;
+
+	// Iterate through each element in the vector
+	for (int i = 0; i < vec.size(); ++i) {
+		// Apply min-max scaling to standardize the value between 0 and 1
+		if (range != 0) {
+			vec[i] = ((vec[i] - min_val) / range) * (max_value - min_value) + min_value;
+		}
+		else {
+			// If range is 0, set all elements to the mid-point of the range
+			vec[i] = (max_value + min_value) / 2.0;
+		}
+	}
+}
 
 //this method alows to reformat the (0,1)-range random values of a point in a flattened grid of dimensions dim1*dim2*dim3
 // This operation is often called raveling.
 
-inline int flatten_indices(int dim1, int dim2, int dim3, const Vector3& point) {
-	int flattened_index = 0;
-	int x = ((int)(ceil(point.x*dim1))) - 1; // values are ceiled (rounded up)
-	int y = ((int)(ceil(point.y*dim2))) - 1;
-	int z = ((int)(ceil(point.z*dim3))) - 1;
+inline int64_t flatten_indices(int dim1, int dim2, int dim3, const Vector3& point) {
+
+	int64_t flattened_index = 0;
+
+	int64_t x = static_cast<int64_t>(std::floor(point.x * dim1));
+	int64_t y = static_cast<int64_t>(std::floor(point.y * dim2));
+	int64_t z = static_cast<int64_t>(std::floor(point.z * dim3));
+
+	// Ensure that the indices are within bounds
+	x = std::max<int64_t>(0, std::min<int64_t>(x, dim1 - 1));
+	y = std::max<int64_t>(0, std::min<int64_t>(y, dim2 - 1));
+	z = std::max<int64_t>(0, std::min<int64_t>(z, dim3 - 1));
+
 	flattened_index = x + y * dim1 + z * dim1 * dim2;
 	return flattened_index;
 }
 
-inline int flatten_indices2(const int& dim1, const int& dim2, const int& dim3, const double& dimx, const double& dimy, const double& dimz, const Vector3& point) {
-	int x = static_cast<int>(std::ceil(point.x * dim1 / dimx)) - 1;
-	int y = static_cast<int>(std::ceil(point.y * dim2 / dimy)) - 1;
-	int z = static_cast<int>(std::ceil(point.z * dim3 / dimz)) - 1;
+inline int64_t flatten_indices2(const int& dim1, const int& dim2, const int& dim3, const double& dimx, const double& dimy, const double& dimz, const Vector3& point) {
 
-	return x + y * dim1 + z * dim1 * dim2;
+	int64_t flattened_index = 0;
+
+	int64_t x = static_cast<int64_t>(std::floor(point.x * dim1 / dimx));
+	int64_t y = static_cast<int64_t>(std::floor(point.y * dim2 / dimy));
+	int64_t z = static_cast<int64_t>(std::floor(point.z * dim3 / dimz));
+
+	// Ensure that the indices are within bounds
+	x = std::max<int64_t>(0, std::min<int64_t>(x, dim1 - 1));
+	y = std::max<int64_t>(0, std::min<int64_t>(y, dim2 - 1));
+	z = std::max<int64_t>(0, std::min<int64_t>(z, dim3 - 1));
+
+	flattened_index = x + y * dim1 + z * static_cast<int64_t>(dim1) * dim2;
+
+	return flattened_index;
 }
-
-//inline int flatten_indices2(int dim1, int dim2, int dim3, double dimx, double dimy, double dimz, const Vector3& point) {
-//	int flattened_index = 0;
-//	int x = ((int)(ceil(point.x*dim1 / dimx))) - 1; // values are ceiled (rounded up)
-//	int y = ((int)(ceil(point.y*dim2 / dimy))) - 1;
-//	int z = ((int)(ceil(point.z*dim3 / dimz))) - 1;
-//	flattened_index = x + y * dim1 + z * dim1 * dim2;
-//	return flattened_index;
-//}
 
 // This method allows to get the indices in a 3D grid from a flattened array index
 // This operation is often called unraveling. Note : you don't really need the 3rd dimension (the smallest one)
 
-inline Vector3 unravel3D(const int& idx_in, const int& intdim1, const int& intdim2, int index_init_norm = 0) {
-	int i, j, k;
+inline Vector3 unravel3D(const int64_t& idx_in, const int& intdim1, const int& intdim2, int index_init_norm = 0) {
+	int64_t i, j, k;
 
 	if (index_init_norm == 0) {
-		k = idx_in / (intdim1 * intdim2);
-		j = (idx_in - k * intdim1 * intdim2) / intdim1;
-		i = idx_in - k * intdim1 * intdim2 - j * intdim1;
+		k = idx_in / static_cast<int64_t>(intdim1 * intdim2);
+		j = (idx_in - k * static_cast<int64_t>(intdim1) * intdim2) / intdim1;
+		i = idx_in - k * static_cast<int64_t>(intdim1) * intdim2 - j * intdim1;
 	}
 	else {
-		k = static_cast<int>(std::ceil(idx_in / (intdim1 * intdim2)));
-		j = static_cast<int>(std::ceil((idx_in - k * intdim1 * intdim2) / intdim1));
-		i = static_cast<int>(std::ceil(idx_in - k * intdim1 * intdim2 - j * intdim1));
+		k = idx_in / static_cast<int64_t>(intdim1 * intdim2) + 1;
+		j = (idx_in - (k - 1) * static_cast<int64_t>(intdim1) * intdim2) / intdim1 + 1;
+		i = idx_in - (k - 1) * static_cast<int64_t>(intdim1) * intdim2 - (j - 1) * intdim1;
 	}
 
-	return Vector3(i, j, k);
+	return Vector3(i,j,k);
 }
-
-
-//inline Vector3 unravel3D(int idx_in, int intdim1, int intdim2, int index_init_norm = 0) {
-//	int i, j, k;
-//	if (index_init_norm == 0) {
-//		k = (int)(idx_in / (intdim1*intdim2));
-//		j = (int)((idx_in - k * intdim1*intdim2) / intdim1);
-//		i = (int)(idx_in - k * intdim1*intdim2 - j * intdim1);
-//	}
-//	else {
-//		k = (int)(ceil(idx_in / (intdim1*intdim2)));
-//		j = (int)(ceil((idx_in - k * intdim1*intdim2) / intdim1));
-//		i = (int)(ceil(idx_in - k * intdim1*intdim2 - j * intdim1));
-//	}
-//	return 	Vector3(i, j, k);
-//}
 
 // This allows to get the equivalent index of a grid in a new grid, in a raveled context (1D).
 //You can define if the indices start at 0 or 1 in option (0 by default)
 
-inline int convert_index(int dim1_in, int dim2_in, int dim3_in, int dim1_out, int dim2_out, int dim3_out, int idx_in, int index_init_norm = 0) {
+inline int64_t convert_index(int dim1_in, int dim2_in, int dim3_in, int dim1_out, int dim2_out, int dim3_out, int64_t idx_in, int index_init_norm = 0) {
 	Vector3 coord = unravel3D(idx_in, dim1_in, dim2_in, index_init_norm);
-	int i_out = int(coord.x*dim1_out / dim1_in);
-	int j_out = int(coord.y*dim2_out / dim2_in);
-	int k_out = int(coord.z*dim3_out / dim3_in);
-	int idx_out = i_out + j_out * dim1_out + k_out * dim1_out * dim2_out;
+	int64_t i_out = static_cast<int64_t>(std::floor(coord.x * dim1_out / dim1_in));
+	int64_t j_out = static_cast<int64_t>(std::floor(coord.y * dim2_out / dim2_in));
+	int64_t k_out = static_cast<int64_t>(std::floor(coord.z * dim3_out / dim3_in));
+	int64_t idx_out = i_out + j_out * dim1_out + k_out * dim1_out * dim2_out;
 	return idx_out;
 }
 
 // this method finds the scanning area around a flattened index position, according to the local density r
 
-inline std::vector<int> scan_area(double r, double r_min, const Vector3& point, int dim) {
-	int flattened_index = flatten_indices(dim, dim, dim, point);
+inline std::vector<int64_t> scan_area(double r, double r_min, const Vector3& point, int dim) {
+	int64_t flattened_index = flatten_indices(dim, dim, dim, point);
 	Vector3 coord = unravel3D(flattened_index, dim, dim);
-	std::vector<int> scanned_indices;
-	int region_size = (int)(ceil(2 * r*sqrt(3) / r_min)); // we're looking to scan all the elements at a distance less than region_size of the index
-	int x_i, y_i, z_i;
+	std::vector<int64_t> scanned_indices;
+	int region_size = static_cast<int>(std::ceil(2 * r * std::sqrt(3) / r_min)); // we're looking to scan all the elements at a distance less than region_size of the index
+	int64_t x_i, y_i, z_i;
 	for (x_i = -region_size; (x_i <= region_size); x_i++) {
 		if ((0 <= coord.x + x_i) && (coord.x + x_i < dim)) { // we also check that those elements aren't outside the grid
 			for (y_i = -region_size; (y_i <= region_size); y_i++) {
 				if ((0 <= coord.y + y_i) && (coord.y + y_i < dim)) {
 					for (z_i = -region_size; (z_i <= region_size); z_i++) {
 						if ((0 <= coord.z + z_i) && (coord.z + z_i < dim)) {
-							scanned_indices.push_back(flattened_index + x_i + y_i * (dim)+z_i * (dim)*(dim));
+							scanned_indices.push_back(flattened_index + x_i + y_i * dim + z_i * dim * dim);
 						}
 					}
 				}
@@ -543,73 +642,51 @@ inline std::vector<int> scan_area(double r, double r_min, const Vector3& point, 
 	return scanned_indices;
 }
 
-// version with varying dimensions
-
-//inline std::vector<int> scan_area2(const double& r, const double& r_min, const Vector3& point, const int& dim1, const int& dim2,
-//	const int& dim3, const double& dimx, const double& dimy, const double& dimz) {
-//
-//	int flattened_index = flatten_indices2(dim1, dim2, dim3, dimx, dimy, dimz, point);
-//	Vector3 coord = unravel3D(flattened_index, dim1, dim2);
-//	std::vector<int> scanned_indices;
-//
-//	int region_size = static_cast<int>(ceil(2 * r * sqrt(3) / r_min));
-//
-//	int x_start = std::max(0, static_cast<int>(coord.x - region_size));
-//	int x_end = std::min(dim1, static_cast<int>(coord.x + region_size)) + 1;
-//	int y_start = std::max(0, static_cast<int>(coord.y - region_size));
-//	int y_end = std::min(dim2, static_cast<int>(coord.y + region_size)) + 1;
-//	int z_start = std::max(0, static_cast<int>(coord.z - region_size));
-//	int z_end = std::min(dim3, static_cast<int>(coord.z + region_size)) + 1;
-//
-//	//scanned_indices.reserve((x_end - x_start) * (y_end - y_start) * (z_end - z_start));
-//
-//	for (int x_i = x_start; x_i < x_end; x_i++) {
-//		for (int y_i = y_start; y_i < y_end; y_i++) {
-//			for (int z_i = z_start; z_i < z_end; z_i++) {
-//				scanned_indices.push_back(flattened_index + x_i + y_i * dim1 + z_i * dim1 * dim2);
-//			}
-//		}
-//	}
-//
-//	return scanned_indices;
-//}
-
-
-inline std::vector<int> scan_area2(const double& r, const double& r_min, const Vector3& point, const int& dim1, const int& dim2,
+inline std::vector<int64_t> scan_area2(const double& r, const double& r_min, const Vector3& point, const int& dim1, const int& dim2,
 	const int& dim3, const double& dimx, const double& dimy, const double& dimz) {
-	int flattened_index = flatten_indices2(dim1, dim2, dim3, dimx, dimy, dimz, point);
+
+	int64_t flattened_index = flatten_indices2(dim1, dim2, dim3, dimx, dimy, dimz, point);
 	Vector3 coord = unravel3D(flattened_index, dim1, dim2);
-	std::vector<int> scanned_indices;
-	int region_size = (int)(ceil(2 * r*sqrt(3) / r_min)); // we're looking to scan all the elements at a distance less than region_size of the index
-	int x_i, y_i, z_i;
+	std::vector<int64_t> scanned_indices;
+	int region_size = static_cast<int>(std::ceil(2 * r * std::sqrt(3) / r_min)); // we're looking to scan all the elements at a distance less than region_size of the index
+	int64_t x_i, y_i, z_i;
+
 	for (x_i = -region_size; (x_i <= region_size); x_i++) {
 		if ((0 <= coord.x + x_i) && (coord.x + x_i < dim1)) { // we also check that those elements aren't outside the grid
 			for (y_i = -region_size; (y_i <= region_size); y_i++) {
 				if ((0 <= coord.y + y_i) && (coord.y + y_i < dim2)) {
 					for (z_i = -region_size; (z_i <= region_size); z_i++) {
 						if ((0 <= coord.z + z_i) && (coord.z + z_i < dim3)) {
-							scanned_indices.push_back(flattened_index + x_i + y_i * (dim1)+z_i * (dim1)*(dim2));
+							scanned_indices.push_back(flattened_index + x_i + y_i * dim1 + z_i * dim1 * dim2);
 						}
 					}
 				}
 			}
 		}
 	}
-
 	return scanned_indices;
 }
 
-inline bool is_point_in_triangle(Vector3& new_horizon_pt, Vector3& A, Vector3& B, Vector3& origin) {
-	double d1 = (B.x - A.x)*(new_horizon_pt.y - A.y) - (B.y - A.y)*(new_horizon_pt.x - A.x);
-	double d2 = (B.x - A.x)*(origin.y - A.y) - (B.y - A.y)*(origin.x - A.x);
-	if (d1 < 0 && d2 < 0) {
-		return true;
-	}
-	else if (d1 > 0 && d2 > 0) {
-		return true;
-	}
-	else {
-		return false;
+// Checks if point is inside triangle IN MAP VIEW (2D, so no z check!!)
+
+inline bool isInsideTriangle(const Vector3& A, const Vector3& B, const Vector3& C, const Vector3& P, const double tolerance = 1e-2) {
+	// Calculate barycentric coordinates
+	const double detT = (B.y - C.y) * (A.x - C.x) + (C.x - B.x) * (A.y - C.y);
+	const double alpha = ((B.y - C.y) * (P.x - C.x) + (C.x - B.x) * (P.y - C.y)) / detT;
+	const double beta = ((C.y - A.y) * (P.x - C.x) + (A.x - C.x) * (P.y - C.y)) / detT;
+	const double gamma = 1.0 - alpha - beta;
+
+	// Check if the point is inside the triangle with tolerance
+	return alpha >= -tolerance && beta >= -tolerance && gamma >= -tolerance;
+}
+
+// Function to push back a Vector3 if not already in the vector with a tolerance
+inline void pushBackIfNotPresent(std::vector<Vector3>& vec, const Vector3& newVector, double tolerance = 1e-5) {
+	if (std::find_if(vec.begin(), vec.end(), [&](const Vector3& v) {
+		return std::abs(v.x - newVector.x) < tolerance && std::abs(v.y - newVector.y) < tolerance &&
+			std::abs(v.z - newVector.z) < tolerance;
+	}) == vec.end()) {
+		vec.push_back(newVector);
 	}
 }
 
@@ -619,76 +696,52 @@ inline void vect_product(Vector3 vec1, Vector3 vec2, Vector3& result) {
 	result.z = vec1.x*vec2.y - vec1.y*vec2.x;
 }
 
-inline double scalar_product(Vector3 v1, Vector3 v2) {
+inline double scalar_product(const Vector3& v1, const Vector3& v2) {
 	return v1.x*v2.x + v1.y*v2.y + v1.z*v2.z;
 }
 
-inline bool is_point_under_triangle(const Vector3& new_horizon_pt, const Vector3& P0, const Vector3& P1, const Vector3& P2, const double tolerance = 1e-5) {
-
-	// preliminary test: if all 3 z values are above or below the point, no need to go further
-	if (P0.z >= new_horizon_pt.z + tolerance && P1.z >= new_horizon_pt.z + tolerance && P2.z >= new_horizon_pt.z + tolerance) {
-		return true;
-	}
-	if (P0.z < new_horizon_pt.z - tolerance && P1.z < new_horizon_pt.z - tolerance && P2.z < new_horizon_pt.z - tolerance) {
-		return false;
-	}
-
-	Vector3 vec1(P1.x - P0.x, P1.y - P0.y, P1.z - P0.z);
-	Vector3 vec2(P2.x - P0.x, P2.y - P0.y, P2.z - P0.z);
+// Check if a point is below a triangle
+inline bool is_point_under_triangle(const Vector3& new_horizon_pt, const Vector3& P0, const Vector3& P1, const Vector3& P2, const double tolerance = 1) {
+	Vector3 edge1 = { P1.x - P0.x, P1.y - P0.y, P1.z - P0.z };
+	Vector3 edge2 = { P2.x - P0.x, P2.y - P0.y, P2.z - P0.z };
 	Vector3 normal;
-	vect_product(vec1, vec2, normal);
-	Vector3 P0_new_horizon_pt(new_horizon_pt.x - P0.x, new_horizon_pt.y - P0.y, new_horizon_pt.z - P0.z);
-	double res = scalar_product(P0_new_horizon_pt, normal);
-
-	// Check orientation of the normal
-	if (normal.z < -tolerance) {
-		if (res >= -tolerance) {
-			return true;  // Point is below the triangle
-		}
-		else {
-			return false;  // Point is above the triangle
-		}
+	vect_product(edge1, edge2,normal);
+	double d = -scalar_product(normal, P0);
+	double res = scalar_product(new_horizon_pt, normal) + d;
+	if (std::abs(res) <= tolerance) {
+		return true;  // Point is coplanar or very close
 	}
-	else if (normal.z > tolerance) {
-		if (res <= tolerance) {
-			return true;  // Point is below the triangle
-		}
-		else {
-			return false;  // Point is above the triangle
-		}
+	else if (res > tolerance) {
+		return true;  // Point is below the triangle
 	}
 	else {
-		// Triangle is (nearly) horizontal, check the point's position in 2D space
-		if (std::abs(res) <= tolerance) {
-			return true;  // Point is coplanar or very close
-		}
-		else if (res > tolerance) {
-			return true;  // Point is below the triangle
-		}
-		else {
-			return false;  // Point is above the triangle
-		}
+		return false;  // Point is above the triangle
 	}
 }
 
-// Function to compute barycentric coordinates of a point in a triangle
-inline void barycentric(const Vector3& pt, const Vector3& A, const Vector3& B, const Vector3& C,
-	double& bary1, double& bary2, double& bary3) {
-	Vector3 v0 = B - A, v1 = C - A, v2 = pt - A;
-	double d00 = Dot(v0,v0);
-	double d01 = Dot(v0, v1);
-	double d11 = Dot(v1, v1);
-	double d20 = Dot(v2, v0);
-	double d21 = Dot(v2, v1);
-	double denom = d00 * d11 - d01 * d01;
-	bary2 = (d11 * d20 - d01 * d21) / denom;
-	bary3 = (d00 * d21 - d01 * d20) / denom;
-	bary1 = 1.0 - bary2 - bary3;
+
+inline double barycentric(const Vector3& pt, const Vector3& A, const Vector3& B, const Vector3& C) {
+
+	// Compute the normal vector of the plane defined by the triangle
+	Vector3 normal = Cross(B - A, C - A);
+
+	// Normalize the normal vector
+	const double normalLength = std::sqrt(normal.x * normal.x + normal.y * normal.y + normal.z * normal.z);
+	normal.x /= normalLength;
+	normal.y /= normalLength;
+	normal.z /= normalLength;
+
+	// Compute the signed distance to the plane
+	const double signedDistance = Dot(normal, pt - A);
+
+	// Return the absolute value of the signed distance (orthogonal projection distance)
+	return std::abs(signedDistance);
 }
+
 
 // Function to compute the signed distance from a point to the plane defined by a triangle
 inline double signed_distance_to_plane(const Vector3& pt, const Vector3& A, const Vector3& B, const Vector3& C) {
-	Vector3 normal = Normalize(Cross((B - A),(C - A)));
+	const Vector3 normal = Normalize(Cross((B - A),(C - A)));
 	return Dot(normal,pt - A);
 }
 

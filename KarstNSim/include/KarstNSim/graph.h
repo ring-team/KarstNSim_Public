@@ -70,6 +70,7 @@ namespace KarstNSim {
 		Vector3 p;
 		double cost;
 		bool vadose; // 1 if in vadose, 0 if in phreatic
+		double eq_radius =0.;
 		std::vector<KarsticConnection> connections;
 
 
@@ -90,14 +91,16 @@ namespace KarstNSim {
 	public:
 		std::vector<KarsticNode> nodes;
 
+
 	public:
 		inline explicit KarsticSkeleton() { }
 		KarsticSkeleton(const GraphOperations*, const std::vector<std::vector<int>>&, const std::vector<std::vector<double>>, const std::vector<std::vector<bool>>);
 
 		int count_vadose_nodes();
 		bool edge_exists(int u, int v);
-		void Amplify_vadose(GraphOperations* graph, GeologicalParameters params);
-		void Amplify_phreatic(GraphOperations* graph, GeologicalParameters params);
+		void Amplify_vadose(GraphOperations* graph, const GeologicalParameters& params);
+		void Amplify_phreatic(GraphOperations* graph, const GeologicalParameters& params);
+		void create_sections(GraphOperations* graph, const GeologicalParameters& params);
 		void save(const std::string& file, const std::string& save_directory) const;
 		void CreateLine(const GeologicalParameters& geologicalparams, std::string network_name) const;
 
@@ -141,13 +144,16 @@ namespace KarstNSim {
 
 	protected:
 		void NormalizeWeights();
-		void SetEdge(int s, int t, std::vector<double> w);
-		void SetEdge(int s, int t, std::vector<double> w, std::vector<bool> ff);
-		void UpdateEdgeWeight(int s, int t, std::vector<double> w);
-		int GetIdxNeighbor(int s, int t);
-		void DijkstraComputePaths(int, int, std::vector<double>&, std::vector<int>&) const;
-		void DijkstraComputePathsNoCostRed(int, int, std::vector<double>&, std::vector<int>&) const;
-		void DijkstraComputePathsSurface(int, int, int&, std::vector<double>&, std::vector<int>&, std::vector<std::vector<bool>>, int, int, bool&) const;
+		void SetEdge(const int& s, const int& t, const std::vector<double>& w);
+		void SetEdge(const int& s, const int& t, const std::vector<double>& w, const std::vector<bool>& ff);
+		void UpdateEdgeWeight(const int& s, const int& t, const std::vector<double>& w);
+		int GetIdxNeighbor(const int& s, const int& t);
+		int FindNearestWaterTablePoint(const int& outlet_count, const int& source, const std::vector<std::vector<bool>>& samples_surf_flags, const std::vector<int>& previous, const std::vector<double>& distance) const;
+		void DijkstraComputePaths(const int&, const int&,  std::vector<double>&, std::vector<int>&, const int& target=-1) const;
+		//void DijkstraComputePathsPoint(const int& outlet_count, const int& source, const int& target, std::vector<double>& distance, std::vector<int>& previous) const;
+		//void DijkstraComputePathsPoint(const int& outlet_count, const int& source, const int& target, std::vector<double>& distance, std::vector<int>& previous) const;
+		void DijkstraComputePathsSurface(int outlet_count, int source, int& reach, std::vector<double>& distance, std::vector<int>& previous, const std::vector<std::vector<bool>>& samples_surf_flags, int target, bool &already_reached) const;
+		//void DijkstraComputePathsSurface(int, int, int&, std::vector<double>&, std::vector<int>&, const std::vector<std::vector<bool>>&, int, bool&) const;
 		std::pair<std::vector<int>, std::vector<double>> DijkstraGetShortestPathTo(int, const std::vector<int>&, const std::vector<double>&, double&) const;
 	};
 
@@ -172,7 +178,8 @@ namespace KarstNSim {
 
 	protected:
 		std::vector<Vector3> samples;	//!< Graph nodes.
-		std::vector<std::vector<bool>> samples_surf_flags;
+		std::vector<std::vector<bool>> samples_surf_flags; // flags for each sample and for each wt : =1 if phreatic zone, =0 if vadose zone
+		std::vector<std::vector<bool>> samples_on_wt_flags; // flags for each sample and for each wt : =1 if exactly onto wt, =0 else
 		std::vector<std::vector<double>> samples_wt_dist;
 		std::vector<double> samples_layer_kp;
 		std::vector<double> samples_surf_dist;
@@ -180,15 +187,21 @@ namespace KarstNSim {
 
 	public:
 		explicit GraphOperations();
-		double ComputeEdgeDistanceCost(const Vector3& p, const Vector3& pn, const double dmin, const double dmax);
-		std::pair<std::vector<double>, std::vector<bool>> ComputeEdgeCostAdapted(const int index, const Vector3& p, const Vector3& pn, double& dmin, double& dmax, const double  dist_max, std::vector<double> min_dist_wt, std::vector<double> max_dist_wt) const;
-		bool CheckBelowSurf(const Vector3&, Surface*, const PointCloud&,const PointCloud& centers2D);
-		double distsurf(const Vector3& pt, Surface* surface, const double& max_inception_surface_distance, const PointCloud& centers, const PointCloud& centers2D);
-		double compute_euclidian_distance_from_surfaces(std::vector<Surface>*, const double);
-		std::pair< std::vector<double>, std::vector<double>> compute_euclidian_distance_from_wt(std::vector<Surface>*, const double);
-		void InitializeCostGraphAdapted(const bool create_nghb_graph, const bool create_nghb_graph_property, const std::vector<KeyPoint>& keypts, const GeologicalParameters& geologicalparams, const std::vector<Vector3>& Points, std::vector<Surface>* inception_horizons,
+		double ComputeEdgeDistanceCost(const Vector3& p, const Vector3& pn, const double& dmin, const double& dmax);
+		std::pair<std::vector<double>, std::vector<bool>> ComputeEdgeCost(const int& index, const Vector3& p, const Vector3& pn, double& dmin, double& dmax, const double&  dist_max) const;
+		static bool CheckBelowSurf(const Vector3&, const Surface*,const PointCloud& centers2D);
+		double distsurf(const Vector3& pt, Surface* surface, const double& max_inception_surface_distance, const PointCloud& centers2D);
+		void compute_euclidian_distance_from_surfaces(std::vector<Surface>*, const double);
+		void compute_euclidian_distance_from_wt(std::vector<Surface>*, const double);
+		void save_nghb_graph(const GeologicalParameters& geologicalparams, const bool& create_nghb_graph_property);
+		void process_node_in_samples(const Vector3& node, std::vector<int>& on_wt_flags_idx);
+		void InitializeCostGraph(const bool create_nghb_graph, const bool create_nghb_graph_property, const std::vector<KeyPoint>& keypts,
+			const GeologicalParameters& geologicalparams, const std::vector<Vector3>& nodes_on_inception_surfaces, const std::vector<std::vector<Vector3>>& nodes_on_wt_surfaces,
+			std::vector<Surface>* inception_horizons,
 		std::vector<Surface>* water_tables, const bool use_sampling_points, Box* Box, const double max_inception_surface_distance, std::vector<Vector3>* sampling_points,
-		const bool create_surf_sampling, const bool use_density_property, int k_pts, const double fraction_karst_perm, std::vector<double> propdensity, std::vector<double> propikp, Surface* topo_surface);
+		const bool create_surf_sampling, const bool use_density_property, int k_pts, const double fraction_karst_perm, std::vector<double> propdensity,
+			std::vector<double> propikp, Surface* topo_surface);
+
 		KarsticSkeleton ComputeKarsticSkeleton(const std::vector<KeyPoint>& keypts, const double fraction_old_karst_perm);
 		std::pair< std::vector<int>, std::vector<double>> shortest_path(bool under_wt, int u, int v);
 		std::vector<std::vector<int>> AmplifyKarsticSkeleton(const std::vector<KarsticNode>& basekeypts, const std::vector<KeyPoint>& newkeypts);
@@ -198,8 +211,8 @@ namespace KarstNSim {
 		inline int get_nb_sampling_pts() { return(int)samples.size(); };
 
 	protected:
-		void SampleSpaceDwork(std::vector<Vector3>& Points, Box* Box, const bool use_density_property, const int k, std::vector<double> propdensity, Surface* topo_surface);
+		void SampleSpaceDwork( Box* Box, const bool use_density_property, const int k, std::vector<double> propdensity, Surface* topo_surface);
 		void DefineWSurfaceFlags(std::vector<Surface>* water_tables);
-		void BuildNearestNeighbourGraphAdapted(Box*, const double fraction_old_karst_perm, const std::vector<double> min_dist_wt, const std::vector<double> max_dist_wt, double max_dist_surf);
+		void BuildNearestNeighbourGraph(Box*, const double fraction_old_karst_perm, double max_dist_surf);
 	};
 }
