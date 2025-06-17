@@ -2,7 +2,7 @@
 Public version of KarstNSim, a C++ code for graph-based and geologically-driven simulation of 3D karst networks.
 
 * [2024 Publication](https://doi.org/10.1016/j.jhydrol.2024.130878)
-* [2025 Thesis]()
+* [2025 Thesis](https://hal.univ-lorraine.fr/tel-05114757v1)
 
 Its inputs and outputs are ASCII files and it can be run through a single command.
 It adapts the Karst simulation code proposed by <b> Paris, A., Guérin, E., Peytavie, A., Collon, P., Galin, E., 2021. Synthesizing Geologically Coherent Cave Networks. Comput. Graph. Forum 40, 277–287. https://doi.org/10.1111/cgf.14420 which is available on Github at : https://github.com/aparis69/Karst-Synthesis. </b>
@@ -10,7 +10,7 @@ This implementation includes modifications as compared to this initial independa
 
 The first version of KarstNSim was done in the frame of <b> Benoit Thebault </b> master's thesis, supervised by Pauline Collon. It was presented in the 2022 RINGMeeting in: <b> Thebault, B., Collon, P., Antoine, C., Paris, A., Galin, E., 2022. Karstic network simulation with γ -graphs, in: 2022 RING Meeting. </b>
 Since 2022 summer, KarstNSim is developed in the frame of <b> Augustin Gouy</b> PhD thesis, supervised by Pauline Collon and Vincent Bailly-Comte.
-This public version corresponds to the version of KarstNSim used to generate results in the 2025 PhD thesis: xxx.
+This public version corresponds to the version of KarstNSim used to generate results in the 2025 PhD thesis.
 
 It is recommended to read the methodology presented in the 2024 article and/or in the thesis to better apprehend the code.
 
@@ -63,10 +63,11 @@ Outputs are stored in the outputs directory.
 A doxyfile is present in the archive. To automatically generate the documentation, type `doxygen path/to/YourDoxyfile` in a command prompt, or simply `doxygen doxyfile` if already
  in the root folder. Once generated, you will find the documentation in the *hmtl folder*. It is advised to open the documentation starting from the main page, which provides important
 general information about the project structure. You can find it by opening the "index.html" file, or by opening any other .html file and clicking on "Main Page" in the upper left.
+A complete documentation of all user input parameters is available in the KarstNSim::ParamsSource struct page.
 
 ## Testing
 
-We provide here a synthetic dataset (inspired from the one used in the 2024 article) and three instruction files (instruction_file_step1, instruction_file_step2 and instruction_file_step3) in the correct format used for KarstNSim, which correspond to inputs used to generate examples in three steps. They are in the Input_files folder.
+We provide here a synthetic dataset (inspired from the one used in the 2024 article) and an instruction file to simulate results shown in a figure of the 2024 article. <!-- three instruction files (instruction_file_step1, instruction_file_step2 and instruction_file_step3) in the correct format used for KarstNSim, which correspond to inputs used to generate examples in three steps. They are in the Input_files folder.
 Since the name of these three files is not "instruction_file.txt", you have to launch the executable manually from a command prompt (see ##Installation for more information).
 
 The first step consists in showing you a simulation, using five inlets going to the upper spring (S1). Subcosts involved are: vadose/phreatic partition, fractures (chosen at orientations N000 and N060), intrinsic karstification potential (including a ghost-rock corridor following the syncline axis), and inception surfaces.
@@ -74,10 +75,10 @@ Also, an amplification of the network is made to add some dead-end branches to i
 
 See below pictures of a) model settings (inlets in red, outlets in blue), b) the background grid Poisson-sphere radius property *r*, c) the background grid intrinsic karstification potential property *P*, and d) an example result.
 
-XXX
-<img src="vadose_contexts_example.png" alt="Figure 12 (Gouy et al., 2023)" width="100%" align="center">
+XXX -->
+<img src="vadose_contexts_example.png" alt="Figure 12 (Gouy et al., 2024)" width="100%" align="center">
 
-The second step consists in presenting a polygenic karst simulation: the network generated during step 1 is reused by reducing the cost of edges already traversed. This time, the spring considered is the lower one (S2): this mimicks a base level drop. The ghost-rock volume is still present, influencing the chosen paths.
+<!-- The second step consists in presenting a polygenic karst simulation: the network generated during step 1 is reused by reducing the cost of edges already traversed. This time, the spring considered is the lower one (S2): this mimicks a base level drop. The ghost-rock volume is still present, influencing the chosen paths.
 The cost function is mostly the same, but the fracture component was removed (mimicking a shift from an epikarstic fractured zone to more homogeneous rocks).
 Moreover, two waypoints and two karst-free points were added on the substratum of the aquifer, to show their capability to control path position. The amplification step is also applied, with the same parameters as in the first step.
 
@@ -85,12 +86,12 @@ Below you can see a) Settings with waypoints in purple and karst-free points in 
 
 XXX
 
-The third and last step consists in generating equivalent conduit dimensions on the edges of the full network generated. The variogram parameters used are the ones proposed by Frantz et al. (2021), based on cave survey data. This step involves using a parameter option that allows to add the previously generated networks as
+[] The third and last step consists in generating equivalent conduit dimensions on the edges of the full network generated. The variogram parameters used are the ones proposed by Frantz et al. (2021), based on cave survey data. This step involves using a parameter option that allows to add the previously generated networks as
 inputs, skipping all steps except the dimensions simulation one. Below is an example simulation result with the equivalent radii represented in log-scale, with values proportional to the sphere radii at each skeleton node.
 
-XXX
+XXX -->
 
-If you want to make modifications to the input parameters, create a new file instructions.txt, and change options as you want with inspiration from the three instruction files provided.
+If you want to make modifications to the input parameters, create a new file instructions.txt, and change options as you want with inspiration from the instruction files provided.
 
 It is advised to use a 3D viewer software (e.g., [ParaView](https://www.paraview.org/download/) ) to visualize complex inputs and outputs (the viewer is not provided in the archive).
 

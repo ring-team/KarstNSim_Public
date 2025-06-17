@@ -18,7 +18,7 @@ set(KARSTNSIM_SOURCES
     src/graph_operations.cpp  
     src/read_files.cpp
     src/karstic_skeleton.cpp  
-    src/run_code.cpp 
+    src/run_code.cpp
     src/parse_inputs.cpp
 )
 
