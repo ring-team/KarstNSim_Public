@@ -11,7 +11,7 @@ If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
 #include "KarstNSim/read_files.h"
 
 namespace KarstNSim {
-	void load_point(const std::string& file_name, const std::string& save_directory, Vector3& u, std::vector<double>& properties)
+	void load_point(const std::string& file_name, const std::string& save_directory, Vector3& u, std::vector<float>& properties)
 	{
 		//(std::vector<Vector3>, std::vector<Triangle>)
 		std::string line;
@@ -39,8 +39,8 @@ namespace KarstNSim {
 			std::istringstream iss2(line);
 			// initialize all params of each line
 			int idx;
-			double x, y, z;
-			std::vector<double> prop(prop_size, 0.);
+			float x, y, z;
+			std::vector<float> prop(prop_size, 0.);
 			// and get their values
 			iss2 >> idx >> x >> y >> z;
 			// iterate on property size to get the rest
@@ -50,146 +50,213 @@ namespace KarstNSim {
 			u = Vector3(x, y, z);
 			properties = prop;
 		}
+		in.close();
 	}
 
-	void load_surface(const std::string& file_name, const std::string& save_directory, Surface& s, std::vector<std::vector<double>>& properties)
+	void load_surface(const std::string& file_name, const std::string& save_directory, Surface& s, std::vector<std::vector<float>>& properties)
 	{
-		//(std::vector<Vector3>, std::vector<Triangle>)
 		std::string line;
 		std::string full_name = save_directory + "/" + file_name;
 		std::ifstream in(full_name);
 
-		//get property size
+		if (!in.is_open()) {
+			std::cerr << "Error opening file: " << full_name << std::endl;
+			return;
+		}
 
-		std::getline(in, line); // skip first line, which is a header !
-		std::getline(in, line);
+		// Count total number of lines with vertices in the file
+		int total_lines = 0;
+		while (std::getline(in, line)) {
+			std::istringstream iss(line);
+			std::string tag;
+			iss >> tag;
+			if (tag == "VRTX") {
+				total_lines++;
+			}
+		}
+
+		in.clear(); // clear eof flag
+		in.seekg(0, std::ios::beg); // back to the start
+
+		// Skip headers and get the number of columns
+		std::getline(in, line); // skip first line (header)
+		std::getline(in, line); // read the second line for property size calculation
 		std::stringstream iss;
 		iss << line;
 		int nb_columns = 0;
 		std::string value;
 		while (iss >> value) nb_columns++;
-		int prop_size = nb_columns - 5;
-		// don't forget to reset to beginning, to not skip first line after header!
-		in.clear();                 // clear fail and eof bits
-		in.seekg(0, std::ios::beg); // back to the start!
+		int prop_size = nb_columns - 5; // Adjust according to actual properties
 
-		// go through lines
+		// Calculate the number of lines to be processed
+		int data_lines = total_lines; // minus 1 header
 
+		in.clear(); // clear eof flag
+		in.seekg(0, std::ios::beg); // back to the start
+
+		// Prepare to read data
 		std::vector<Vector3> nodes;
 		std::vector<Triangle> trgls;
 		std::string tag;
+		properties.resize(data_lines); // Resize properties based on the number of data lines
 
-		std::getline(in, line); // skip first line, which is a header !
-		while (std::getline(in, line)) { // get line
+		std::getline(in, line); // Skip the header line
+
+		int line_count = 0;
+		while (std::getline(in, line) && line_count < data_lines) {
 			std::istringstream iss2(line);
 			iss2 >> tag;
 
-			if (tag == "VRTX") { 			// if we're reading the vertices
-				// initialize all params of each line
+			if (tag == "VRTX") { // If we're reading the vertices
 				int idx;
-				double x, y, z;
-				std::vector<double> prop(prop_size, 0.);
-				// and get their values
+				float x, y, z;
+				std::vector<float> prop(prop_size, 0.);
 				iss2 >> idx >> x >> y >> z;
-				// iterate on property size to get the rest
+
 				for (int k = 0; k < prop_size; k++) {
 					iss2 >> prop[k];
 				}
 				Vector3 v(x, y, z);
 				nodes.push_back(v);
-				properties.push_back(prop);
+				properties[line_count] = prop; // Store the properties in the array
 			}
-			else if (tag == "TRGL") { 		// when vertices have been read, we now have to read the triangles
+			else if (tag == "TRGL") { // When vertices have been read, we now have to read the triangles
 				int idx;
 				int id1, id2, id3;
 				iss2 >> idx >> id1 >> id2 >> id3;
 				Triangle tgl(id1, id2, id3);
 				trgls.push_back(tgl);
 			}
+			else {
+			}
+			line_count++;
 		}
+
 		s = Surface(nodes, trgls);
+		in.close();
 	}
 
-	void load_pointset(const std::string& file_name, const std::string& save_directory, std::vector<Vector3>& pset, std::vector<std::vector<double>>& properties)
+	void load_pointset(const std::string& file_name, const std::string& save_directory, std::vector<Vector3>& pset, std::vector<std::vector<float>>& properties)
 	{
-		//(std::vector<Vector3>, std::vector<Triangle>)
 		std::string line;
 		std::string full_name = save_directory + "/" + file_name;
 		std::ifstream in(full_name);
 
-		//get property size
-		
-		std::getline(in, line); // skip first line, which is a header !
-		std::getline(in, line);
+		if (!in.is_open()) {
+			std::cerr << "Error opening file: " << full_name << std::endl;
+			return;
+		}
+
+		// Count total number of lines in the file
+		int total_lines = 0;
+		while (std::getline(in, line)) {
+			total_lines++;
+		}
+		in.clear(); // clear eof flag
+		in.seekg(0, std::ios::beg); // back to the start
+
+		// Skip headers and get the number of columns
+		std::getline(in, line); // skip first line (header)
+		std::getline(in, line); // read the second line for property size calculation
 		std::stringstream iss;
 		iss << line;
 		int nb_columns = 0;
 		std::string value;
 		while (iss >> value) nb_columns++;
-		int prop_size = nb_columns - 4;
-		// don't forget to reset to beginning, to not skip first line after header!
-		in.clear();                 // clear fail and eof bits
-		in.seekg(0, std::ios::beg); // back to the start!
+		int prop_size = nb_columns - 4; // Adjust according to actual properties
 
-		// go through lines
+		// Calculate the number of lines to be processed
+		int data_lines = total_lines - 1; // minus 1 header
 
-		std::getline(in, line); // skip first line, which is a header !
-		while (std::getline(in, line)) { // get line
+		in.clear(); // clear eof flag
+		in.seekg(0, std::ios::beg); // back to the start
+
+		// Resize properties based on the number of data lines
+		properties.resize(data_lines);
+
+		// Prepare to read data
+		std::getline(in, line); // Skip the header line
+
+		int line_count = 0;
+		while (std::getline(in, line) && line_count < data_lines) {
 			std::istringstream iss2(line);
-			// initialize all params of each line
+			// Initialize all params of each line
 			int idx;
-			double x, y, z;
-			std::vector<double> prop(prop_size, 0.);
-			// and get their values
+			float x, y, z;
+			std::vector<float> prop(prop_size, 0.);
+			// Get their values
 			iss2 >> idx >> x >> y >> z;
-			// iterate on property size to get the rest
+
+			// Iterate on property size to get the rest
 			for (int k = 0; k < prop_size; k++) {
 				iss2 >> prop[k];
 			}
 			Vector3 u(x, y, z);
 			pset.push_back(u);
-			properties.push_back(prop);
+			properties[line_count] = prop; // Store the properties in the array
+
+			line_count++;
 		}
+
+		in.close();
 	}
 
-	void load_line(const std::string& file_name, const std::string& save_directory, Line& pline, std::vector<std::vector<std::vector<double>>>& properties)
+
+
+	void load_line(const std::string& file_name, const std::string& save_directory, Line& pline, std::vector<std::vector<std::vector<float>>>& properties)
 	{
-		//(std::vector<Vector3>, std::vector<Triangle>)
 		std::string line;
 		std::string full_name = save_directory + "/" + file_name;
 		std::ifstream in(full_name);
-		std::vector<Segment> segs;
-		//get property size
 
-		std::getline(in, line); // skip first line, which is a header !
-		std::getline(in, line);
+		if (!in.is_open()) {
+			std::cerr << "Error opening file: " << full_name << std::endl;
+			return;
+		}
+
+		// Count total number of lines in the file
+		int total_lines = 0;
+		while (std::getline(in, line)) {
+			total_lines++;
+		}
+		in.clear(); // clear eof flag
+		in.seekg(0, std::ios::beg); // back to the start
+
+		// Skip headers and get the number of columns
+		std::getline(in, line); // skip first line (header)
+		std::getline(in, line); // read the second line for property size calculation
 		std::stringstream iss;
 		iss << line;
 		int nb_columns = 0;
 		std::string value;
 		while (iss >> value) nb_columns++;
-		int prop_size = nb_columns - 4;
-		// don't forget to reset to beginning, to not skip first line after header!
-		in.clear();                 // clear fail and eof bits
-		in.seekg(0, std::ios::beg); // back to the start!
+		int prop_size = nb_columns - 4; // Adjust according to actual properties
 
-		// go through lines
+		in.clear(); // clear eof flag
+		in.seekg(0, std::ios::beg); // back to the start
+
+		// Calculate the number of lines to be processed
+		int data_lines = total_lines - 1; // minus 1 header
+
+		// Resize properties based on the number of data lines
+		properties.resize(data_lines / 2); // Each segment has 2 points
+
+		// Prepare to read data
+		std::getline(in, line); // Skip the header line
+
 		bool count = false;
-		std::getline(in, line); // skip first line, which is a header !
-		Vector3 u1;
-		Vector3 u2;
-		std::vector<double> prop(prop_size, 0.);
-		std::vector<double> prop2(prop_size, 0.);
+		std::vector<Segment> segs;
+		Vector3 u1, u2;
+		std::vector<float> prop(prop_size, 0.);
+		std::vector<float> prop2(prop_size, 0.);
 
-		while (std::getline(in, line)) { // get line
+		int line_count = 0;
+		while (std::getline(in, line) && line_count < data_lines) {
 			std::istringstream iss2(line);
-			// initialize all params of each line
 			int idx;
-			double x, y, z;
-
-			// and get their values
+			float x, y, z;
 			iss2 >> idx >> x >> y >> z;
-			// iterate on property size to get the rest
+
 			if (!count) {
 				for (int k = 0; k < prop_size; k++) {
 					iss2 >> prop[k];
@@ -201,53 +268,59 @@ namespace KarstNSim {
 					iss2 >> prop2[k];
 				}
 				u2 = Vector3(x, y, z);
+
+				// Create properties array for this segment
+				std::vector<std::vector<float>> props(prop_size, std::vector<float>(2));
+				for (int k = 0; k < prop_size; k++) {
+					props[k] = { prop[k], prop2[k] };
+				}
+				properties[line_count / 2] = props; // Store properties for this segment
+				segs.push_back(Segment(u1, u2));
 			}
 
-			if (count) {
-				std::vector<std::vector<double>> props;
-				for (int k = 0; k < prop_size; k++) {
-					props.push_back({ prop[k],prop2[k] });
-				}
-				properties.push_back(props);
-				Segment seg(u1, u2);
-				segs.push_back(seg);
-				count = false;
-			}
-			else {
-				count = true;
-			}
+			count = !count; // Toggle count
+			line_count++;
 		}
+
 		pline = Line(segs);
+		in.close();
 	}
 
-	void load_box(const std::string& file_name, const std::string& save_directory, Box& box, std::vector<std::vector<double>>& properties)
+
+	void load_box(const std::string& file_name, const std::string& save_directory, Box& box, std::vector<std::vector<float>>& properties)
 	{
-		//(std::vector<Vector3>, std::vector<Triangle>)
 		std::string line;
 		std::string full_name = save_directory + "/" + file_name;
 		std::ifstream in(full_name);
 
-		//get property size and other characteristics
+		if (!in.is_open()) {
+			std::cerr << "Error opening file: " << full_name << std::endl;
+			return;
+		}
 
-		std::getline(in, line); // skip first line, which is a header !
+		// Count total number of lines in the file
+		int total_lines = 0;
+		while (std::getline(in, line)) {
+			total_lines++;
+		}
+		in.clear(); // Clear eof flag
+		in.seekg(0, std::ios::beg); // Back to the start
+
+		// Skip headers and get property size and other characteristics
+		std::getline(in, line); // Skip first line (header)
 
 		std::string name;
 		int prop_size;
-		Vector3 basis;
-		Vector3 u;
-		Vector3 v;
-		Vector3 w;
-		int nu;
-		int nv;
-		int nw;
-		double x, y, z;
+		Vector3 basis, u, v, w;
+		int nu, nv, nw;
+		float x, y, z;
 
-		// prop number
+		// Property number
 		std::getline(in, line);
 		std::stringstream iss1(line);
 		iss1 >> name >> prop_size;
 
-		// basis
+		// Basis
 		std::getline(in, line);
 		std::stringstream iss2(line);
 		iss2 >> name >> x >> y >> z;
@@ -288,23 +361,28 @@ namespace KarstNSim {
 
 		box = Box(basis, u, v, w, nu, nv, nw);
 
-		// skip next line (header)
+		// Skip next line (header)
 		std::getline(in, line);
 
-		// go through next lines for property values
+		// Calculate the number of data lines
+		int data_lines = total_lines - 9; // Total lines minus 9 header lines (1+8)
 
-		while (std::getline(in, line)) { // get line
+		// Resize properties based on the number of data lines
+		properties.resize(data_lines);
+
+		// Read the property values
+		int line_count = 0;
+		while (std::getline(in, line) && line_count < data_lines) {
 			std::istringstream iss(line);
-			// initialize all params of each line
 			int idx;
-			std::vector<double> prop(prop_size, 0.);
-			// and get their values
+			std::vector<float> prop(prop_size, 0.);
 			iss >> idx;
-			// iterate on property size to get the rest
 			for (int k = 0; k < prop_size; k++) {
 				iss >> prop[k];
 			}
-			properties.push_back(prop);
+			properties[line_count] = prop; // Store the properties in the array
+			line_count++;
 		}
+		in.close();
 	}
 }

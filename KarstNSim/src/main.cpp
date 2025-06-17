@@ -8,10 +8,32 @@ If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
 
 ***************************************************************/
 
+/**
+* @file main.cpp
+* @brief Main entry point for KarstNSim. Parses input instructions and runs the simulation.
+*
+* This file handles the parsing of the instruction file and executes the main simulation
+* using the KarstNSim framework. The elapsed time for the simulation is also measured.
+*/
+
 #include "KarstNSim/parse_inputs.h"
 #include "KarstNSim/run_code.h"
 #include <chrono>
 
+/**
+* @brief Entry point for the KarstNSim application.
+*
+* This function takes an optional command-line argument specifying the instruction file.
+* If no argument is provided, it defaults to a predefined file location. It parses the input file,
+* runs the simulation, and outputs the elapsed time.
+*
+* @param argc The number of command-line arguments.
+* @param argv The array of command-line arguments.
+* @return int Returns 0 if the program runs successfully; otherwise, returns 1.
+*
+* @note If no command-line argument is provided, the program defaults to "../../../Input_files/instructions.txt".
+* @note The simulation parameters are parsed using the `ParseInputs` class, and the simulation is run using the `run_simulation_full` function.
+*/
 int main(int argc, char* argv[]) {
 	//if (argc != 2) {
 	//	std::cerr << "Usage: " << argv[0] << " <instruction_file>" << std::endl;

@@ -23,43 +23,42 @@ namespace KarstNSim {
 		adj.resize(n);
 	}
 
-
-
 	void CostGraph::NormalizeWeights() {
-		double min = std::numeric_limits<double>::infinity();
-		double max = 0.;
+		float min = std::numeric_limits<float>::infinity();
+		float max = 0.;
 		for (int i = 0; i < adj.size(); i++) {
 			for (int j = 0; j < adj[i].size(); j++) {
-				std::vector<double> weight_itr = adj[i][j].weight;
-				for (int k = 0; k < weight_itr.size(); k++) {
-					if (max < weight_itr[k]) max = weight_itr[k];
-					if (min > weight_itr[k]) min = weight_itr[k];
+				if (adj[i][j].target >= 0) { // avoid empty neighbors (when n<N) 
+					std::vector<float> weight_itr = adj[i][j].weight;
+					for (int k = 0; k < weight_itr.size(); k++) {
+						if (max < weight_itr[k]) max = weight_itr[k];
+						if (min > weight_itr[k]) min = weight_itr[k];
+					}
 				}
 			}
 		}
 		for (int i = 0; i < adj.size(); i++) {
 			for (int j = 0; j < adj[i].size(); j++) {
-				for (int k = 0; k < adj[i][j].weight.size(); k++) {
-					adj[i][j].weight[k] = (adj[i][j].weight[k] - min) / (max - min);
+				if (adj[i][j].target >= 0) { // avoid empty neighbors (when n<N) 
+					for (int k = 0; k < adj[i][j].weight.size(); k++) {
+						adj[i][j].weight[k] = (adj[i][j].weight[k] - min) / (max - min);
+					}
 				}
 			}
 		}
 	}
 
-	/*
-	\brief
-	*/
-	void CostGraph::SetEdge(const int& s, const int& t, const std::vector<double>& w, const std::vector<bool>& ff)
+	void CostGraph::SetEdge(const int& s, const int& neigh, const int& t, const std::vector<float>& w, const std::vector<bool>& ff)
 	{
-		adj[s].push_back(GraphEdge(t, w, ff));
+		adj[s][neigh] = GraphEdge(t, w, ff);
 	}
 
-	void CostGraph::SetEdge(const int& s, const int& t, const std::vector<double>& w)
+	void CostGraph::SetEdge(const int& s, const int& neigh, const int& t, const std::vector<float>& w)
 	{
-		adj[s].push_back(GraphEdge(t, w));
+		adj[s][neigh] = GraphEdge(t, w);
 	}
 
-	void CostGraph::UpdateEdgeWeight(const int& s, const int& t, const std::vector<double>& w)
+	void CostGraph::UpdateEdgeWeight(const int& s, const int& t, const std::vector<float>& w)
 	{
 		adj[s][t].weight = w;
 	}
@@ -67,117 +66,116 @@ namespace KarstNSim {
 	int CostGraph::GetIdxNeighbor(const int& s, const int& t)
 	{
 		for (int i = 0; i < adj[s].size(); i++) {
-			if (adj[s][i].target == t)
-			{
-				return i;
+			if (adj[s][i].target >= 0) { // avoid empty neighbors (when n<N) 
+				if (adj[s][i].target == t)
+				{
+					return i;
+				}
 			}
 		}
 		return 0;
 	}
 
-	/*
-	\brief
-	*/
-	void CostGraph::DijkstraComputePaths(const int& outlet_count, const int& source, std::vector<double>& distance, std::vector<int>& previous, const int& target) const
+	void CostGraph::DijkstraComputePaths(int outlet_count, int source, std::vector<float>& distance, std::vector<int>& previous, int target) const
 	{
-		constexpr double max_weight = std::numeric_limits<double>::infinity();
+		constexpr float max_weight = std::numeric_limits<float>::infinity();
 		size_t n = adj.size();
-		distance.clear();
+		size_t n2 = adj.row(0).size();
 		distance.resize(n, max_weight);
 		distance[source] = 0;
-		//int nb_frac_families = int(adj[0][0].frac_flag.size());
-		previous.clear();
 		previous.resize(n, -1);
-		std::set<std::pair<double, int>> vertex_queue;
+
+		std::set<std::pair<float, int>> vertex_queue;
 		vertex_queue.insert(std::make_pair(distance[source], source));
+
 		while (!vertex_queue.empty())
 		{
-			double dist = vertex_queue.begin()->first;
+			float dist = vertex_queue.begin()->first;
 			int u = vertex_queue.begin()->second;
 			vertex_queue.erase(vertex_queue.begin());
 
 			if (u == target) {
+				//distance[target] = dist; // Ensure target's distance is updated
 				break; // Found shortest path to target, no need to explore further
 			}
 
-			// Visit each edge exiting u
-			const std::vector<GraphEdge>& neighbors = adj[u];
-			for (std::vector<GraphEdge>::const_iterator neighbor_iter = neighbors.begin(); neighbor_iter != neighbors.end(); neighbor_iter++)
+			for (int i = 0; i < n2; ++i)
 			{
-				//double cumulated_length = 0.;
-				int v = neighbor_iter->target;
-				double weight = neighbor_iter->weight[outlet_count];
-				double distance_through_u = dist + weight;
-				if (distance_through_u < distance[v])
-				{
-
-					vertex_queue.erase(std::make_pair(distance[v], v));
-
-					distance[v] = distance_through_u;
-					previous[v] = u;
-					vertex_queue.insert(std::make_pair(distance[v], v));
+				if (adj(u, i).target >= 0) { // avoid empty neighbors (when n<N) 
+					const GraphEdge& neighbor(adj(u, i));
+					int v = neighbor.target;
+					float weight = neighbor.weight[outlet_count];
+					float distance_through_u = dist + weight;
+					if (distance_through_u < distance[v])
+					{
+						vertex_queue.erase(std::make_pair(distance[v], v));
+						distance[v] = distance_through_u;
+						previous[v] = u;
+						vertex_queue.insert(std::make_pair(distance[v], v));
+					}
 				}
 			}
 		}
 	}
 
 	// This version computes a path between a point and a surface with Dijkstra algorithm.
-	void CostGraph::DijkstraComputePathsSurface(int outlet_count, int source, int& reach, std::vector<double>& distance, std::vector<int>& previous, const std::vector<std::vector<bool>>& samples_surf_flags, int target, bool &already_reached) const
+	void CostGraph::DijkstraComputePathsSurface(int outlet_count, int source, int& reach, std::vector<float>& distance, std::vector<int>& previous, const  Array2D<char>& samples_surf_flags, int target, bool &already_reached) const
 	{
-		constexpr double max_weight = std::numeric_limits<double>::infinity();
+		constexpr float max_weight = std::numeric_limits<float>::infinity();
 		size_t n = adj.size();
-		distance.clear();
+		size_t n2 = adj.row(0).size();
 		distance.resize(n, max_weight);
 		distance[source] = 0;
-		previous.clear();
 		previous.resize(n, -1);
-		std::set<std::pair<double, int>> vertex_queue;
-		vertex_queue.insert(std::make_pair(distance[source], source));
 
+		std::set<std::pair<float, int>> vertex_queue;
+		vertex_queue.insert(std::make_pair(distance[source], source));
 		while (!vertex_queue.empty())
 		{
-			double dist = vertex_queue.begin()->first;
+
+			float dist = vertex_queue.begin()->first;
 			int u = vertex_queue.begin()->second;
 			vertex_queue.erase(vertex_queue.begin());
 
-			if (samples_surf_flags[u][outlet_count]) {
+			if (samples_surf_flags(u, outlet_count)) {
 				reach = u;
 				if (u == target) {
 					already_reached = true;
 				}
+				//distance[target] = dist; // Ensure target's distance is updated
 				break;
 			}
 
 			// Visit each edge exiting u
-			for (int i = 0; i < adj[u].size(); ++i)
+			for (int i = 0; i < n2; ++i)
 			{
-				const GraphEdge& neighbor = adj[u][i];
-				int v = neighbor.target;
-				double weight = neighbor.weight[outlet_count];
-				double distance_through_u = dist + weight;
-				if (distance_through_u < distance[v])
-				{
-					vertex_queue.erase(std::make_pair(distance[v], v));
-					distance[v] = distance_through_u;
-					previous[v] = u;
-					vertex_queue.insert(std::make_pair(distance[v], v));
+				if (adj(u, i).target >= 0) { // avoid empty neighbors (when n<N)
+
+					const GraphEdge& neighbor(adj(u, i));
+					int v = neighbor.target;
+					float weight = neighbor.weight[outlet_count];
+					float distance_through_u = dist + weight;
+					if (distance_through_u < distance[v])
+					{
+						vertex_queue.erase(std::make_pair(distance[v], v));
+						distance[v] = distance_through_u;
+						previous[v] = u;
+						vertex_queue.insert(std::make_pair(distance[v], v));
+					}
 				}
 			}
 		}
 	}
 
-	/*
-	\brief
-	*/
-	std::pair<std::vector<int>, std::vector<double>> CostGraph::DijkstraGetShortestPathTo(int target, const std::vector<int>& previous, const std::vector<double>& distances, double& dist) const
+	std::pair<std::vector<int>, std::vector<float>> CostGraph::DijkstraGetShortestPathTo(int target, const std::vector<int>& previous, const std::vector<float>& distances, float& dist) const
 	{
 		std::vector<int> path;
-		std::vector<double> path_cost;
+		std::vector<float> path_cost;
 		int n = target;
 		dist = distances[n];
-		double dist1 = dist;
-		double dist2 = dist;
-		double eps = 1e-100;
+		float dist1 = dist;
+		float dist2 = dist;
+		float eps = 1e-10f;
 		int tocopy = 0;
 		for (; n != -1; n = previous[n])
 		{
@@ -202,29 +200,4 @@ namespace KarstNSim {
 		return std::make_pair(path, path_cost);
 	}
 
-	// Function to find the nearest water table point from the source vertex
-	int CostGraph::FindNearestWaterTablePoint(const int& outlet_count, const int& source, const std::vector<std::vector<bool>>& samples_surf_flags, const std::vector<int>& previous, const std::vector<double>& distance) const
-	{
-		int nearest_water_table_point = -1;
-		double min_distance = std::numeric_limits<double>::infinity();
-		for (size_t i = 0; i < samples_surf_flags.size(); ++i)
-		{
-			if (samples_surf_flags[i][outlet_count] && previous[i] != -1)
-			{
-				double distance_to_source = 0.0;
-				int current_vertex = int(i);
-				while (current_vertex != source && current_vertex != -1)
-				{
-					distance_to_source += distance[current_vertex];
-					current_vertex = previous[current_vertex];
-				}
-				if (current_vertex == source && distance_to_source < min_distance)
-				{
-					min_distance = distance_to_source;
-					nearest_water_table_point = int(i);
-				}
-			}
-		}
-		return nearest_water_table_point;
-	}
 }

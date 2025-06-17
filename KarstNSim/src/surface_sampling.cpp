@@ -15,7 +15,7 @@ If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
 namespace {
 	struct myhash {
 		size_t operator()(const Vector3 &p) const {
-			return std::hash<double>{}(p.x) ^ std::hash<double>{}(p.x) ^ std::hash<double>{}(p.x);
+			return std::hash<float>{}(p.x) ^ std::hash<float>{}(p.x) ^ std::hash<float>{}(p.x);
 		}
 	};
 }
@@ -27,10 +27,10 @@ namespace KarstNSim {
 	{
 		// we iterate on the surfaces
 		MySet res; // unordered sets don't allow for duplicates, which is perfect for our usage here
-		for (int k = 0; k < surface->size();k++) {
+		for (int k = 0; k < surface->size(); k++) {
 			// we iterate on the triangles of the surface
 			Surface surfk = surface->at(k);
-			for (int j = 0;j<surfk.get_nb_trgls();j++) {
+			for (int j = 0; j < surfk.get_nb_trgls(); j++) {
 				bool allow_refinement = false;
 				std::vector<Vector3> trgl_pts;
 				Triangle trgl = surfk.get_triangle(j);
@@ -45,7 +45,7 @@ namespace KarstNSim {
 					}
 				}
 
-				if (allow_refinement) {
+				if (allow_refinement && refine_surface_sampling != -1) {
 					for (int i = 0; i < 3; i++) {
 						if (box->contains(trgl_pts[i])) {
 							res.insert(trgl_pts[i]);
@@ -72,7 +72,7 @@ namespace KarstNSim {
 							Vector3 a = prev_tri[pt][0];
 							Vector3 b = prev_tri[pt][1];
 							Vector3 c = prev_tri[pt][2];
-							Vector3 u =(a+b)/2;
+							Vector3 u = (a + b) / 2;
 							Vector3 v = (c + b) / 2;
 							Vector3 w = (a + c) / 2;
 							if (box->contains(u)) {

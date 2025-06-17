@@ -16,6 +16,7 @@ If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
 @author Augustin GOUY
 **/
 
+
 #include "KarstNSim/write_files.h"
 #include "KarstNSim/graph.h"
 #include <unordered_set>
@@ -27,7 +28,7 @@ If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
 #include <fstream>
 
 namespace KarstNSim {
-	
+
 	/*!
 	\class surface_sampling
 	\brief Class that contains method allowing triangulated surfaces sampling and refinement
@@ -42,13 +43,13 @@ namespace KarstNSim {
 		\param Box box containing the geological model and surfaces
 		\param Surface List of surfaces to sample
 		\param Points Sampling cloud which will be updated by the function
-		\param refine_surface_sampling option to use if surface vertices should be refined. 
-		A value of 0 means no refinement (only 1 node sampled per vertex). 
+		\param refine_surface_sampling option to use if surface vertices should be refined.
+		A value of 0 means no refinement (only 1 node sampled per vertex).
 		A value of 1 means that a new point is sampled at the middle of each edge of each triangle of the surface, effectively forming new triangles.
 		A value of n means that this fractal pattern operation is operated n times.
 		\param create_surface_sampling option which will create an ASCII file with only the points sampled on the surfaces if set to true.
 		*/
-		static void multiple_surface_sampling(std::string directoryname, std::string network_name, KarstNSim::Box* Box,std::vector<Surface>* Surface, std::vector<Vector3>& Points, const int refine_surface_sampling, const bool create_surface_sampling);
+		static void multiple_surface_sampling(std::string directoryname, std::string network_name, KarstNSim::Box* Box, std::vector<Surface>* Surface, std::vector<Vector3>& Points, const int refine_surface_sampling, const bool create_surface_sampling);
 
 	};
 }

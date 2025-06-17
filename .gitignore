@@ -8,6 +8,10 @@
 *.obj
 *.bak
 
+# Ignore compilation folders
+html/
+latex/
+
 # Precompiled Headers
 *.gch
 *.pch

@@ -1,10 +1,11 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // This is the instruction file.
-// Each line corresponds to a parameter and its value
+// Each line corresponds to a parameter and its value.
 // If you don't want to use a given parameter (provided it is optional), you can simply add a "//", "%", "::" or "#" at the beginning of the line.
 // Some parameters can switch from mandatory to optional (and vice versa) according to the value of other parameters.
+// You can find more information about the parameters in the doxygen documentation (see the main page).
 // The default parameters provided here give a correct use example.
-// Don't forget to also define the connectivity matrix, defined in a separate file
+// Don't forget to also define the connectivity matrix, defined in a separate file.
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
@@ -33,12 +34,6 @@ use_sampling_points: false
 use_density_property: true
 k_pts: 10
 
-// Re-use previously generated networks to constrain simulation (polyphasic karstification) :
-
-use_previous_networks: false
-//previous_networks:
-//fraction_old_karst_perm:
-
 // N nearest-neighbor graph parameters :
 
 nghb_count: 100
@@ -47,17 +42,32 @@ use_max_nghb_radius: false
 
 // Inlets, outlets and waypoints :
 
+use_sinks_radius: false
 sinks: Input_files/example_sinks.txt
+use_springs_radius: false
 springs: Input_files/example_springs.txt
 allow_single_outlet_connection: true
 use_waypoints: false
-//waypoints:
+use_waypoints_radius: false
+waypoints_weight: 0.1
+waypoints: Input_files/example_waypoints.txt
+
+// Ghost-rocks:
+
+use_ghostrocks: false
+alteration_lines: Input_files/example_alteration_lines.txt
+//interpolate_lines: false
+ghostrock_max_vertical_size: 110
+use_max_depth_constraint: true
+ghost_rock_weight: 2
+max_depth_horizon: Input_files/example_inception_surf3.txt
+ghostrock_width: 60
 
 // Inception surfaces :
 
 add_inception_surfaces: true
 refine_surface_sampling: 2
-inception_surfaces: Input_files/example_inception_surf2.txt Input_files/example_inception_surf3.txt
+inception_surfaces: Input_files/example_inception_surf1.txt Input_files/example_inception_surf2.txt
 inception_surface_constraint_weight: 1.0
 max_inception_surface_distance: 50.0
 
@@ -73,11 +83,68 @@ fracture_families_orientations: 0 60
 fracture_families_tolerance: 5 5
 fracture_constraint_weight: 0.5
 
+// Re-use previously generated networks to constrain simulation (polyphasic karstification) or to skip all steps except simulation of
+// conduit dimensions (in that case, set sections_simulation_only to true):
+
+use_previous_networks: false
+//previous_networks:
+//fraction_old_karst_perm:
+sections_simulation_only: false
+
+// No-karst spheres :
+
+use_no_karst_spheres: true
+sphere_centers: Input_files/example_nokarstspheres.txt
+
 // Water tables (one for each spring) and vadose and phreatic trends (mandatory) :
 
 surf_wat_table: Input_files/example_watertable_surf1.txt Input_files/example_watertable_surf2.txt
 water_table_constraint_weight_vadose: 1.0
 water_table_constraint_weight_phreatic: 1.0
+
+// Deadend points amplification :
+
+use_deadend_points: true
+nb_deadend_points: 15
+max_distance_of_deadend_pts: 50
+
+// Cycle amplification :
+
+use_cycle_amplification: true
+max_distance_amplification: 150
+min_distance_amplification: 50
+nb_cycles: 20
+
+// Noise Amplification parameters :
+
+use_noise: false
+use_noise_on_all: false
+noise_frequency: 10
+noise_octaves: 1
+noise_weight: 10
+
+// Create sections :
+
+simulate_sections: false
+simulation_distribution: Input_files/eq_radius_initial_distrib.txt
+global_vario_range = 50
+global_range_of_neighborhood = 150
+global_vario_sill = 0.92
+global_vario_nugget = 0.33
+global_vario_model = "Exponential"
+interbranch_vario_range = 30
+interbranch_range_of_neighborhood = 80
+interbranch_vario_sill = 0.92
+interbranch_vario_nugget = 0.34,
+interbranch_vario_model = "Exponential"
+intrabranch_vario_range = 30
+intrabranch_range_of_neighborhood = 45
+intrabranch_vario_sill = 0.55
+intrabranch_vario_nugget = 0.31
+intrabranch_vario_model = "Exponential"
+number_max_of_neighborhood_points = 16
+nb_points_interbranch = 7
+proportion_interbranch = 0.1
 
 // Other general cost graph parameters (gamma-graph parameter, cost reduction (cohesion) factor, and option to multiply costs instead of summing them) :
 
@@ -91,3 +158,4 @@ multiply_costs: false
 create_vset_sampling: true
 create_nghb_graph: false
 create_nghb_graph_property: false
+create_grid: false
