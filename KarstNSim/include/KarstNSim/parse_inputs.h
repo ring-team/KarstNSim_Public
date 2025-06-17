@@ -62,7 +62,7 @@ public:
 	 * @param filename path to the discrete distribution.
 	 * @return the vector of floats with the values of the distribution.
 	 */
-	std::vector<float> ParseInputs::read_distrib(const std::string& filename);
+	std::vector<float> read_distrib(const std::string& filename);
 
 	/**
 	 * @brief Parses simulation parameters from an input file.

@@ -67,7 +67,8 @@ A complete documentation of all user input parameters is available in the KarstN
 
 ## Testing
 
-We provide here a synthetic dataset (inspired from the one used in the 2024 article) and an instruction file to simulate results shown in a figure of the 2024 article. <!-- three instruction files (instruction_file_step1, instruction_file_step2 and instruction_file_step3) in the correct format used for KarstNSim, which correspond to inputs used to generate examples in three steps. They are in the Input_files folder.
+We provide here a synthetic dataset (inspired from the one used in the 2024 article) and an instruction file to simulate results shown in a figure of the 2024 article.
+<!-- three instruction files (instruction_file_step1, instruction_file_step2 and instruction_file_step3) in the correct format used for KarstNSim, which correspond to inputs used to generate examples in three steps. They are in the Input_files folder.
 Since the name of these three files is not "instruction_file.txt", you have to launch the executable manually from a command prompt (see ##Installation for more information).
 
 The first step consists in showing you a simulation, using five inlets going to the upper spring (S1). Subcosts involved are: vadose/phreatic partition, fractures (chosen at orientations N000 and N060), intrinsic karstification potential (including a ghost-rock corridor following the syncline axis), and inception surfaces.
