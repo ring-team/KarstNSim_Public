@@ -87,8 +87,8 @@ If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
 #include "KarstNSim/vec.h"
 #include <fstream>
 #include <map>
+#include <iomanip>
 #include <algorithm>
-#include <string>
 #include <random>
 #include "KarstNSim/randomgenerator.h"
 

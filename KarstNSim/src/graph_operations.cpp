@@ -709,52 +709,80 @@ namespace KarstNSim {
 		}
 
 		const clock_t time2 = clock();
+		std::cout << " * Points were successfully sampled / recovered ("
+			<< std::fixed << std::setprecision(3)
+			<< float(time2 - time1) / CLOCKS_PER_SEC << " s)" << std::endl;
 
-			// 2 Find the karstification potential for each point of the sampling cloud
-			if (params.karstificationCost.used) {
-				const Vector3 u = box->get_u();
-				const Vector3 v = box->get_v();
-				const Vector3 w = box->get_w();
-				int nu = box->get_nu(), nv = box->get_nv();
-				for (int i = 0; i < samples.size(); i++) {
-					int u1, v1, w1;
-					box->xyz2uvw_with_limits_conditions(samples[i], u1, v1, w1);
-					float value_itr = propikp[u1 + nu * v1 + nv * nu*w1];
-					if (value_itr < 0) { // a value smaller than  means a No data value, which means a cell above topography
-						samples_layer_kp.push_back(1); // maximal cost (this happens because of the discrepancy between the background grid's resolution and the points' position close to the topography)
-						continue;
-					}
-					samples_layer_kp.push_back(1 - propikp[u1 + nu * v1 + nv * nu*w1]);
+		// 2 Find the karstification potential for each point of the sampling cloud
+		if (params.karstificationCost.used) {
+			const Vector3 u = box->get_u();
+			const Vector3 v = box->get_v();
+			const Vector3 w = box->get_w();
+			int nu = box->get_nu(), nv = box->get_nv();
+			for (int i = 0; i < samples.size(); i++) {
+				int u1, v1, w1;
+				box->xyz2uvw_with_limits_conditions(samples[i], u1, v1, w1);
+				float value_itr = propikp[u1 + nu * v1 + nv * nu*w1];
+				if (value_itr < 0) { // a value smaller than  means a No data value, which means a cell above topography
+					samples_layer_kp.push_back(1); // maximal cost (this happens because of the discrepancy between the background grid's resolution and the points' position close to the topography)
+					continue;
 				}
-				propikp.clear();
+				samples_layer_kp.push_back(1 - propikp[u1 + nu * v1 + nv * nu*w1]);
 			}
+			propikp.clear();
+		}
 
 		const clock_t time21 = clock();
 
-			// 3 For each sampling point, this defines whether the point is below or above each water table surface, and also if they are exactly onto the wt surface
-			DefineWSurfaceFlags(water_tables); // above or under wt test
+		std::cout << "\t* Karstification potential was recovered if needed ("
+			<< std::fixed << std::setprecision(3)
+			<< float(time21 - time2) / CLOCKS_PER_SEC << " s)" << std::endl;
+
+		// 3 For each sampling point, this defines whether the point is below or above each water table surface, and also if they are exactly onto the wt surface
+		DefineWSurfaceFlags(water_tables); // above or under wt test
 		get_flags_from_indices(samples, on_wt_flags_idx, samples_on_wt_flags); // exactly on wt test
 
 		const clock_t time22 = clock();
 
-			// 4 Compute the distance from each point to the inception surfaces and the water table surfaces
-			compute_euclidian_distance_from_wt(water_tables, max_inception_surface_distance);
+		std::cout << "\t* Points were flagged in vadose and phreatic zones ("
+			<< std::fixed << std::setprecision(3)
+			<< float(time22 - time21) / CLOCKS_PER_SEC << " s)" << std::endl;
+
+		// 4 Compute the distance from each point to the inception surfaces and the water table surfaces
+		compute_euclidian_distance_from_wt(water_tables, max_inception_surface_distance);
 		if (inception_horizons != nullptr) {
 			compute_euclidian_distance_from_surfaces(inception_horizons, max_inception_surface_distance);
 		}
 		const clock_t time23 = clock();
 
-			const clock_t time3 = clock();
+		std::cout << "\t* Distance from points to horizons and water tables was computed ("
+			<< std::fixed << std::setprecision(3)
+			<< float(time23 - time22) / CLOCKS_PER_SEC << " s)" << std::endl;
 
-			// 5 Nearest neighbour graph creation (initialization + cost computation on each edge)
-			BuildNearestNeighbourGraph(box, fraction_old_karst_perm, max_inception_surface_distance, keypts);
+		const clock_t time3 = clock();
+
+		std::cout << " * Sampling points geometry fully analyzed to create graph ("
+			<< float(time3 - time1) / CLOCKS_PER_SEC << " s)" << std::endl;
+
+
+		// 5 Nearest neighbour graph creation (initialization + cost computation on each edge)
+		BuildNearestNeighbourGraph(box, fraction_old_karst_perm, max_inception_surface_distance, keypts);
 
 		const clock_t time4 = clock();
 
-			// 6 Save the nearest neighbour graph
-			if (create_nghb_graph) {
-				save_nghb_graph(geologicalparams, create_nghb_graph_property);
-			}
+		std::cout << " * Nearest neighbor & cost graph generated ("
+			<< std::fixed << std::setprecision(3)
+			<< float(time4 - time3) / CLOCKS_PER_SEC << " s)" << std::endl;
+
+		std::cout << " * Sampling points geometry fully analyzed to create graph ("
+			<< std::fixed << std::setprecision(3)
+			<< float(time3 - time23) / CLOCKS_PER_SEC << " s)" << std::endl;
+
+
+		// 6 Save the nearest neighbour graph
+		if (create_nghb_graph) {
+			save_nghb_graph(geologicalparams, create_nghb_graph_property);
+		}
 	}
 
 	std::pair<std::vector<float>, std::vector<std::string>> GraphOperations::Save_noise_vector(std::vector<Vector3> Points) {

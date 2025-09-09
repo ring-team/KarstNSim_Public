@@ -219,12 +219,58 @@ namespace KarstNSim {
 		params.fractureCost = CostTerm(false, 0.0);
 	}
 
-	void KarsticNetwork::set_no_karst_spheres_parameters(const std::vector<Vector3>* sphere_centers, const std::vector<float>& sphere_radius) {
-		for (int i = 0; i < sphere_centers->size(); i++) {
-			//params.spheres.push_back(Sphere(Vector3(0., 0., 0.), 5.));
-			params.spheres.push_back(Sphere(sphere_centers->at(i), sphere_radius[0]));
+	void KarsticNetwork::set_no_karst_spheres_parameters(const std::vector<Vector3>* sphere_centers,
+		const std::vector<float>& sphere_radius)
+	{
+		// --- Defensive checks to prevent crashes and undefined behavior ---
+		if (sphere_centers == nullptr || sphere_centers->empty()) {
+			std::cout << "WARNING: no 'no-karst' spheres provided; skipping spheres setup." << std::endl;
+			return;
 		}
+
+		if (sphere_radius.empty()) {
+			std::cout << "WARNING: sphere_radius is empty; skipping 'no-karst' spheres setup to avoid crash." << std::endl;
+			return;
+		}
+
+		const bool one_radius_for_all = (sphere_radius.size() == 1);
+		const bool per_sphere_radius = (sphere_radius.size() == sphere_centers->size());
+
+		if (!one_radius_for_all && !per_sphere_radius) {
+			std::cout << "WARNING: sphere_radius size (" << sphere_radius.size()
+				<< ") does not match 1 or number of centers (" << sphere_centers->size()
+				<< "). Using the first radius for all spheres as fallback." << std::endl;
+		}
+
+		int added = 0;
+		for (int i = 0; i < static_cast<int>(sphere_centers->size()); ++i) {
+			float r = 0.0f;
+
+			if (one_radius_for_all) {
+				r = sphere_radius[0];
+			}
+			else if (per_sphere_radius) {
+				r = sphere_radius[i];
+			}
+			else {
+				// Fallback: use first radius for all (already warned above).
+				r = sphere_radius[0];
+			}
+
+			if (r <= 0.0f || !std::isfinite(r)) {
+				std::cout << "WARNING: invalid sphere radius at index " << i
+					<< " (r=" << r << "); skipping this sphere." << std::endl;
+				continue;
+			}
+
+			params.spheres.push_back(Sphere(sphere_centers->at(i), r));
+			++added;
+		}
+
+		std::cout << "[ok] set_no_karst_spheres_parameters() -> added "
+			<< added << " sphere(s)" << std::endl;
 	}
+
 
 	void KarsticNetwork::set_domain_geometry() {
 
@@ -294,7 +340,7 @@ namespace KarstNSim {
 
 	void KarsticNetwork::read_connectivity_matrix(const std::vector<Vector3>* sinks, const std::vector<Vector3>* springs) {
 
-		std::string connectivity_matrix_path = params.directoryname + "/connectivity_matrix.txt";
+		std::string connectivity_matrix_path = params.directoryname + "/Input_files/connectivity_matrix.txt";
 		int nb_sinks = static_cast<int>(sinks->size());
 		int nb_springs = static_cast<int>(springs->size());
 
@@ -554,6 +600,13 @@ namespace KarstNSim {
 				inception_horizons, water_tables, use_sampling_points, box, max_inception_surface_distance, sampling_points, create_vset_sampling,
 				use_density_property, k_pts, fraction_old_karst_perm, propdensity, propikp, topo_surface_);
 			const clock_t time2 = clock();
+			std::cout << " * Volumetric graph successfully generated ("
+				<< std::fixed << std::setprecision(3)
+				<< float(time2 - time1) / CLOCKS_PER_SEC << " s)" << std::endl;
+
+			std::cout << "Cost graph initialized ("
+				<< std::fixed << std::setprecision(3)
+				<< float(time2 - time1) / CLOCKS_PER_SEC << " s)" << std::endl;
 
 				// Compute karstic skeleton
 
@@ -570,6 +623,11 @@ namespace KarstNSim {
 
 				const clock_t time3 = clock();
 
+				std::cout << "Skeleton computed ("
+					<< std::fixed << std::setprecision(3)
+					<< float(time3 - time2) / CLOCKS_PER_SEC << " s)" << std::endl;
+
+
 					// Network preparation
 					skel.detect_intersection_points(karst_paths);
 				skel.update_branch_ID(karst_paths);
@@ -580,6 +638,12 @@ namespace KarstNSim {
 					skel.amplify_deadend(&graph, max_distance_of_deadend_pts_, nb_deadend_points_, params);
 				}
 				const clock_t time5 = clock();
+
+				if (use_deadend_pts_) {
+					std::cout << "Network amplified with deadend points ("
+						<< std::fixed << std::setprecision(3)
+						<< float(time5 - time4) / CLOCKS_PER_SEC << " s)" << std::endl;
+				}
 
 					// Amplification
 					if (use_amplification) {
@@ -596,12 +660,22 @@ namespace KarstNSim {
 
 				create_sections(skel);
 				const clock_t time7 = clock();
-					// save network
-					skel.create_line(params, karstic_network_name);
+
+				std::cout << "Conduits sections generated ("
+					<< std::fixed << std::setprecision(3)
+					<< float(time7 - time6) / CLOCKS_PER_SEC << " s)" << std::endl;
+
+				// save network
+				skel.create_line(params, karstic_network_name);
 
 				const clock_t time8 = clock();
 
-					const clock_t time_end = clock();
+				std::cout << "Karst network saved ("
+					<< std::fixed << std::setprecision(3)
+					<< float(time8 - time7) / CLOCKS_PER_SEC << " s)" << std::endl;
+
+
+				const clock_t time_end = clock();
 				time_needed = float(time_end - time1) / CLOCKS_PER_SEC;
 			}
 			else {

@@ -41,6 +41,7 @@ If you use this code, pleace cite : Paris et al., 2021, Computer Graphic Forum.
 #include "KarstNSim/write_files.h"
 #include "KarstNSim/randomgenerator.h"
 #include "KarstNSim/simplex_noise.h"
+#include <iomanip>
 
 namespace KarstNSim {
 

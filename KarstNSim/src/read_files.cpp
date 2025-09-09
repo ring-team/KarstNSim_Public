@@ -9,8 +9,6 @@ If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
 ***************************************************************/
 
 #include "KarstNSim/read_files.h"
-#include <cerrno>
-#include <cstring>
 
 namespace KarstNSim {
 	void load_point(const std::string& file_name, const std::string& save_directory, Vector3& u, std::vector<float>& properties)

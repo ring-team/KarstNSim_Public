@@ -33,6 +33,7 @@ If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
 #include <sstream>
 #include <vector>
 #include <cstring>
+#include <iomanip>
 
 namespace KarstNSim {
 
