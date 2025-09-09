@@ -55,7 +55,7 @@ int main(int argc, char* argv[]) {
 	ParseInputs inputParser;
 	KarstNSim::ParamsSource params = inputParser.parse(instructionFile);
 
-	std::cout << "Parsing completed. Running simulation..." << std::endl;
+	std::cout << "Parsing completed (success). Running simulation..." << std::endl;
 
 	// Measure the start time
 	auto startTime = std::chrono::high_resolution_clock::now();

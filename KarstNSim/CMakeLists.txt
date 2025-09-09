@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 set(KARSTNSIM_SOURCES 
-    src/karstic_network.cpp 
+    src/karstic_network.cpp 	
     src/main.cpp 
     src/surface_sampling.cpp 
     src/cost_graph.cpp 
