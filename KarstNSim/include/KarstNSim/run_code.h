@@ -1,7 +1,7 @@
 /***************************************************************
 
-Université de Lorraine - ANDRA - BRGM
-Copyright(c) 2023 Université de Lorraine - ANDRA - BRGM. All Rights Reserved.
+UniversitÃ© de Lorraine - ANDRA - BRGM
+Copyright(c) 2023 UniversitÃ© de Lorraine - ANDRA - BRGM. All Rights Reserved.
 This code is published under the MIT License.
 Author : Augustin Gouy - augustin.gouy@univ-lorraine.fr
 If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
@@ -102,7 +102,7 @@ namespace KarstNSim {
 		// Names :
 
 		std::string karstic_network_name; //!< Name of the simulation, will be attached to all outputs
-		std::string save_repertory; //!< Name of the folder in which results should be saved
+		std::string save_repository; //!< Name of the folder in which results should be saved
 
 		// General parameters :
 
@@ -237,17 +237,17 @@ namespace KarstNSim {
 
 		// extracted from springs pointset :
 		std::vector<int> propspringsindex; //!< Indices of spring properties (column index in connectivity matrix).
-		std::vector<float> propspringsradius; //!< Radii of springs.
+		std::vector<float> propspringsradius; //!< Radii of springs. -> for conduit size
 		std::vector<int> propspringssurfindex; //!< Surface indices for springs (index of water table associated with each spring).
 
 		// extracted from sinks pointset :
 		std::vector<int> propsinksindex; //!< Indices of sink properties (row index in connectivity matrix).
 		std::vector<int> propsinksorder; //!< Order of sinks (see 2024 paper for signification of sink order)
-		std::vector<float> propsinksradius; //!< Radii of sinks.
+		std::vector<float> propsinksradius; //!< Radii of sinks. -> for conduit size
 
 		// extracted from waypoints pointset :
-		std::vector<float> waypoints_radius; //!< Radii of waypoints.
-		std::vector<float> waypoints_impact_radius; //!< Impact radii of waypoints.
+		std::vector<float> waypoints_radius; //!< Radii of waypoints. -> for conduit size
+		std::vector<float> waypoints_impact_radius; //!< Impact radii of waypoints. -> for influence area
 
 		// extracted from no-karst spheres pointset :
 		std::vector<float> sphere_radius; //!< Radii of no-karst spheres.

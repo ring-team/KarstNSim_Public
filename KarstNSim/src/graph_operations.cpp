@@ -1,7 +1,7 @@
 /***************************************************************
 
-Universit� de Lorraine - ANDRA - BRGM
-Copyright(c) 2023 Universit� de Lorraine - ANDRA - BRGM. All Rights Reserved.
+Université de Lorraine - ANDRA - BRGM
+Copyright(c) 2023 Université de Lorraine - ANDRA - BRGM. All Rights Reserved.
 This code is published under the MIT License.
 Author : Augustin Gouy - augustin.gouy@univ-lorraine.fr for new methods + modifications to original methods
 If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.

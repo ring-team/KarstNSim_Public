@@ -1,7 +1,7 @@
 /***************************************************************
 
-Université de Lorraine - ANDRA - BRGM
-Copyright(c) 2023 Université de Lorraine - ANDRA - BRGM. All Rights Reserved.
+UniversitÃ© de Lorraine - ANDRA - BRGM
+Copyright(c) 2023 UniversitÃ© de Lorraine - ANDRA - BRGM. All Rights Reserved.
 This code is published under the MIT License.
 Author : Augustin Gouy - augustin.gouy@univ-lorraine.fr
 If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
@@ -9,6 +9,8 @@ If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
 ***************************************************************/
 
 #include "KarstNSim/read_files.h"
+#include <cerrno>
+#include <cstring>
 
 namespace KarstNSim {
 	void load_point(const std::string& file_name, const std::string& save_directory, Vector3& u, std::vector<float>& properties)
@@ -61,22 +63,9 @@ namespace KarstNSim {
 
 		if (!in.is_open()) {
 			std::cerr << "Error opening file: " << full_name << std::endl;
-			return;
+			std::cerr << "Reason: " << strerror(errno) << std::endl;
+			throw std::runtime_error("File not found: " + full_name);
 		}
-
-		// Count total number of lines with vertices in the file
-		int total_lines = 0;
-		while (std::getline(in, line)) {
-			std::istringstream iss(line);
-			std::string tag;
-			iss >> tag;
-			if (tag == "VRTX") {
-				total_lines++;
-			}
-		}
-
-		in.clear(); // clear eof flag
-		in.seekg(0, std::ios::beg); // back to the start
 
 		// Skip headers and get the number of columns
 		std::getline(in, line); // skip first line (header)
@@ -88,9 +77,6 @@ namespace KarstNSim {
 		while (iss >> value) nb_columns++;
 		int prop_size = nb_columns - 5; // Adjust according to actual properties
 
-		// Calculate the number of lines to be processed
-		int data_lines = total_lines; // minus 1 header
-
 		in.clear(); // clear eof flag
 		in.seekg(0, std::ios::beg); // back to the start
 
@@ -98,12 +84,11 @@ namespace KarstNSim {
 		std::vector<Vector3> nodes;
 		std::vector<Triangle> trgls;
 		std::string tag;
-		properties.resize(data_lines); // Resize properties based on the number of data lines
 
 		std::getline(in, line); // Skip the header line
 
 		int line_count = 0;
-		while (std::getline(in, line) && line_count < data_lines) {
+		while (std::getline(in, line)) {
 			std::istringstream iss2(line);
 			iss2 >> tag;
 
@@ -118,7 +103,7 @@ namespace KarstNSim {
 				}
 				Vector3 v(x, y, z);
 				nodes.push_back(v);
-				properties[line_count] = prop; // Store the properties in the array
+				properties.push_back(prop);
 			}
 			else if (tag == "TRGL") { // When vertices have been read, we now have to read the triangles
 				int idx;
@@ -126,8 +111,6 @@ namespace KarstNSim {
 				iss2 >> idx >> id1 >> id2 >> id3;
 				Triangle tgl(id1, id2, id3);
 				trgls.push_back(tgl);
-			}
-			else {
 			}
 			line_count++;
 		}
@@ -144,7 +127,8 @@ namespace KarstNSim {
 
 		if (!in.is_open()) {
 			std::cerr << "Error opening file: " << full_name << std::endl;
-			return;
+			std::cerr << "Reason: " << strerror(errno) << std::endl;
+			throw std::runtime_error("File not found: " + full_name);
 		}
 
 		// Count total number of lines in the file
@@ -211,7 +195,8 @@ namespace KarstNSim {
 
 		if (!in.is_open()) {
 			std::cerr << "Error opening file: " << full_name << std::endl;
-			return;
+			std::cerr << "Reason: " << strerror(errno) << std::endl;
+			throw std::runtime_error("File not found: " + full_name);
 		}
 
 		// Count total number of lines in the file
@@ -295,7 +280,8 @@ namespace KarstNSim {
 
 		if (!in.is_open()) {
 			std::cerr << "Error opening file: " << full_name << std::endl;
-			return;
+			std::cerr << "Reason: " << strerror(errno) << std::endl;
+			throw std::runtime_error("File not found: " + full_name);
 		}
 
 		// Count total number of lines in the file

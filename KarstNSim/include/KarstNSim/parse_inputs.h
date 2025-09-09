@@ -1,7 +1,7 @@
 /***************************************************************
 
-Université de Lorraine - ANDRA - BRGM
-Copyright(c) 2023 Université de Lorraine - ANDRA - BRGM. All Rights Reserved.
+UniversitÃ© de Lorraine - ANDRA - BRGM
+Copyright(c) 2023 UniversitÃ© de Lorraine - ANDRA - BRGM. All Rights Reserved.
 This code is published under the MIT License.
 Author : Augustin Gouy - augustin.gouy@univ-lorraine.fr
 If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
@@ -59,10 +59,11 @@ public:
 
 	/**
 	 * @brief Reads a file containing a discrete distribution (separator = space) and stores it in a vector.
-	 * @param filename path to the discrete distribution.
-	 * @return the vector of floats with the values of the distribution.
+	 * @param directory The directory containing the file.
+	 * @param filename The name of the file to read.
+	 * @return The vector of floats with the values of the distribution.
 	 */
-	std::vector<float> read_distrib(const std::string& filename);
+	std::vector<float> read_distrib(const std::string& directory, const std::string& filename);
 
 	/**
 	 * @brief Parses simulation parameters from an input file.

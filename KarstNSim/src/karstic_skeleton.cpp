@@ -1,14 +1,14 @@
 /***************************************************************
 
-Universit� de Lorraine - ANDRA - BRGM
-Copyright(c) 2023 Universit� de Lorraine - ANDRA - BRGM. All Rights Reserved.
+Université de Lorraine - ANDRA - BRGM
+Copyright(c) 2023 Université de Lorraine - ANDRA - BRGM. All Rights Reserved.
 This code is published under the MIT License.
 Author : Augustin Gouy - augustin.gouy@univ-lorraine.fr for new methods and modifications to original methods
 If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
 
 Copyright (c) 2021 Axel Paris
 Author : Axel Paris, for original versions of KarsticSkeleton constructor, amplify and append_paths
-If you use this code, pleace cite : Paris et al., 2021, Computer Graphic Forum.
+If you use this code, please cite : Paris et al., 2021, Computer Graphic Forum.
 
 ***************************************************************/
 

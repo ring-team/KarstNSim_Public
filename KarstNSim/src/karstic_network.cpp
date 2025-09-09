@@ -1,7 +1,7 @@
 /***************************************************************
 
-Université de Lorraine - ANDRA - BRGM
-Copyright(c) 2023 Université de Lorraine - ANDRA - BRGM. All Rights Reserved.
+UniversitÃ© de Lorraine - ANDRA - BRGM
+Copyright(c) 2023 UniversitÃ© de Lorraine - ANDRA - BRGM. All Rights Reserved.
 This code is published under the MIT License.
 Author : Augustin Gouy - augustin.gouy@univ-lorraine.fr
 If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
@@ -306,7 +306,7 @@ namespace KarstNSim {
 
 		std::ifstream myfile(connectivity_matrix_path);
 		if (!myfile.is_open()) {
-			std::cerr << "Error opening file after creation: " << strerror(errno) << std::endl;
+			std::cerr << "Error opening file " << connectivity_matrix_path << " after creation: " << strerror(errno) << std::endl;
 			return;
 		}
 

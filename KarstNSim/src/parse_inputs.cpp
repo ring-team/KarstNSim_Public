@@ -1,7 +1,7 @@
 /***************************************************************
 
-Université de Lorraine - ANDRA - BRGM
-Copyright(c) 2023 Université de Lorraine - ANDRA - BRGM. All Rights Reserved.
+UniversitÃ© de Lorraine - ANDRA - BRGM
+Copyright(c) 2023 UniversitÃ© de Lorraine - ANDRA - BRGM. All Rights Reserved.
 This code is published under the MIT License.
 Author : Augustin Gouy - augustin.gouy@univ-lorraine.fr
 If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
@@ -35,12 +35,14 @@ bool ParseInputs::parse_boolean(const std::string& input) {
 	return flag;
 }
 
-std::vector<float> ParseInputs::read_distrib(const std::string& filename) {
+std::vector<float> ParseInputs::read_distrib(const std::string& directory, const std::string& filename) {
 	std::vector<float> values;
-	std::ifstream file(filename);
+	std::string full_path = directory + "/" + filename;
+	std::ifstream file(full_path);
 	if (!file) {
-		std::cerr << "Error opening file: " << filename << std::endl;
-		return values;
+		std::cerr << "Error opening file: " << full_path << std::endl;
+		std::cerr << "Reason: " << strerror(errno) << std::endl;
+		throw std::runtime_error("File not found: " + full_path);
 	}
 
 	std::string line;
@@ -80,6 +82,12 @@ KarstNSim::ParamsSource ParseInputs::parse(const std::string& filename) {
 
 	std::ifstream inputFile(filename);
 
+	if (!inputFile) {
+		std::cerr << "Error opening file: " << filename << std::endl;
+		std::cerr << "Error: " << std::strerror(errno) << std::endl;
+		throw std::runtime_error("Failed to open input file");
+	}
+
 	std::string line;
 	while (std::getline(inputFile, line)) {
 
@@ -102,7 +110,7 @@ KarstNSim::ParamsSource ParseInputs::parse(const std::string& filename) {
 			iss >> params.karstic_network_name;
 		}
 		else if (paramType == "main_repository:") {
-			iss >> params.save_repertory;
+			iss >> params.save_repository;
 		}
 
 		// General parameters
@@ -112,7 +120,7 @@ KarstNSim::ParamsSource ParseInputs::parse(const std::string& filename) {
 			iss >> box_path;
 			KarstNSim::Box box;
 			std::vector<std::vector<float>> prop_box;
-			KarstNSim::load_box(box_path, params.save_repertory, box, prop_box);
+			KarstNSim::load_box(box_path, params.save_repository, box, prop_box);
 			params.domain = box;
 
 			for (size_t i = 0; i < box.get_nu()*box.get_nv()*box.get_nw(); ++i) {
@@ -140,7 +148,7 @@ KarstNSim::ParamsSource ParseInputs::parse(const std::string& filename) {
 			iss >> surf_path;
 			std::vector<std::vector<float>> prop;
 			KarstNSim::Surface surf;
-			KarstNSim::load_surface(surf_path, params.save_repertory, surf, prop);
+			KarstNSim::load_surface(surf_path, params.save_repository, surf, prop);
 			params.topo_surface = surf;
 		}
 
@@ -156,7 +164,7 @@ KarstNSim::ParamsSource ParseInputs::parse(const std::string& filename) {
 			iss >> pts_path;
 			std::vector<std::vector<float>> prop;
 			std::vector<Vector3> ptset;
-			KarstNSim::load_pointset(pts_path, params.save_repertory,ptset, prop);
+			KarstNSim::load_pointset(pts_path, params.save_repository,ptset, prop);
 			params.sampling_points = ptset;
 		}
 		else if (paramType == "poisson_radius:") {
@@ -207,7 +215,7 @@ KarstNSim::ParamsSource ParseInputs::parse(const std::string& filename) {
 			iss >> pts_path;
 			std::vector<std::vector<float>> prop;
 			std::vector<Vector3> ptset;
-			KarstNSim::load_pointset(pts_path, params.save_repertory, ptset, prop);
+			KarstNSim::load_pointset(pts_path, params.save_repository, ptset, prop);
 			params.sinks = ptset;
 			for (int i = 0; i < params.sinks.size(); i++) {
 				params.propsinksindex.push_back(prop[i][0]);
@@ -222,7 +230,7 @@ KarstNSim::ParamsSource ParseInputs::parse(const std::string& filename) {
 			iss >> pts_path;
 			std::vector<std::vector<float>> prop;
 			std::vector<Vector3> ptset;
-			KarstNSim::load_pointset(pts_path, params.save_repertory, ptset, prop);
+			KarstNSim::load_pointset(pts_path, params.save_repository, ptset, prop);
 			params.springs = ptset;
 			for (int i = 0; i < params.springs.size(); i++) {
 				params.propspringsindex.push_back(prop[i][0]);
@@ -242,7 +250,7 @@ KarstNSim::ParamsSource ParseInputs::parse(const std::string& filename) {
 			iss >> pts_path;
 			std::vector<std::vector<float>> prop;
 			std::vector<Vector3> ptset;
-			KarstNSim::load_pointset(pts_path, params.save_repertory, ptset, prop);
+			KarstNSim::load_pointset(pts_path, params.save_repository, ptset, prop);
 			params.waypoints = ptset;
 			for (int i = 0; i < params.waypoints.size(); i++) {
 				params.waypoints_impact_radius.push_back(prop[i][0]);
@@ -269,7 +277,7 @@ KarstNSim::ParamsSource ParseInputs::parse(const std::string& filename) {
 		std::vector<std::vector<std::vector<float>>> prop;
 		KarstNSim::Line line;
 		iss >> line_path;
-		KarstNSim::load_line(line_path, params.save_repertory, line, prop);
+		KarstNSim::load_line(line_path, params.save_repository, line, prop);
 		params.alteration_lines = line;
 		}
 		else if (paramType == "interpolate_lines:") {
@@ -293,7 +301,7 @@ KarstNSim::ParamsSource ParseInputs::parse(const std::string& filename) {
 		std::vector<std::vector<float>> prop;
 		KarstNSim::Surface surf;
 		iss >> surf_path;
-		KarstNSim::load_surface(surf_path, params.save_repertory, surf, prop);
+		KarstNSim::load_surface(surf_path, params.save_repository, surf, prop);
 		params.max_depth_horizon = surf;
 		}
 		else if (paramType == "ghostrock_width:") {
@@ -316,7 +324,7 @@ KarstNSim::ParamsSource ParseInputs::parse(const std::string& filename) {
 			std::vector<KarstNSim::Surface> surf;
 			while (iss >> surf_path) {
 				KarstNSim::Surface surfi;
-				KarstNSim::load_surface(surf_path, params.save_repertory, surfi, prop);
+				KarstNSim::load_surface(surf_path, params.save_repository, surfi, prop);
 				surf.push_back(surfi);
 			}
 
@@ -376,7 +384,7 @@ KarstNSim::ParamsSource ParseInputs::parse(const std::string& filename) {
 			std::vector<KarstNSim::Line> lines;
 			while (iss >> line_path) {
 				KarstNSim::Line line;
-				KarstNSim::load_line(line_path, params.save_repertory, line, prop);
+				KarstNSim::load_line(line_path, params.save_repository, line, prop);
 				lines.push_back(line);
 			}
 			params.previous_networks = lines;
@@ -402,7 +410,7 @@ KarstNSim::ParamsSource ParseInputs::parse(const std::string& filename) {
 			iss >> pts_path;
 			std::vector<std::vector<float>> prop;
 			std::vector<Vector3> ptset;
-			KarstNSim::load_pointset(pts_path, params.save_repertory, ptset, prop);
+			KarstNSim::load_pointset(pts_path, params.save_repository, ptset, prop);
 			params.sphere_centers = ptset;
 		}
 
@@ -420,7 +428,7 @@ KarstNSim::ParamsSource ParseInputs::parse(const std::string& filename) {
 		std::vector<KarstNSim::Surface> surf;
 		while (iss >> surf_path) {
 			KarstNSim::Surface surfi;
-			KarstNSim::load_surface(surf_path, params.save_repertory, surfi, prop);
+			KarstNSim::load_surface(surf_path, params.save_repository, surfi, prop);
 			surf.push_back(surfi);
 		}
 		params.surf_wat_table = surf;
@@ -492,7 +500,7 @@ KarstNSim::ParamsSource ParseInputs::parse(const std::string& filename) {
 		else if (paramType == "simulation_distribution:") {
 		std::string path;
 		iss >> path;
-		std::vector<float> sim_distrib_discrete = read_distrib(path);
+		std::vector<float> sim_distrib_discrete = read_distrib(params.save_repository, path);
 		params.geostat_params.simulation_distribution = sim_distrib_discrete;
 		}
 		else if (paramType == "global_vario_range:") {

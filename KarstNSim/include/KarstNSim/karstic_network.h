@@ -1,7 +1,7 @@
 /***************************************************************
 
-Université de Lorraine - ANDRA - BRGM
-Copyright(c) 2023 Université de Lorraine - ANDRA - BRGM. All Rights Reserved.
+UniversitÃ© de Lorraine - ANDRA - BRGM
+Copyright(c) 2023 UniversitÃ© de Lorraine - ANDRA - BRGM. All Rights Reserved.
 This code is published under the MIT License.
 Author : Augustin Gouy - augustin.gouy@univ-lorraine.fr
 If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
@@ -11,7 +11,7 @@ If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
 /*!
 \file karstic_network.h
 \brief Declaration of the class that stores input parameters and allows to easily set up the karstic network simulation
-\author Benoît THEBAULT, Augustin GOUY
+\author BenoÃ®t THEBAULT, Augustin GOUY
 */
 
 #pragma once

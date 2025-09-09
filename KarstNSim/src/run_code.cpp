@@ -1,7 +1,7 @@
 /***************************************************************
 
-Université de Lorraine - ANDRA - BRGM
-Copyright(c) 2023 Université de Lorraine - ANDRA - BRGM. All Rights Reserved.
+UniversitÃ© de Lorraine - ANDRA - BRGM
+Copyright(c) 2023 UniversitÃ© de Lorraine - ANDRA - BRGM. All Rights Reserved.
 This code is published under the MIT License.
 Author : Augustin Gouy - augustin.gouy@univ-lorraine.fr
 If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
@@ -14,6 +14,8 @@ namespace KarstNSim {
 	void run_simulation_full(ParamsSource parameters) {
 
 		// Uncomment to save inputs for special use
+		std::string full_dir_name = parameters.save_repository + "/outputs";
+		std::cout << "Will save outputs to: " << full_dir_name << std::endl;
 
 		// save box voxet
 		Box saved_box = parameters.domain;
@@ -23,19 +25,19 @@ namespace KarstNSim {
 			properties.push_back({ parameters.propdensity[i], parameters.propikp[i] });
 		}
 		std::string full_name = parameters.karstic_network_name + "_box.txt";
-		std::string full_dir_name = parameters.save_repertory + "/outputs";
+		
 		save_box(full_name, full_dir_name, saved_box, property_names,properties);
 
 		// save topography
 		Surface topo = parameters.topo_surface;
 		full_name = parameters.karstic_network_name + "_topo_surf.txt";
-		full_dir_name = parameters.save_repertory + "/outputs";
+		full_dir_name = parameters.save_repository + "/outputs";
 		save_surface(full_name, full_dir_name, topo);
 
 		// save inception surfaces
 		std::vector<Surface> inception_surfaces = parameters.inception_surfaces;
 		full_name = parameters.karstic_network_name + "_inception_surf";
-		full_dir_name = parameters.save_repertory + "/outputs";
+		full_dir_name = parameters.save_repository + "/outputs";
 		for (int surfi = 0; surfi < inception_surfaces.size(); surfi++) {
 			std::string full_name_i = full_name + std::to_string(surfi) + ".txt";
 			save_surface(full_name_i, full_dir_name, inception_surfaces[surfi]);
@@ -44,7 +46,7 @@ namespace KarstNSim {
 		// save water tables
 		std::vector<Surface> wtsurf = parameters.surf_wat_table;
 		full_name = parameters.karstic_network_name + "_watertable_surf";
-		full_dir_name = parameters.save_repertory + "/outputs";
+		full_dir_name = parameters.save_repository + "/outputs";
 		for (int surfi = 0; surfi < wtsurf.size(); surfi++) {
 			std::string full_name_i = full_name + std::to_string(surfi) + ".txt";
 			save_surface(full_name_i, full_dir_name, wtsurf[surfi]);
@@ -55,10 +57,14 @@ namespace KarstNSim {
 		std::vector<std::string> property_names_sinks = { "index","order", "radius" };
 		std::vector<std::vector<float>> properties_sinks;
 		for (size_t i = 0; i < parameters.propsinksindex.size(); ++i) {
-			properties_sinks.push_back({ float(parameters.propsinksindex[i]), float(parameters.propsinksorder[i]), float(parameters.propsinksradius[i]) });
+			float v = 0;
+			if (parameters.use_sinks_radius) {
+				v = parameters.propsinksradius[i];
+			}
+			properties_sinks.push_back({ float(parameters.propsinksindex[i]), float(parameters.propsinksorder[i]), v });
 		}
 		full_name = parameters.karstic_network_name + "_sinks.txt";
-		full_dir_name = parameters.save_repertory + "/outputs";
+		full_dir_name = parameters.save_repository + "/outputs";
 		save_pointset(full_name, full_dir_name, sinks, property_names_sinks, properties_sinks);
 
 		// save springs
@@ -66,10 +72,14 @@ namespace KarstNSim {
 		std::vector<std::string> property_names_springs = { "index",  "surfindex", "radius" };
 		std::vector<std::vector<float>> properties_springs;
 		for (size_t i = 0; i < parameters.propspringsindex.size(); ++i) {
-			properties_springs.push_back({ float(parameters.propspringsindex[i]), float(parameters.propspringssurfindex[i]), float(parameters.propspringsradius[i]) });
+			float v = 0;
+			if (parameters.use_springs_radius) {
+				v = parameters.propspringsradius[i];
+			}
+			properties_springs.push_back({ float(parameters.propspringsindex[i]), float(parameters.propspringssurfindex[i]), v });
 		}
 		full_name = parameters.karstic_network_name + "_springs.txt";
-		full_dir_name = parameters.save_repertory + "/outputs";
+		full_dir_name = parameters.save_repository + "/outputs";
 		save_pointset(full_name, full_dir_name, springs, property_names_springs, properties_springs);
 
 		// save waypoints
@@ -77,10 +87,14 @@ namespace KarstNSim {
 		std::vector<std::string> property_names_waypoints = { "impact_radius",  "radius" };
 		std::vector<std::vector<float>> properties_waypoints;
 		for (size_t i = 0; i < parameters.waypoints_impact_radius.size(); ++i) {
-			properties_waypoints.push_back({ float(parameters.waypoints_impact_radius[i]), float(parameters.waypoints_radius[i]) });
+			float v = 0;
+			if (parameters.use_waypoints_radius) {
+				v = parameters.waypoints_radius[i];
+			}
+			properties_waypoints.push_back({ float(parameters.waypoints_impact_radius[i]), v });
 		}
 		full_name = parameters.karstic_network_name + "_waypoints.txt";
-		full_dir_name = parameters.save_repertory + "/outputs";
+		full_dir_name = parameters.save_repository + "/outputs";
 		save_pointset(full_name, full_dir_name, waypoints, property_names_waypoints, properties_waypoints);
 
 		for (int i = 0; i < parameters.number_of_iterations; i++) {
@@ -110,7 +124,7 @@ namespace KarstNSim {
 			std::string sim_name_iter = parameters.karstic_network_name + "_" + std::to_string(i + parameters.selected_seed - 1);
 
 			KarsticNetwork karst(sim_name_iter, &parameters.domain, params, keypts, &parameters.surf_wat_table);
-			karst.set_save_directory(parameters.save_repertory);
+			karst.set_save_directory(parameters.save_repository);
 			karst.set_sinks(&parameters.sinks, parameters.propsinksindex, parameters.propsinksorder, parameters.use_sinks_radius, parameters.propsinksradius);
 			karst.set_springs(&parameters.springs, parameters.propspringsindex, parameters.allow_single_outlet_connection, parameters.use_springs_radius, parameters.propspringsradius, parameters.propspringssurfindex);
 
@@ -193,7 +207,7 @@ namespace KarstNSim {
 			float real_time_needed = float(time2 - begin_time) / CLOCKS_PER_SEC;
 
 				// File writing
-				std::string full_file_name = parameters.save_repertory + "/simulation_times.txt";
+				std::string full_file_name = parameters.save_repository + "/simulation_times.txt";
 			std::ofstream outfile(full_file_name, std::ios::app); // Open file in append mode
 			if (outfile.is_open()) {
 				outfile << parameters.karstic_network_name << ": " << real_time_needed << " s for seed " << parameters.selected_seed << std::endl; // Write the time and seed
@@ -235,7 +249,7 @@ namespace KarstNSim {
 
 			KarsticNetwork karst(sim_name_iter, &parameters.domain, params, keypts, &parameters.surf_wat_table);
 
-			karst.set_save_directory(parameters.save_repertory);
+			karst.set_save_directory(parameters.save_repository);
 
 			if (parameters.use_waypoints) {
 				parameters.use_waypoints_radius = true;

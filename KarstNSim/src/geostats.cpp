@@ -1,13 +1,13 @@
 /***************************************************************
 
-Université de Lorraine - ANDRA - BRGM
-Copyright(c) 2023 Université de Lorraine - ANDRA - BRGM. All Rights Reserved.
+UniversitÃ© de Lorraine - ANDRA - BRGM
+Copyright(c) 2023 UniversitÃ© de Lorraine - ANDRA - BRGM. All Rights Reserved.
 This code is published under the MIT License.
 Author : Augustin Gouy - augustin.gouy@univ-lorraine.fr for new methods + modifications to original methods
 If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
 
 Rewritten entirely (except the variogram_value fonction, written by G. Rongier in 2015) from the pseudo-code algorithm (Algorithm 2) in the paper of Frantz et al., 2021 "Analysis and stochastic simulation of geometrical properties of conduits in karstic networks".
-This work was performed in the frame of the RING project at Université de Lorraine.
+This work was performed in the frame of the RING project at UniversitÃ© de Lorraine.
 
 ***************************************************************/
 

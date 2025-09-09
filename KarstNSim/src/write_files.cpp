@@ -1,7 +1,7 @@
 /***************************************************************
 
-Université de Lorraine - ANDRA - BRGM
-Copyright(c) 2023 Université de Lorraine - ANDRA - BRGM. All Rights Reserved.
+UniversitÃ© de Lorraine - ANDRA - BRGM
+Copyright(c) 2023 UniversitÃ© de Lorraine - ANDRA - BRGM. All Rights Reserved.
 This code is published under the MIT License.
 Author : Augustin Gouy - augustin.gouy@univ-lorraine.fr
 If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
@@ -9,6 +9,8 @@ If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
 ***************************************************************/
 
 #include "KarstNSim/write_files.h"
+#include <cerrno>
+#include <cstring>
 
 namespace KarstNSim {
 
@@ -22,10 +24,13 @@ namespace KarstNSim {
 
 	void create_directory(const std::string& directory) {
 #ifdef _WIN32
-		_mkdir(directory.c_str());
+		int res = _mkdir(directory.c_str());
 #else
-		mkdir(directory.c_str(), 0777);
+		int res = mkdir(directory.c_str(), 0777);
 #endif
+		if (res != 0) {
+			std::cerr << "Error creating directory: " << directory << " (" << strerror(errno) << ")" << std::endl;
+		}
 	}
 
 	// Function to check if a file exists
