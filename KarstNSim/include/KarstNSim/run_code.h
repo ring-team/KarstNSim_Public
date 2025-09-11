@@ -230,6 +230,7 @@ namespace KarstNSim {
 		bool create_vset_sampling = true; //!< Flag to save sampling points.
 		bool create_nghb_graph = false; //!< Flag to save nearest neighbor graph (quite heavy object!)
 		bool create_nghb_graph_property = false; //!< Flag to save nearest neighbor graph property (very heavy object!!)
+		bool create_solved_connectivity_matrix = false; //!< Flag to save "solved" connectivity matrix (with resolved "uncertain" connections)
 		bool create_grid = false; //!< Flag to save grid data.
 
 		// parameters not included formally with a tag in the prompt file, but defined in another file (properties) :

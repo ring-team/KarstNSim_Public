@@ -247,6 +247,7 @@ namespace KarstNSim {
 		\param sections_simulation_only Boolean indicating whether to simulate sections only (and skip everything else)
 		\param create_nghb_graph Boolean to create nearest neighbor graph
 		\param create_nghb_graph_property Boolean to create nearest neighbor graph property
+		\param create_solved_connectivity_matrix Boolean to create the "solved" connectivity matrix (with resolved "uncertain" connections)
 		\param use_amplification Boolean to use amplification phase
 		\param use_sampling_points_ Boolean to use sampling points
 		\param fraction_karst_perm Cohesion factor Pred
@@ -260,9 +261,11 @@ namespace KarstNSim {
 		\param propikp Vector of IKP property of the box
 		\return Simulation time
 		*/
-		float run_simulation(const bool& sections_simulation_only, const bool& create_nghb_graph, const bool& create_nghb_graph_property, const bool& use_amplification, const bool& use_sampling_points_,
-			const float& fraction_karst_perm, const float& fraction_old_karst_perm, const float& max_inception_surface_distance, std::vector<Vector3>* sampling_points_, const bool& create_vset_sampling_,
-			const bool& use_density_property_, const int& k_pts, const std::vector<float>& propdensity, const std::vector<float>& propikp);
+		float run_simulation(const bool &sections_simulation_only, const bool &create_nghb_graph, const bool &create_nghb_graph_property,
+							 const bool &create_solved_connectivity_matrix, const bool &use_amplification, const bool &use_sampling_points,
+							 const float &fraction_karst_perm, const float &fraction_old_karst_perm, const float &max_inception_surface_distance,
+							 std::vector<Vector3> *sampling_points, const bool &create_vset_sampling, const bool &use_density_property,
+							 const int &k_pts, const std::vector<float> &propdensity, const std::vector<float> &propikp);
 
 		/*!
 		\brief Sets the save repertory if we want to create link and node files

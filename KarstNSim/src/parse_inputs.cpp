@@ -610,6 +610,11 @@ KarstNSim::ParamsSource ParseInputs::parse(const std::string& filename) {
 		iss >> flag;
 		params.create_nghb_graph_property = parse_boolean(flag);
 		}
+		else if (paramType == "create_solved_connectivity_matrix:") {
+		std::string flag;
+		iss >> flag;
+		params.create_solved_connectivity_matrix = parse_boolean(flag);
+		}
 		else if (paramType == "create_grid:") {
 		std::string flag;
 		iss >> flag;

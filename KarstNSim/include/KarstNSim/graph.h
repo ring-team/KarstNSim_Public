@@ -437,9 +437,10 @@ namespace KarstNSim {
 		\param costsFinal The costs associated with the final paths.
 		\param vadoseFinal Vadose zone flags for the final paths (true if in the vadose zone, false in the phreatic zone).
 		\param springidxFinal The index of the spring associated with each generated path of the skeleton.
+		\param save_new_matrix A flag indicating whether to save the new connectivity matrix (with resolved "uncertain" connections).
 		*/
 		void ComputeKarsticSkeleton(const std::vector<KeyPoint>& pts, const float fraction_karst_perm, std::vector<std::vector<int>>& pathsFinal, std::vector<std::vector<float>>& costsFinal, std::vector<std::vector<char>>& vadoseFinal,
-			std::vector<int>& springidxFinal);
+			std::vector<int>& springidxFinal, bool save_new_matrix);
 
 		/*!
 		\brief Finds the shortest path between two nodes in the graph.

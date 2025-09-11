@@ -598,9 +598,11 @@ namespace KarstNSim {
 		}
 	}
 
-	float KarsticNetwork::run_simulation(const bool& sections_simulation_only, const bool& create_nghb_graph, const bool& create_nghb_graph_property, const bool& use_amplification, const bool& use_sampling_points,
-		const float& fraction_karst_perm, const float& fraction_old_karst_perm, const float& max_inception_surface_distance, std::vector<Vector3>* sampling_points, const bool& create_vset_sampling,
-		const bool& use_density_property, const int& k_pts, const std::vector<float>& propdensity, const std::vector<float>& propikp) {
+	float KarsticNetwork::run_simulation(const bool& sections_simulation_only, const bool& create_nghb_graph, const bool& create_nghb_graph_property,
+		const bool& create_solved_connectivity_matrix, const bool& use_amplification, const bool& use_sampling_points,
+		const float& fraction_karst_perm, const float& fraction_old_karst_perm, const float& max_inception_surface_distance,
+		std::vector<Vector3>* sampling_points, const bool& create_vset_sampling, const bool& use_density_property,
+		const int& k_pts, const std::vector<float>& propdensity, const std::vector<float>& propikp) {
 
 			params.scenename = karstic_network_name;
 		// Cost due to distance
@@ -627,7 +629,7 @@ namespace KarstNSim {
 			std::vector<std::vector<float>> karst_paths_costs;
 			std::vector<std::vector<char>> karst_paths_vadose_flag;
 			std::vector<int> springidxFinal;
-			graph.ComputeKarsticSkeleton(keypts, fraction_karst_perm, karst_paths, karst_paths_costs, karst_paths_vadose_flag, springidxFinal);
+			graph.ComputeKarsticSkeleton(keypts, fraction_karst_perm, karst_paths, karst_paths_costs, karst_paths_vadose_flag, springidxFinal, create_solved_connectivity_matrix);
 
 			if (!karst_paths.empty()) { // if a network was successfully computed
 

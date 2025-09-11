@@ -227,7 +227,7 @@ namespace KarstNSim {
 
 			std::cout << "Parameters were prepared for simulation (" << init_time << " s)" << std::endl;
 
-			float time_needed = karst.run_simulation(parameters.sections_simulation_only, parameters.create_nghb_graph, parameters.create_nghb_graph_property, parameters.use_amplification,
+			float time_needed = karst.run_simulation(parameters.sections_simulation_only, parameters.create_nghb_graph, parameters.create_nghb_graph_property, parameters.create_solved_connectivity_matrix, parameters.use_amplification,
 				parameters.use_sampling_points, parameters.fraction_karst_perm, parameters.fraction_old_karst_perm, parameters.max_inception_surface_distance, &parameters.sampling_points, parameters.create_vset_sampling, parameters.use_density_property,
 				parameters.k_pts, parameters.propdensity, parameters.propikp);
 			const clock_t time2 = clock();

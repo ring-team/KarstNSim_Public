@@ -1059,7 +1059,7 @@ namespace KarstNSim {
 	}
 
 	void GraphOperations::ComputeKarsticSkeleton(const std::vector<KeyPoint>& pts, const float fraction_karst_perm, std::vector<std::vector<int>>& pathsFinal, std::vector<std::vector<float>>& costsFinal, std::vector<std::vector<char>>& vadoseFinal,
-		std::vector<int>& springidxFinal)
+		std::vector<int>& springidxFinal, bool save_new_connectivity_matrix)
 	{
 		float step1 = 0.0f, step2 = 0.0f, step3 = 0.0f, step4 = 0.0f, step5 = 0.0f, step6 = 0.0f, step7 = 0.0f, step8 = 0.0f, step_sink = 0.0f;
 		const clock_t time1 = clock();
@@ -1284,9 +1284,11 @@ namespace KarstNSim {
 			}
 		}
 
-		std::string full_dir_name = params.directoryname + "/outputs";
-		std::string full_name = params.scenename + "_connectivity_matrix.txt";
-		save_connectivity_matrix(full_name, full_dir_name, new_connectivity_matrix);
+		if (save_new_connectivity_matrix) {
+			std::string full_dir_name = params.directoryname + "/outputs";
+			std::string full_name = params.scenename + "_connectivity_matrix.txt";
+			save_connectivity_matrix(full_name, full_dir_name, new_connectivity_matrix);
+		}
 
 		clock_t time11 = clock();
 		step8 += float(time11 - time10) / CLOCKS_PER_SEC;
