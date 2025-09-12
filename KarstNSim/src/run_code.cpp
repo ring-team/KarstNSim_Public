@@ -24,7 +24,7 @@ namespace KarstNSim {
 		for (size_t i = 0; i < parameters.propdensity.size(); ++i) {
 			properties.push_back({ parameters.propdensity[i], parameters.propikp[i] });
 		}
-		std::string full_name = parameters.karstic_network_name + "_box.txt";
+		std::string full_name = parameters.karstic_network_name + "_box.txt";	
 		
 		save_box(full_name, full_dir_name, saved_box, property_names,properties);
 
@@ -134,6 +134,9 @@ namespace KarstNSim {
 
 			KarsticNetwork karst(sim_name_iter, &parameters.domain, params, keypts, &parameters.surf_wat_table);
 			karst.set_save_directory(parameters.save_repository);
+
+			karst.set_sinks(&parameters.sinks, parameters.propsinksindex, parameters.propsinksorder, parameters.use_sinks_radius, parameters.propsinksradius);
+			karst.set_springs(&parameters.springs, parameters.propspringsindex, parameters.allow_single_outlet_connection, parameters.use_springs_radius, parameters.propspringsradius, parameters.propspringssurfindex);
 
 			if (parameters.use_waypoints) {
 				karst.set_waypoints(&parameters.waypoints, parameters.use_waypoints_radius, parameters.waypoints_radius, parameters.waypoints_impact_radius, parameters.waypoints_weight);

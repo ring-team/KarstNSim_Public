@@ -42,15 +42,18 @@ use_max_nghb_radius: false
 
 // Inlets, outlets and waypoints :
 
-use_sinks_radius: false
 sinks: Input_files/example_sinks.txt
-use_springs_radius: false
+use_sinks_radius: false
+
 springs: Input_files/example_springs.txt
+use_springs_radius: false
+
 allow_single_outlet_connection: true
+
 use_waypoints: false
-use_waypoints_radius: false
-waypoints_weight: 0.1
 waypoints: Input_files/example_waypoints.txt
+waypoints_weight: 0.1
+use_waypoints_radius: false
 
 // Ghost-rocks:
 
