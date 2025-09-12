@@ -16,14 +16,15 @@ namespace KarstNSim {
         ResultPoint end; //!< The ending point of the segment.
     };
 
-    class KarstNetworkResult {
-    public:
+    struct KarstNetworkResult {
+        std::vector<ResultSegment> segments; //!< List of segments in the karst network.
+
         //!< Convert the result to a string representation, for easy saving to a file
         std::string to_string() const {
             auto header_line = "Index\tX\tY\tZ\tcost\tequivalent_radius\tbranch_id\tvadose_flag";
             std::string result = header_line;
             int index = 0;
-            for (const auto& segment : _segments) {
+            for (const auto& segment : segments) {
                 // index is duped for both start and end points of the segment
                 for (const auto& point : { segment.start, segment.end }) {
                     result += "\n" + std::to_string(index) + "\t" +
@@ -42,9 +43,7 @@ namespace KarstNSim {
 
         //!< Add a segment to the karst network result.
         void add_segment(const ResultPoint& start, const ResultPoint& end) {
-            _segments.push_back({ start, end });
+            segments.push_back({ start, end });
         }
-    protected:
-        std::vector<ResultSegment> _segments; //!< List of segments in the karst network.
     };
 }
