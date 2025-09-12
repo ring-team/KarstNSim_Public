@@ -408,10 +408,26 @@ KarstNSim::ParamsSource ParseInputs::parse(const std::string& filename) {
 		else if (paramType == "sphere_centers:") {
 			std::string pts_path;
 			iss >> pts_path;
+
 			std::vector<std::vector<float>> prop;
 			std::vector<Vector3> ptset;
 			KarstNSim::load_pointset(pts_path, params.save_repository, ptset, prop);
 			params.sphere_centers = ptset;
+
+			// --- Fill per-sphere radius ---
+			// Expect the first property column to be "radius" (one value per point).
+			if (!prop.empty() && prop[0].size() >= 1) {
+				sphere_radius.reserve(ptset.size());
+				for (size_t i = 0; i < ptset.size(); ++i) {
+					sphere_radius.push_back(prop[i][0]); // prop[i][0] == radius
+				}
+			}
+			else {
+				std::cerr << "[warn] 'sphere_centers' has no 'radius' property and no 'sphere_radius:' fallback was provided. "
+					"Setting radius=0 for all spheres (no effect)." << std::endl;
+				sphere_radius.assign(ptset.size(), 0.0f);
+			}
+			params.sphere_radius = sphere_radius;
 		}
 
 		// Water tables
