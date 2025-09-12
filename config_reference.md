@@ -89,9 +89,9 @@ Two modes are available; choose **one**.
 
 - `sinks: <path>` — **Type**: `path` (point set with mandatory "Index" and "Order" properties) 
 - `use_sinks_radius: <bool>` — **Type**: `bool` (read per-sink radius from properties if true)  
-- `springs: <path>` — **Type**: `path` (point set with mandatory "Index" property)  
+- `springs: <path>` — **Type**: `path` (point set with mandatory "Index" and "Surfindex" properties)  
 - `use_springs_radius: <bool>` — **Type**: `bool`  
-**Behavior**: Define inlet(s) and outlet(s). Inlets MUST be associated with two properties: Index, which allows to pair them in the connectivity matrix with springs, and Order, which controls the order of iteration of sinks (order 1 first, then 2 etc.). Sinks of the same order are iterated in a random order within their group. Springs must be associated with an Index property, to pair them with inlets in the connectivity matrix. Radii can be optionally read per point when the respective `use_*_radius` flag is true. These radii will be used as observation data to constrain the conduit size simulation.
+**Behavior**: Define inlet(s) and outlet(s). Inlets MUST be associated with two properties: Index, which allows to pair them in the connectivity matrix with springs, and Order, which controls the order of iteration of sinks (order 1 first, then 2 etc.). Sinks of the same order are iterated in a random order within that group. Springs must be associated with an Index property, to pair them with inlets in the connectivity matrix, and with a Surfindex property which links each spring to its watertable (watertable file names end with a number ; that number is their index). Radii can be optionally read per point when the respective `use_*_radius` flag is true. These radii will be used as observation data to constrain the conduit size simulation.
 
 ### Outlet selection for ambiguous links
 - `allow_single_outlet_connection: <bool>` — **Type**: `bool`  
@@ -184,7 +184,7 @@ Two modes are available; choose **one**.
 - `water_table_constraint_weight_vadose: <float>` — **Type**: `float` (≥ 0)  
 - `water_table_constraint_weight_phreatic: <float>` — **Type**: `float` (≥ 0)  
 **Behavior**: Classifies nodes as vadose/phreatic relative to their associated water table and adds dedicated cost terms with independent weights for vadose and phreatic zones.
-**Important**: The format of the watertable surface file name must very precisely be "(name)_k" with k the index of the spring associated with the water table. You CAN associate multiple springs to the same water table (exemple: "(name)_ki_kj ...") with ki, kj, ... the indices of the associated springs. Obviously, you can associate each spring to one water table only. There is currently no option to avoid defining any water table in the simulation ; this option will be developed in the future (perched springs).
+**Important**: The format of the watertable surface file name must very precisely be "(name)_k" with k the index of the water table. The spring pointset has a mandatory property called surfindex which links each spring to its watertable k. There is currently no option to avoid defining any water table in the simulation ; this option will be developed in the future (perched springs).
 **Practical effects**: Larger weights strengthen vertically downward conduits in the vadose zone (and penalize any horizontal or vertically upward conduit) and base level (water table) control in the phreatic zone.
 
 
