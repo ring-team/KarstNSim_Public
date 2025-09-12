@@ -38,6 +38,7 @@ set(KARSTNSIM_INCLUDES
     include/KarstNSim/run_code.h 
     include/KarstNSim/parse_inputs.h 
     include/KarstNSim/nanoflann.hpp
+    include/KarstNSim/models/results.h
 )
 
 include_directories("include")

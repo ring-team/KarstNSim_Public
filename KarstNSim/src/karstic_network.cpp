@@ -598,123 +598,119 @@ namespace KarstNSim {
 		}
 	}
 
-	float KarsticNetwork::run_simulation(const bool& sections_simulation_only, const bool& create_nghb_graph, const bool& create_nghb_graph_property,
-		const bool& create_solved_connectivity_matrix, const bool& use_amplification, const bool& use_sampling_points,
-		const float& fraction_karst_perm, const float& fraction_old_karst_perm, const float& max_inception_surface_distance,
-		std::vector<Vector3>* sampling_points, const bool& create_vset_sampling, const bool& use_density_property,
-		const int& k_pts, const std::vector<float>& propdensity, const std::vector<float>& propikp) {
-
-			params.scenename = karstic_network_name;
-		// Cost due to distance
+	std::optional<KarstNetworkResult> KarsticNetwork::run_simulation(
+		const bool &sections_simulation_only, const bool &create_nghb_graph,
+		const bool &create_nghb_graph_property,
+		const bool &create_solved_connectivity_matrix,
+		const bool &use_amplification, const bool &use_sampling_points,
+		const float &fraction_karst_perm, const float &fraction_old_karst_perm,
+		const float &max_inception_surface_distance,
+		std::vector<Vector3> *sampling_points, const bool &create_vset_sampling,
+		const bool &use_density_property, const int &k_pts,
+		const std::vector<float> &propdensity, const std::vector<float> &propikp
+	) {
+		params.scenename = karstic_network_name;
 		const clock_t time1 = clock();
-		float time_needed = 0.0f;
 
 		if (is_simulation_parametrized) { // full simulation
 
 			// Compute 3D cost graph
 
 			GraphOperations graph;
-			graph.InitializeCostGraph(create_nghb_graph, create_nghb_graph_property, keypts, params, nodes_on_inception_surfaces, nodes_on_wt_surfaces,
-				inception_horizons, water_tables, use_sampling_points, box, max_inception_surface_distance, sampling_points, create_vset_sampling,
-				use_density_property, k_pts, fraction_old_karst_perm, propdensity, propikp, topo_surface_);
+			graph.InitializeCostGraph(
+				create_nghb_graph, create_nghb_graph_property, keypts, params,
+				nodes_on_inception_surfaces, nodes_on_wt_surfaces, inception_horizons,
+				water_tables, use_sampling_points, box, max_inception_surface_distance,
+				sampling_points, create_vset_sampling, use_density_property, k_pts,
+				fraction_old_karst_perm, propdensity, propikp, topo_surface_);
 			const clock_t time2 = clock();
 
-			std::cout << "Cost graph initialized ("
-				<< std::fixed << std::setprecision(3)
-				<< float(time2 - time1) / CLOCKS_PER_SEC << " s)" << std::endl;
+			std::cout << "Cost graph initialized (" << std::fixed
+					<< std::setprecision(3) << float(time2 - time1) / CLOCKS_PER_SEC
+					<< " s)" << std::endl;
 
-				// Compute karstic skeleton
-
-				std::vector<std::vector<int>> karst_paths;
+			// Compute karstic skeleton
+			std::vector<std::vector<int>> karst_paths;
 			std::vector<std::vector<float>> karst_paths_costs;
 			std::vector<std::vector<char>> karst_paths_vadose_flag;
 			std::vector<int> springidxFinal;
-			graph.ComputeKarsticSkeleton(keypts, fraction_karst_perm, karst_paths, karst_paths_costs, karst_paths_vadose_flag, springidxFinal, create_solved_connectivity_matrix);
 
-			if (!karst_paths.empty()) { // if a network was successfully computed
+			graph.ComputeKarsticSkeleton(keypts, fraction_karst_perm, karst_paths,
+										karst_paths_costs, karst_paths_vadose_flag,
+										springidxFinal,
+										create_solved_connectivity_matrix);
 
-				// Build karstic skeleton structure
-				KarsticSkeleton skel(&graph, karst_paths, karst_paths_costs, karst_paths_vadose_flag, springidxFinal);
+			if (karst_paths.empty()) {
+				std::cout << "No path found between inlets and outlets with the "
+							"current parameters."
+							<< std::endl;
+				return std::nullopt; // no path found
+			}
 
-				const clock_t time3 = clock();
+			// Build karstic skeleton structure
+			KarsticSkeleton skel(&graph, karst_paths, karst_paths_costs,
+								karst_paths_vadose_flag, springidxFinal);
 
-				std::cout << "Skeleton computed ("
-					<< std::fixed << std::setprecision(3)
+			const clock_t time3 = clock();
+
+			std::cout << "Skeleton computed (" << std::fixed << std::setprecision(3)
 					<< float(time3 - time2) / CLOCKS_PER_SEC << " s)" << std::endl;
 
+			// Network preparation
+			skel.detect_intersection_points(karst_paths);
+			skel.update_branch_ID(karst_paths);
 
-					// Network preparation
-					skel.detect_intersection_points(karst_paths);
-				skel.update_branch_ID(karst_paths);
+			// Procedural amplification with deadend nodes
+			const clock_t time4 = clock();
+			if (use_deadend_pts_) {
+				skel.amplify_deadend(&graph, max_distance_of_deadend_pts_, nb_deadend_points_, params);
+			}
+			const clock_t time5 = clock();
 
-				// Procedural amplification with deadend nodes
-				const clock_t time4 = clock();
-				if (use_deadend_pts_) {
-					skel.amplify_deadend(&graph, max_distance_of_deadend_pts_, nb_deadend_points_, params);
+			if (use_deadend_pts_) {
+				std::cout << "Network amplified with deadend points (" << std::fixed
+							<< std::setprecision(3) << float(time5 - time4) / CLOCKS_PER_SEC
+							<< " s)" << std::endl;
+			}
+
+			// Amplification
+			if (use_amplification) {
+				if (params.use_noise && !params.use_noise_on_all) {
+					graph.add_noise();
 				}
-				const clock_t time5 = clock();
+				std::pair<float, float> result = skel.amplify_noise(&graph, params);
+				const clock_t time5bis = clock();
+			}
 
-				if (use_deadend_pts_) {
-					std::cout << "Network amplified with deadend points ("
-						<< std::fixed << std::setprecision(3)
-						<< float(time5 - time4) / CLOCKS_PER_SEC << " s)" << std::endl;
-				}
+			const clock_t time6 = clock();
+			skel.detect_intersection_points(karst_paths);
+			skel.update_branch_ID(karst_paths);
 
-					// Amplification
-					if (use_amplification) {
-						if (params.use_noise && !params.use_noise_on_all) {
-							graph.add_noise();
-						}
-						std::pair<float, float> result = skel.amplify_noise(&graph, params);
-						const clock_t time5bis = clock();
-					}
+			create_sections(skel);
+			const clock_t time7 = clock();
 
-				const clock_t time6 = clock();
-				skel.detect_intersection_points(karst_paths);
-				skel.update_branch_ID(karst_paths);
+			std::cout << "Conduits sections generated (" << std::fixed
+					<< std::setprecision(3) << float(time7 - time6) / CLOCKS_PER_SEC
+					<< " s)" << std::endl;
 
-				create_sections(skel);
-				const clock_t time7 = clock();
+			// save network
+			auto res = skel.get_result(params, karstic_network_name);
+			const clock_t time8 = clock();
 
-				std::cout << "Conduits sections generated ("
-					<< std::fixed << std::setprecision(3)
-					<< float(time7 - time6) / CLOCKS_PER_SEC << " s)" << std::endl;
-
-				// save network
-				skel.create_line(params, karstic_network_name);
-
-				const clock_t time8 = clock();
-
-				std::cout << "Karst network saved ("
-					<< std::fixed << std::setprecision(3)
+			std::cout << "Karst network saved (" << std::fixed << std::setprecision(3)
 					<< float(time8 - time7) / CLOCKS_PER_SEC << " s)" << std::endl;
 
-
-				const clock_t time_end = clock();
-				time_needed = float(time_end - time1) / CLOCKS_PER_SEC;
-			}
-			else {
-			}
-
-		}
-		else if (sections_simulation_only) { // only generate sections
+			return res;
+		} else if (sections_simulation_only) { // only generate sections
 			std::vector<std::vector<float>> costs_graph(params.PtsOldGraph.size(), std::vector<float>(2, 0.0)); // dummy vector
 			std::vector<std::vector<char>> vadoseflags_graph(params.PtsOldGraph.size(), std::vector<char>(2, false)); // dummy vector
 			std::vector<int> springidx(params.PtsOldGraph.size(), 1);
 			KarsticSkeleton skel(params.PtsOldGraph, costs_graph, vadoseflags_graph, springidx);
 
-			const clock_t time5 = clock();
-
 			create_sections(skel);
-
-			const clock_t time6 = clock();
-
-				// save network
-				skel.create_line(params, karstic_network_name);
-
-			const clock_t time7 = clock();
+			return skel.get_result(params, karstic_network_name);
 		}
-		return time_needed;
+		return std::nullopt;
 	}
 
 	void KarsticNetwork::set_save_directory(const std::string& repertory) {

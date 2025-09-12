@@ -41,6 +41,7 @@ If you use this code, pleace cite : Paris et al., 2021, Computer Graphic Forum.
 #include "KarstNSim/write_files.h"
 #include "KarstNSim/randomgenerator.h"
 #include "KarstNSim/simplex_noise.h"
+#include "KarstNSim/models/results.h"
 #include <iomanip>
 
 namespace KarstNSim {
@@ -695,7 +696,7 @@ namespace KarstNSim {
 		\param geologicalparams The geological parameters of the simulation.
 		\param network_name The name of the generated network.
 		*/
-		void create_line(const GeologicalParameters& geologicalparams, std::string network_name) const;
+		KarstNetworkResult get_result(const GeologicalParameters& geologicalparams, std::string network_name) const;
 
 		/*!
 		\brief Generates a set of deadend points in the karstic skeleton bounding box. Used in amplify_deadend.

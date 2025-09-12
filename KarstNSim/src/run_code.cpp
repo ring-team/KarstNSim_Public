@@ -227,9 +227,26 @@ namespace KarstNSim {
 
 			std::cout << "Parameters were prepared for simulation (" << init_time << " s)" << std::endl;
 
-			float time_needed = karst.run_simulation(parameters.sections_simulation_only, parameters.create_nghb_graph, parameters.create_nghb_graph_property, parameters.create_solved_connectivity_matrix, parameters.use_amplification,
+			auto result = karst.run_simulation(parameters.sections_simulation_only, parameters.create_nghb_graph, parameters.create_nghb_graph_property, parameters.create_solved_connectivity_matrix, parameters.use_amplification,
 				parameters.use_sampling_points, parameters.fraction_karst_perm, parameters.fraction_old_karst_perm, parameters.max_inception_surface_distance, &parameters.sampling_points, parameters.create_vset_sampling, parameters.use_density_property,
 				parameters.k_pts, parameters.propdensity, parameters.propikp);
+			
+			if (!result.has_value()) {
+				std::cout << "Simulation failed for seed " << used_seed << std::endl;
+				continue;
+			}
+			// save result to file
+			std::string full_name = sim_name_iter + "_karst.txt";
+			std::string full_dir_name = parameters.save_repository + "/outputs";
+			auto res_path = make_unique_filename(full_name, full_dir_name);
+			std::ofstream resfile(res_path);
+			if (resfile.is_open()) {
+				resfile << result->to_string();
+				resfile.close();
+			} else {
+				std::cout << "Failed to save karst network to file." << std::endl;
+			}
+
 			const clock_t time2 = clock();
 			float real_time_needed = float(time2 - begin_time) / CLOCKS_PER_SEC;
 

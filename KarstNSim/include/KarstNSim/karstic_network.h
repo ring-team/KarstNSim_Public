@@ -35,6 +35,7 @@ If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
 #include <cstring>
 #include <iomanip>
 #include <stdexcept>
+#include <optional>
 
 namespace KarstNSim {
 
@@ -261,7 +262,7 @@ namespace KarstNSim {
 		\param propikp Vector of IKP property of the box
 		\return Simulation time
 		*/
-		float run_simulation(const bool &sections_simulation_only, const bool &create_nghb_graph, const bool &create_nghb_graph_property,
+		std::optional<KarstNetworkResult> run_simulation(const bool &sections_simulation_only, const bool &create_nghb_graph, const bool &create_nghb_graph_property,
 							 const bool &create_solved_connectivity_matrix, const bool &use_amplification, const bool &use_sampling_points,
 							 const float &fraction_karst_perm, const float &fraction_old_karst_perm, const float &max_inception_surface_distance,
 							 std::vector<Vector3> *sampling_points, const bool &create_vset_sampling, const bool &use_density_property,

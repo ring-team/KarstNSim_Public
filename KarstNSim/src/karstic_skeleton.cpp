@@ -949,107 +949,53 @@ namespace KarstNSim {
 		}
 	}
 
-	void KarsticSkeleton::create_line(const GeologicalParameters& geologicalparams, std::string network_name) const
+	KarstNetworkResult KarsticSkeleton::get_result(const GeologicalParameters& geologicalparams, std::string network_name) const
 	{
 
-		std::vector<Segment> nghb_graph_line;
-		std::vector<float> list_cost;
-		std::vector<float> list_vadose;
-		std::vector<float> list_eq_radius;
-		std::vector<int> list_branch_id;
-		//std::vector<float> list_branch_dist; //debugging
+		KarstNetworkResult result;
+
+		std::vector<int> list_new_branch_id;
+		std::vector<int> used_id = { 0 };
+		std::vector<std::vector<int>> seen_br_id = { nodes[0].branch_id_ascend };
 
 		for (int i = 0; i < nodes.size(); i++) {
 			for (int j = 0; j < nodes[i].connections.size(); j++) {
+				auto it = find(seen_br_id.begin(), seen_br_id.end(), nodes[nodes[i].connections[j].destindex].branch_id_ascend);
 
 				float epsilon = 1e-10;
 				// Find the index of the first element in cost that is not effectively zero (it corresponds to the spring index to which the path leads to)
 				int index_spring = std::distance(nodes[i].cost.begin(), std::find_if(nodes[i].cost.begin(), nodes[i].cost.end(),
 					[epsilon](float c) { return std::fabs(c) > epsilon; }));
 
-				list_cost.push_back(float(nodes[i].cost[index_spring]));
-				list_cost.push_back(float(nodes[nodes[i].connections[j].destindex].cost[index_spring]));
+				ResultPoint start, end;
+				start.p = nodes[i].p;
+				start.cost = float(nodes[i].cost[index_spring]);
+				start.equivalent_radius = float(nodes[i].eq_radius);
+				start.vadose_flag = float(nodes[i].vadose[index_spring]);
 
-				list_eq_radius.push_back(float(nodes[i].eq_radius));
-				list_eq_radius.push_back(float(nodes[nodes[i].connections[j].destindex].eq_radius));
+				end.p = nodes[nodes[i].connections[j].destindex].p;
+				end.cost = float(nodes[nodes[i].connections[j].destindex].cost[index_spring]);
+				end.equivalent_radius = float(nodes[nodes[i].connections[j].destindex].eq_radius);
+				end.vadose_flag = float(nodes[nodes[i].connections[j].destindex].vadose[index_spring]);
 
-				list_branch_id.push_back(nodes[i].branch_id);
-				list_branch_id.push_back(nodes[nodes[i].connections[j].destindex].branch_id);
-
-				list_vadose.push_back(float(nodes[i].vadose[index_spring]));
-				list_vadose.push_back(float(nodes[nodes[i].connections[j].destindex].vadose[index_spring]));
-
-				//list_branch_dist.push_back(float(nodes[i].distance)); // debugging
-				//list_branch_dist.push_back(float(nodes[nodes[i].connections[j].destindex].distance));
-
-				Vector3 a0 = nodes[i].p;
-				Vector3 a1 = nodes[nodes[i].connections[j].destindex].p;
-
-				// Use those if you want the points to be defined in the Lambert 93 coordinates
-				//Vector3 a0 = Vector3(nodes[i].p.x+870000.,nodes[i].p.y+6820000.,nodes[i].p.z);
-				//Vector3 a1 = Vector3(nodes[nodes[i].connections[j].destindex].p.x + 870000., nodes[nodes[i].connections[j].destindex].p.y + 6820000., nodes[nodes[i].connections[j].destindex].p.z);
-
-				Segment seg(a0, a1);
-				nghb_graph_line.push_back(seg);
-			}
-		}
-		std::vector<int> list_new_branch_id;
-		std::vector<int> used_id = { 0 };
-		std::vector<std::vector<int>> seen_br_id = { nodes[0].branch_id_ascend };
-
-		// Changing branch label for gocad visualization
-		for (int i = 0; i < nodes.size(); i++) {
-			for (int j = 0; j < nodes[i].connections.size(); j++) {
-				auto it = find(seen_br_id.begin(), seen_br_id.end(), nodes[nodes[i].connections[j].destindex].branch_id_ascend);
-
+				// set branch ids
 				if (it != seen_br_id.end()) { //id already found
-
 					ptrdiff_t pos = it - seen_br_id.begin();
-					list_new_branch_id.push_back(used_id[pos]);
-					list_new_branch_id.push_back(used_id[pos]);
+					start.branch_id = used_id[pos];
+					end.branch_id = used_id[pos];
 				}
 				else {	//id not found
 					seen_br_id.push_back(nodes[nodes[i].connections[j].destindex].branch_id_ascend);
-					list_new_branch_id.push_back(used_id[find(seen_br_id.begin(), seen_br_id.end(), nodes[i].branch_id_ascend) - seen_br_id.begin()]);
+					start.branch_id = used_id[find(seen_br_id.begin(), seen_br_id.end(), nodes[i].branch_id_ascend) - seen_br_id.begin()];
 					used_id.push_back(used_id.back() + 1);
-					list_new_branch_id.push_back(used_id.back());
+					end.branch_id = used_id.back();
 				}
+
+				result.add_segment(start, end);
 			}
 		}
 
-
-		Line full_line = nghb_graph_line;
-
-		int number_segs = full_line.get_nb_segs();
-		std::vector<std::string> property_names = { "cost","equivalent_radius", "branch_id","vadose_flag" };
-		std::vector<std::vector<std::vector<float>>> properties;
-
-		properties.resize(number_segs);
-		for (int segi = 0; segi < int(properties.size()); segi++) {
-			properties[segi].resize(4); // there is 4 properties in total
-		}
-		for (int n = 0; n < number_segs; n++) {
-			properties[n][0].push_back(list_cost[2 * n]);
-			properties[n][0].push_back(list_cost[2 * n + 1]);
-
-			properties[n][1].push_back(list_eq_radius[2 * n]);
-			properties[n][1].push_back(list_eq_radius[2 * n + 1]);
-
-			properties[n][2].push_back(list_new_branch_id[2 * n]);
-			properties[n][2].push_back(list_new_branch_id[2 * n + 1]);
-
-			properties[n][3].push_back(list_vadose[2 * n]);
-			properties[n][3].push_back(list_vadose[2 * n + 1]);
-
-			//properties[n][3].push_back(list_branch_dist[2 * n]); // for debugging
-			//properties[n][3].push_back(list_branch_dist[2 * n + 1]);
-
-		}
-		std::string full_name = network_name + "_karst.txt";
-		std::string full_dir_name = geologicalparams.directoryname + "/outputs";
-
-		save_line(full_name, full_dir_name, full_line, property_names, properties); // version with costs
-
+		return result;
 	}
 
 	// Method to populate distance matrix using Johnson's algorithm (which finds shortest distance between a pair of nodes in a graph)
