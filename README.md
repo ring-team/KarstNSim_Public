@@ -80,7 +80,7 @@ A complete documentation of all user input parameters is available in the KarstN
 
 We provide **four ready-to-run examples** (see the `Input_files/` folder). Each example lives in its own subfolder under `Input_files/`. When you double-click `karstnsim.exe`,
 the interactive picker lists these folders and preselects the appropriate instruction file for each. The illustrations provided below have been generated with a slightly different version of KarstNSim,
-meaning the seed will provide different random numbers and networks will be slightly different by using KarstNSim_Public.
+meaning the seed will provide different random numbers and networks will be slightly different when using KarstNSim_Public.
 
 > Tip: Use a 3D viewer such as [ParaView](https://www.paraview.org/download/) to inspect inputs/outputs.
 
