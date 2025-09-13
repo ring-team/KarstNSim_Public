@@ -42,7 +42,7 @@ Major update with new features from the PhD thesis (Gouy, 2025), including:
 ### Modifications
 
 Minor update in terms of code functionalities:
-- Added an input configuration reference manual (config_manual.md) which precises the type, theoretical and typical range of values, meaning, behavior and practical effect of all input parameters. Users can now refer to it for correct KarstNSim use, which avoids the requirement to generate the doxygen documentation for most users.
+- Added an input configuration reference manual (config_reference.md) which precises the type, theoretical and typical range of values, meaning, behavior and practical effect of all input parameters. Users can now refer to it for correct KarstNSim use, which avoids the requirement to generate the doxygen documentation for most users.
 - Updated the "base" example provided with some new functionalities, and added three other examples:
 	- A "Polygenic Karst" example which simulated the carving of new conduits following a base level drop from the base case.
 	- An "Amplification" example which uses the amplification step on the network generated in the "polygenic karst" example.

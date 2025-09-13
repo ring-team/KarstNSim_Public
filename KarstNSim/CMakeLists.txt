@@ -43,3 +43,8 @@ set(KARSTNSIM_INCLUDES
 include_directories("include")
 
 add_executable(karstnsim ${KARSTNSIM_SOURCES} ${KARSTNSIM_INCLUDES})
+
+# Linux GCC still needs explicit link with stdc++fs when using std::experimental::filesystem
+if (UNIX AND NOT APPLE)
+    target_link_libraries(karstnsim PRIVATE stdc++fs)
+endif()
