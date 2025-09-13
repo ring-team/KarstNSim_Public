@@ -47,56 +47,80 @@ KarstNSim is designed to operate on Windows 10. While it hasn't been directly te
 
 * Download the archive and unzip it somewhere (avoid spaces and special characters in the path).
 * Go to the KarstNSim folder and run the batch file "build.bat", which will create a build folder and run CMake to generate build files and build the project (including compilation).
-* An executable should have been generated in build/release/karstnsim.exe. To run the code, you can either double-click directly on karstnsim.exe if the instructions file is named exactly "instructions.txt", or else open a command prompt anywhere and type :
+* An executable should have been generated in 'build/release/karstnsim.exe'.
 
-```
-cd path/to/your/executable
-karstnsim.exe ../../../Input_files/[name_of_instruction_file]
-```
+**Running the code:**
+- **Double-click** `karstnsim.exe`: the program scans `Input_files/` for subfolders and shows a numbered menu of available examples. Type the number of the example you want and press Enter.
+- **Command line**
+  ```bash
+  cd path/to/your/executable
+  karstnsim.exe ../../../Input_files/[path/to/your/instruction_file.txt]
+  ```
 
-The instruction file is in the Input_files directory in the root of the archive. *Make sure to use "/" or "\\\\" but never "\\" for the paths.*
+*Make sure to use "/" or "\\\\" but never "\\" for the paths.*
 
 Outputs are stored in the outputs directory.
 
-## Generate documentation files
+## Documentation
 
-A doxyfile is present in the archive. To automatically generate the documentation, type `doxygen path/to/YourDoxyfile` in a command prompt, or simply `doxygen doxyfile` if already
+### Input configuration documentation
+
+If you're not looking to code in KarstNSim and only want to use it for simulation applications, you only need information on how to configuration a simulation with the (many) inputs of KarstNSim. 
+We provide a file in the archive ([here](config_manual.md)) which precises the type, theoretical and typical range of values, meaning, behavior and practical effect of all input parameters.
+
+### Generate documentation files for full code documentation
+
+If you're aiming at coding in KarstNSim or better understand how the code works, a doxyfile is present in the archive. To automatically generate the documentation, 
+type `doxygen path/to/YourDoxyfile` in a command prompt, or simply `doxygen doxyfile` if already
  in the root folder. Once generated, you will find the documentation in the *hmtl folder*. It is advised to open the documentation starting from the main page, which provides important
 general information about the project structure. You can find it by opening the "index.html" file, or by opening any other .html file and clicking on "Main Page" in the upper left.
 A complete documentation of all user input parameters is available in the KarstNSim::ParamsSource struct page.
 
 ## Testing
 
-We provide here a synthetic dataset (inspired from the one used in the 2024 article) and an instruction file to simulate results shown in a figure of the 2024 article.
-<!-- three instruction files (instruction_file_step1, instruction_file_step2 and instruction_file_step3) in the correct format used for KarstNSim, which correspond to inputs used to generate examples in three steps. They are in the Input_files folder.
-Since the name of these three files is not "instruction_file.txt", you have to launch the executable manually from a command prompt (see ##Installation for more information).
+We provide **four ready-to-run examples** (see the `Input_files/` folder). Each example lives in its own subfolder under `Input_files/`. When you double-click `karstnsim.exe`,
+the interactive picker lists these folders and preselects the appropriate instruction file for each. The illustrations provided below have been generated with a slightly different version of KarstNSim,
+meaning the seed will provide different random numbers and networks will be slightly different by using KarstNSim_Public.
 
-The first step consists in showing you a simulation, using five inlets going to the upper spring (S1). Subcosts involved are: vadose/phreatic partition, fractures (chosen at orientations N000 and N060), intrinsic karstification potential (including a ghost-rock corridor following the syncline axis), and inception surfaces.
-Also, an amplification of the network is made to add some dead-end branches to increase network density, and some cycles to change network topology.
+> Tip: Use a 3D viewer such as [ParaView](https://www.paraview.org/download/) to inspect inputs/outputs.
 
-See below pictures of a) model settings (inlets in red, outlets in blue), b) the background grid Poisson-sphere radius property *r*, c) the background grid intrinsic karstification potential property *P*, and d) an example result.
+### 1) Base simulation
+A minimal, single-phase run on the synthetic dataset (as in Fig. 12 of the 2024 paper, but with some improvements). It demonstrates:
+- vadose/phreatic partitioning,
+- fracture guidance (two families),
+- intrinsic karstification potential,
+- inception surfaces.
 
-XXX -->
-<img src="vadose_contexts_example.png" alt="Figure 12 (Gouy et al., 2024)" width="100%" align="center">
+<img src="" alt="base_example" width="100%" align="center">
 
-<!-- The second step consists in presenting a polygenic karst simulation: the network generated during step 1 is reused by reducing the cost of edges already traversed. This time, the spring considered is the lower one (S2): this mimicks a base level drop. The ghost-rock volume is still present, influencing the chosen paths.
-The cost function is mostly the same, but the fracture component was removed (mimicking a shift from an epikarstic fractured zone to more homogeneous rocks).
-Moreover, two waypoints and two karst-free points were added on the substratum of the aquifer, to show their capability to control path position. The amplification step is also applied, with the same parameters as in the first step.
+### 2) Polygenic karst (multi-phase reuse)
+Reuses a previously generated network by **down-weighting already traversed edges**, mimicking multi-phase karstification (here, base-level drop with flow redirected to another outlet). The example disables the fracture term to emulate a more homogeneous medium in the bottom of the aquifer, and showcases **waypoints** and **karst-free points** close to the aquifer substratum.
 
-Below you can see a) Settings with waypoints in purple and karst-free points in green, and b) an example result.
+<img src="" alt="polygenic_example" width="100%" align="center">
 
-XXX
+### 3) Amplification
+Starting from the **base** network, this example runs the amplification step to control density and topology by adding:
+- small-scale dead-end branches,  
+- a limited number of cycles/loops.
 
-[] The third and last step consists in generating equivalent conduit dimensions on the edges of the full network generated. The variogram parameters used are the ones proposed by Frantz et al. (2021), based on cave survey data. This step involves using a parameter option that allows to add the previously generated networks as
-inputs, skipping all steps except the dimensions simulation one. Below is an example simulation result with the equivalent radii represented in log-scale, with values proportional to the sphere radii at each skeleton node.
+<img src="" alt="amplification_example" width="100%" align="center">
 
-XXX -->
+### 4) Karst section generation (curvilinear SGS)
+Given the **amplified** network, this example simulates **equivalent radii on nodes** using a **curvilinear SGS** algorithm (Frantz et al., 2021). Variogram parameters mirror those in the paper; radii are visualized in log-scale and mapped to node sphere size for rendering.
 
-If you want to make modifications to the input parameters, create a new file instructions.txt, and change options as you want with inspiration from the instruction files provided.
+<img src="" alt="karst_section_generation_example" width="100%" align="center">
 
-It is advised to use a 3D viewer software (e.g., [ParaView](https://www.paraview.org/download/) ) to visualize complex inputs and outputs (the viewer is not provided in the archive).
+The main option of KarstNSim not presented in the above examples is the ghost-rock-driven simulation. Read the config reference file for information on correct use.
+
+
+---
+
 
 <b>For any information </b>, please contact : 
-* Augustin Gouy : augustin.gouy@univ-lorraine.fr
+* Augustin Gouy : a.gouy.proaddress@gmail.com
 * Pauline Collon : pauline.collon@univ-lorraine.fr 
 * Christophe Antoine : christophe.antoine@univ-lorraine.fr
+
+<b> To report a bug in the code </b>, please contact :
+* Augustin Gouy : a.gouy.proaddress@gmail.com
+Provide a screenshot of the log as well as complete information on your input parameters.

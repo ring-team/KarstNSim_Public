@@ -762,7 +762,7 @@ namespace KarstNSim {
 		const clock_t time3 = clock();
 
 		std::cout << " * Sampling points geometry fully analyzed to create graph ("
-			<< float(time3 - time1) / CLOCKS_PER_SEC << " s)" << std::endl;
+			<< float(time3 - time2) / CLOCKS_PER_SEC << " s)" << std::endl;
 
 
 		// 5 Nearest neighbour graph creation (initialization + cost computation on each edge)
@@ -773,11 +773,6 @@ namespace KarstNSim {
 		std::cout << " * Nearest neighbor & cost graph generated ("
 			<< std::fixed << std::setprecision(3)
 			<< float(time4 - time3) / CLOCKS_PER_SEC << " s)" << std::endl;
-
-		std::cout << " * Sampling points geometry fully analyzed to create graph ("
-			<< std::fixed << std::setprecision(3)
-			<< float(time3 - time23) / CLOCKS_PER_SEC << " s)" << std::endl;
-
 
 		// 6 Save the nearest neighbour graph
 		if (create_nghb_graph) {

@@ -34,6 +34,7 @@ If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
 #include <vector>
 #include <cstring>
 #include <iomanip>
+#include <stdexcept>
 
 namespace KarstNSim {
 
@@ -96,7 +97,7 @@ namespace KarstNSim {
 		\param propwaypointsimpactradius Impact radii for way points
 		\param waypoints_weight Weight for way points in simulation
 		*/
-		void set_waypoints(const std::vector<Vector3>* waypoints, bool use_sinks_radius, const std::vector<float>& propsinksradius, const std::vector<float>& propwaypointsimpactradius, float waypoints_weight);
+		void set_waypoints(const std::vector<Vector3>* waypoints, bool use_waypoints_radius, const std::vector<float>& propwaypointsradius, const std::vector<float>& propwaypointsimpactradius, float waypoints_weight);
 
 		/*!
 		\brief Set the number and maximum distance of dead-end points
@@ -214,7 +215,7 @@ namespace KarstNSim {
 		\param sinks Pointer to the list of sinks
 		\param springs Pointer to the list of springs
 		*/
-		void read_connectivity_matrix(const std::vector<Vector3>* sinks, const std::vector<Vector3>* springs);
+		void read_connectivity_matrix(const std::string& simulation_input_dir, const std::vector<Vector3>* sinks, const std::vector<Vector3>* springs);
 
 		/*! \brief Sets noise parameters for the simulation
 		\param use_noise Boolean indicating whether to use noise for the cycle amplification step only

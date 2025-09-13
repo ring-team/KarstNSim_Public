@@ -91,6 +91,7 @@ If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
 #include <algorithm>
 #include <random>
 #include "KarstNSim/randomgenerator.h"
+#include <stdexcept>
 
 namespace KarstNSim {
 	/*!
@@ -103,6 +104,7 @@ namespace KarstNSim {
 
 		std::string karstic_network_name; //!< Name of the simulation, will be attached to all outputs
 		std::string save_repository; //!< Name of the folder in which results should be saved
+		std::string simulation_input_dir; //!< Name of the subfolder in which inputs are
 
 		// General parameters :
 

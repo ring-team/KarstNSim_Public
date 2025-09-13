@@ -135,7 +135,7 @@ Two modes are available; choose **one**.
 
 ---
 
-## 8) Intrinsic arstification potential (IKP)
+## 8) Intrinsic karstification potential (IKP)
 
 - `use_karstification_potential: <bool>` — **Type**: `bool`  
 - `karstification_potential_weight: <float>` — **Type**: `float` (≥ 0)  

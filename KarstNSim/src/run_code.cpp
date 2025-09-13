@@ -14,88 +14,88 @@ namespace KarstNSim {
 	void run_simulation_full(ParamsSource parameters) {
 
 		// Uncomment to save inputs for special use
-		std::string full_dir_name = parameters.save_repository + "/outputs";
-		std::cout << "Will save outputs to: " << full_dir_name << std::endl;
+		//std::string full_dir_name = parameters.save_repository + "/outputs";
+		//std::cout << "Will save inputs to: " << full_dir_name << std::endl;
 
-		// save box voxet
-		Box saved_box = parameters.domain;
-		std::vector<std::string> property_names = { "density","karstif_potential" };
-		std::vector<std::vector<float>> properties;
-		for (size_t i = 0; i < parameters.propdensity.size(); ++i) {
-			properties.push_back({ parameters.propdensity[i], parameters.propikp[i] });
-		}
-		std::string full_name = parameters.karstic_network_name + "_box.txt";	
-		
-		save_box(full_name, full_dir_name, saved_box, property_names,properties);
+		//// save box voxet
+		//Box saved_box = parameters.domain;
+		//std::vector<std::string> property_names = { "density","karstif_potential" };
+		//std::vector<std::vector<float>> properties;
+		//for (size_t i = 0; i < parameters.propdensity.size(); ++i) {
+		//	properties.push_back({ parameters.propdensity[i], parameters.propikp[i] });
+		//}
+		//std::string full_name = parameters.karstic_network_name + "_box.txt";	
+		//
+		//save_box(full_name, full_dir_name, saved_box, property_names,properties);
 
-		// save topography
-		Surface topo = parameters.topo_surface;
-		full_name = parameters.karstic_network_name + "_topo_surf.txt";
-		full_dir_name = parameters.save_repository + "/outputs";
-		save_surface(full_name, full_dir_name, topo);
+		//// save topography
+		//Surface topo = parameters.topo_surface;
+		//full_name = parameters.karstic_network_name + "_topo_surf.txt";
+		//full_dir_name = parameters.save_repository + "/outputs";
+		//save_surface(full_name, full_dir_name, topo);
 
-		// save inception surfaces
-		std::vector<Surface> inception_surfaces = parameters.inception_surfaces;
-		full_name = parameters.karstic_network_name + "_inception_surf";
-		full_dir_name = parameters.save_repository + "/outputs";
-		for (int surfi = 0; surfi < inception_surfaces.size(); surfi++) {
-			std::string full_name_i = full_name + std::to_string(surfi) + ".txt";
-			save_surface(full_name_i, full_dir_name, inception_surfaces[surfi]);
-		}
+		//// save inception surfaces
+		//std::vector<Surface> inception_surfaces = parameters.inception_surfaces;
+		//full_name = parameters.karstic_network_name + "_inception_surf";
+		//full_dir_name = parameters.save_repository + "/outputs";
+		//for (int surfi = 0; surfi < inception_surfaces.size(); surfi++) {
+		//	std::string full_name_i = full_name + std::to_string(surfi) + ".txt";
+		//	save_surface(full_name_i, full_dir_name, inception_surfaces[surfi]);
+		//}
 
-		// save water tables
-		std::vector<Surface> wtsurf = parameters.surf_wat_table;
-		full_name = parameters.karstic_network_name + "_watertable_surf";
-		full_dir_name = parameters.save_repository + "/outputs";
-		for (int surfi = 0; surfi < wtsurf.size(); surfi++) {
-			std::string full_name_i = full_name + std::to_string(surfi) + ".txt";
-			save_surface(full_name_i, full_dir_name, wtsurf[surfi]);
-		}
+		//// save water tables
+		//std::vector<Surface> wtsurf = parameters.surf_wat_table;
+		//full_name = parameters.karstic_network_name + "_watertable_surf";
+		//full_dir_name = parameters.save_repository + "/outputs";
+		//for (int surfi = 0; surfi < wtsurf.size(); surfi++) {
+		//	std::string full_name_i = full_name + std::to_string(surfi) + ".txt";
+		//	save_surface(full_name_i, full_dir_name, wtsurf[surfi]);
+		//}
 
-		// save sinks
-		std::vector<Vector3> sinks = parameters.sinks;
-		std::vector<std::string> property_names_sinks = { "index","order", "radius" };
-		std::vector<std::vector<float>> properties_sinks;
-		for (size_t i = 0; i < parameters.propsinksindex.size(); ++i) {
-			float v = 0;
-			if (parameters.use_sinks_radius) {
-				v = parameters.propsinksradius[i];
-			}
-			properties_sinks.push_back({ float(parameters.propsinksindex[i]), float(parameters.propsinksorder[i]), v });
-		}
-		full_name = parameters.karstic_network_name + "_sinks.txt";
-		full_dir_name = parameters.save_repository + "/outputs";
-		save_pointset(full_name, full_dir_name, sinks, property_names_sinks, properties_sinks);
+		//// save sinks
+		//std::vector<Vector3> sinks = parameters.sinks;
+		//std::vector<std::string> property_names_sinks = { "index","order", "radius" };
+		//std::vector<std::vector<float>> properties_sinks;
+		//for (size_t i = 0; i < parameters.propsinksindex.size(); ++i) {
+		//	float v = 0;
+		//	if (parameters.use_sinks_radius) {
+		//		v = parameters.propsinksradius[i];
+		//	}
+		//	properties_sinks.push_back({ float(parameters.propsinksindex[i]), float(parameters.propsinksorder[i]), v });
+		//}
+		//full_name = parameters.karstic_network_name + "_sinks.txt";
+		//full_dir_name = parameters.save_repository + "/outputs";
+		//save_pointset(full_name, full_dir_name, sinks, property_names_sinks, properties_sinks);
 
-		// save springs
-		std::vector<Vector3> springs = parameters.springs;
-		std::vector<std::string> property_names_springs = { "index",  "surfindex", "radius" };
-		std::vector<std::vector<float>> properties_springs;
-		for (size_t i = 0; i < parameters.propspringsindex.size(); ++i) {
-			float v = 0;
-			if (parameters.use_springs_radius) {
-				v = parameters.propspringsradius[i];
-			}
-			properties_springs.push_back({ float(parameters.propspringsindex[i]), float(parameters.propspringssurfindex[i]), v });
-		}
-		full_name = parameters.karstic_network_name + "_springs.txt";
-		full_dir_name = parameters.save_repository + "/outputs";
-		save_pointset(full_name, full_dir_name, springs, property_names_springs, properties_springs);
+		//// save springs
+		//std::vector<Vector3> springs = parameters.springs;
+		//std::vector<std::string> property_names_springs = { "index",  "surfindex", "radius" };
+		//std::vector<std::vector<float>> properties_springs;
+		//for (size_t i = 0; i < parameters.propspringsindex.size(); ++i) {
+		//	float v = 0;
+		//	if (parameters.use_springs_radius) {
+		//		v = parameters.propspringsradius[i];
+		//	}
+		//	properties_springs.push_back({ float(parameters.propspringsindex[i]), float(parameters.propspringssurfindex[i]), v });
+		//}
+		//full_name = parameters.karstic_network_name + "_springs.txt";
+		//full_dir_name = parameters.save_repository + "/outputs";
+		//save_pointset(full_name, full_dir_name, springs, property_names_springs, properties_springs);
 
-		// save waypoints
-		std::vector<Vector3> waypoints = parameters.waypoints;
-		std::vector<std::string> property_names_waypoints = { "impact_radius",  "radius" };
-		std::vector<std::vector<float>> properties_waypoints;
-		for (size_t i = 0; i < parameters.waypoints_impact_radius.size(); ++i) {
-			float v = 0;
-			if (parameters.use_waypoints_radius) {
-				v = parameters.waypoints_radius[i];
-			}
-			properties_waypoints.push_back({ float(parameters.waypoints_impact_radius[i]), v });
-		}
-		full_name = parameters.karstic_network_name + "_waypoints.txt";
-		full_dir_name = parameters.save_repository + "/outputs";
-		save_pointset(full_name, full_dir_name, waypoints, property_names_waypoints, properties_waypoints);
+		//// save waypoints
+		//std::vector<Vector3> waypoints = parameters.waypoints;
+		//std::vector<std::string> property_names_waypoints = { "impact_radius",  "radius" };
+		//std::vector<std::vector<float>> properties_waypoints;
+		//for (size_t i = 0; i < parameters.waypoints_impact_radius.size(); ++i) {
+		//	float v = 0;
+		//	if (parameters.use_waypoints_radius) {
+		//		v = parameters.waypoints_radius[i];
+		//	}
+		//	properties_waypoints.push_back({ float(parameters.waypoints_impact_radius[i]), v });
+		//}
+		//full_name = parameters.karstic_network_name + "_waypoints.txt";
+		//full_dir_name = parameters.save_repository + "/outputs";
+		//save_pointset(full_name, full_dir_name, waypoints, property_names_waypoints, properties_waypoints);
 
 		for (int i = 0; i < parameters.number_of_iterations; i++) {
 
@@ -196,12 +196,22 @@ namespace KarstNSim {
 				}
 
 				if (parameters.use_amplification) {
+					
+					if (parameters.min_distance_amplification > parameters.max_distance_amplification) {
+						std::cout << "[params][error] min_distance_amplification ("
+								  << parameters.min_distance_amplification << ") > max_distance_amplification ("
+								  << parameters.max_distance_amplification << ")." << std::endl;
+						throw std::runtime_error(
+							"Amplification distance window is invalid (min > max). Swap the values in the instruction file."
+						);
+					}
+					
 					karst.set_amplification_params(parameters.max_distance_amplification, parameters.min_distance_amplification, parameters.nb_cycles);
 				}
 
 				karst.set_water_table_weight(parameters.water_table_constraint_weight_vadose, parameters.water_table_constraint_weight_phreatic);
 				karst.set_simulation_parameters(parameters.nghb_count, parameters.use_max_nghb_radius, parameters.nghb_radius, parameters.poisson_radius, parameters.gamma, parameters.multiply_costs, parameters.vadose_cohesion);
-				karst.read_connectivity_matrix(&parameters.sinks, &parameters.springs);
+				karst.read_connectivity_matrix(parameters.simulation_input_dir, &parameters.sinks, &parameters.springs);
 			}
 
 			if (parameters.simulate_sections) {
@@ -216,7 +226,6 @@ namespace KarstNSim {
 			float init_time = float(time1 - begin_time) / CLOCKS_PER_SEC;
 
 			std::cout << "Parameters were prepared for simulation (" << init_time << " s)" << std::endl;
-			std::cout << "Cost graph / network computation begins..." << std::endl;
 
 			float time_needed = karst.run_simulation(parameters.sections_simulation_only, parameters.create_nghb_graph, parameters.create_nghb_graph_property, parameters.use_amplification,
 				parameters.use_sampling_points, parameters.fraction_karst_perm, parameters.fraction_old_karst_perm, parameters.max_inception_surface_distance, &parameters.sampling_points, parameters.create_vset_sampling, parameters.use_density_property,
@@ -282,8 +291,28 @@ namespace KarstNSim {
 			karst.set_save_directory(parameters.save_repository);
 
 			if (parameters.use_waypoints) {
-				parameters.use_waypoints_radius = true;
-				karst.set_waypoints(&parameters.waypoints, parameters.use_waypoints_radius, parameters.waypoints_radius, parameters.waypoints_impact_radius, parameters.waypoints_weight);
+				// Decide safely whether we can use per-waypoint radius
+				bool can_use_radius = parameters.use_waypoints_radius
+					&& (parameters.waypoints_radius.size() == parameters.waypoints.size());
+
+				if (parameters.use_waypoints_radius && !can_use_radius) {
+					std::cout << "[waypoints][warn] 'radius' property missing or wrong size for sections-only; "
+						<< "per-waypoint radius will be disabled." << std::endl;
+				}
+
+				// 'impact_radius' is mandatory
+				if (parameters.waypoints_impact_radius.size() != parameters.waypoints.size()) {
+					std::cout << "[waypoints][error] missing/invalid 'impact_radius' ("
+						<< parameters.waypoints_impact_radius.size() << " vs "
+						<< parameters.waypoints.size() << ")." << std::endl;
+					throw std::runtime_error("Waypoints enabled but 'impact_radius' is missing or mismatched.");
+				}
+
+				karst.set_waypoints(&parameters.waypoints,
+					can_use_radius,
+					parameters.waypoints_radius,
+					parameters.waypoints_impact_radius,
+					parameters.waypoints_weight);
 			}
 
 			if (parameters.use_previous_networks) {
@@ -302,7 +331,7 @@ namespace KarstNSim {
 			std::cout << "Parameters were prepared for simulation (" << init_time << " s)" << std::endl;
 			std::cout << "Simulation of properties..." << std::endl;
 
-				karst.run_simulation_properties(skel, &parameters.alteration_lines, parameters.use_ghostrocks, parameters.ghostrock_max_vertical_size, parameters.use_max_depth_constraint, &parameters.max_depth_horizon, parameters.ghostrock_width);
+			karst.run_simulation_properties(skel, &parameters.alteration_lines, parameters.use_ghostrocks, parameters.ghostrock_max_vertical_size, parameters.use_max_depth_constraint, &parameters.max_depth_horizon, parameters.ghostrock_width);
 			const clock_t time2 = clock();
 			float real_time_needed = float(time2 - begin_time) / CLOCKS_PER_SEC;
 

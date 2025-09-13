@@ -34,3 +34,18 @@ Major update with new features from the PhD thesis (Gouy, 2025), including:
 - Possibility to incorporate ghost-rocks in the simulation through surface alteration lines: the code will first interpolate an alterite volume beneath the line (with elliptic cross-section) and then reduce the cost of edges traversing this volume (through the intrinsic karstification potential subcost).
 - New key points available : waypoints and karst-free points. Both affect the path chosen during shortest path computations. Waypoints can be seen as soft data constraints, by reducing cost of all edges less than a given radius away from a waypoint (can be used when some conduits positions are known) and no-karst points also have a spherical effect zone around them which simply deletes any sampling point in it, hence blocking any path close to them.
 - Conduit dimensions simulation step using the 1D-Curvilinear Branchwise modified SGS algorithm of Frantz et al. (2021). Allows to generate any property on the skeleton nodes, such as Re (equivalent radius) and WH (widht-height ratio).
+
+## Version 1.3
+
+09/12/2025
+
+### Modifications
+
+Minor update in terms of code functionalities:
+- Added an input configuration reference manual (config_manual.md) which precises the type, theoretical and typical range of values, meaning, behavior and practical effect of all input parameters. Users can now refer to it for correct KarstNSim use, which avoids the requirement to generate the doxygen documentation for most users.
+- Updated the "base" example provided with some new functionalities, and added three other examples:
+	- A "Polygenic Karst" example which simulated the carving of new conduits following a base level drop from the base case.
+	- An "Amplification" example which uses the amplification step on the network generated in the "polygenic karst" example.
+	- A "Karst section generation" example, which, based on the amplified network, simulates an equivalent radius on the nodes of the network using a curvilinear SGS algorithm (Frantz et al. 2021).
+- Added more log lines during simulation so that the user is kept informed of the completion and time duration of each step. In case of a crash, the user can also, as a result, provide more precise information to the developer for a fix.
+- Some minor bug fixes.

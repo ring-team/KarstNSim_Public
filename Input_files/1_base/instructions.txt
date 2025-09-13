@@ -12,16 +12,16 @@
 // Name of generated outputs and path of the directory where i) outputs directory and ii) inputs directory are located (normally, the root of the archive)
 // (ALWAYS keep at the beginning of the file):
 
-karstic_network_name: example
+karstic_network_name: base
 main_repository: ../../..
 
 // General parameters :
 
-domain: Input_files/example_box.txt
+domain: Input_files/1_base/example_box.txt
 selected_seed: 1
 number_of_iterations: 1
 vary_seed: true
-topo_surface: Input_files/example_topo_surf.txt
+topo_surface: Input_files/1_base/example_topo_surf.txt
 
 // Use already sampled points... :
 
@@ -42,37 +42,37 @@ use_max_nghb_radius: false
 
 // Inlets, outlets and waypoints :
 
-sinks: Input_files/example_sinks.txt
+sinks: Input_files/1_base/example_sinks.txt
 use_sinks_radius: false
 
-springs: Input_files/example_springs.txt
+springs: Input_files/1_base/example_springs.txt
 use_springs_radius: false
 
 allow_single_outlet_connection: true
 
 use_waypoints: false
-waypoints: Input_files/example_waypoints.txt
+waypoints: Input_files/1_base/example_waypoints.txt
 waypoints_weight: 0.1
 use_waypoints_radius: false
 
 // Ghost-rocks:
 
 use_ghostrocks: false
-alteration_lines: Input_files/example_alteration_lines.txt
+//alteration_lines:
 //interpolate_lines: false
-ghostrock_max_vertical_size: 110
-use_max_depth_constraint: true
-ghost_rock_weight: 2
-max_depth_horizon: Input_files/example_inception_surf3.txt
-ghostrock_width: 60
+//ghostrock_max_vertical_size: 110
+//use_max_depth_constraint: true
+//ghost_rock_weight: 2
+//max_depth_horizon:
+//ghostrock_width: 60
 
 // Inception surfaces :
 
 add_inception_surfaces: true
-refine_surface_sampling: 2
-inception_surfaces: Input_files/example_inception_surf1.txt Input_files/example_inception_surf2.txt
-inception_surface_constraint_weight: 1.0
-max_inception_surface_distance: 50.0
+refine_surface_sampling: 1
+inception_surfaces: Input_files/1_base/example_inception_surf1.txt Input_files/1_base/example_inception_surf2.txt
+inception_surface_constraint_weight: 1
+max_inception_surface_distance: 20.0
 
 // Karstification potential (property scanned from grid/box) :
 
@@ -97,23 +97,23 @@ sections_simulation_only: false
 // No-karst spheres :
 
 use_no_karst_spheres: true
-sphere_centers: Input_files/example_nokarstspheres.txt
+sphere_centers: Input_files/1_base/example_nokarstspheres.txt
 
 // Water tables (one for each spring) and vadose and phreatic trends (mandatory) :
 
-surf_wat_table: Input_files/example_watertable_surf1.txt Input_files/example_watertable_surf2.txt
-water_table_constraint_weight_vadose: 1.0
+surf_wat_table: Input_files/1_base/example_watertable_surf1.txt Input_files/1_base/example_watertable_surf2.txt
+water_table_constraint_weight_vadose: 2.0
 water_table_constraint_weight_phreatic: 1.0
 
 // Deadend points amplification :
 
-use_deadend_points: true
+use_deadend_points: false
 nb_deadend_points: 15
 max_distance_of_deadend_pts: 50
 
 // Cycle amplification :
 
-use_cycle_amplification: true
+use_cycle_amplification: false
 max_distance_amplification: 150
 min_distance_amplification: 50
 nb_cycles: 20
@@ -129,7 +129,7 @@ noise_weight: 10
 // Create sections :
 
 simulate_sections: false
-simulation_distribution: Input_files/eq_radius_initial_distrib.txt
+simulation_distribution: Input_files/1_base/eq_radius_initial_distrib.txt
 global_vario_range = 50
 global_range_of_neighborhood = 150
 global_vario_sill = 0.92

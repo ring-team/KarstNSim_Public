@@ -37,11 +37,23 @@ bool ParseInputs::parse_boolean(const std::string& input) {
 
 std::vector<float> ParseInputs::read_distrib(const std::string& directory, const std::string& filename) {
 	std::vector<float> values;
-	std::string full_path = directory + "/" + filename;
+
+	// --- Defensive guard: allow empty/none filenames gracefully ---
+	// Treat empty or sentinel values as "no distribution provided".
+	if (filename.empty() ||
+		filename == "-" ||
+		filename == "none" || filename == "None" || filename == "NONE" ||
+		filename == "null" || filename == "Null" || filename == "NULL") {
+		// Not an error: just return an empty vector. The caller can check emptiness if needed.
+		return values;
+	}
+
+	const std::string full_path = directory + "/" + filename;
+
 	std::ifstream file(full_path);
-	if (!file) {
+	if (!file.is_open()) {
 		std::cerr << "Error opening file: " << full_path << std::endl;
-		std::cerr << "Reason: " << strerror(errno) << std::endl;
+		std::cerr << "Reason: " << std::strerror(errno) << std::endl;
 		throw std::runtime_error("File not found: " + full_path);
 	}
 
@@ -56,6 +68,7 @@ std::vector<float> ParseInputs::read_distrib(const std::string& directory, const
 
 	return values;
 }
+
 
 KarstNSim::ParamsSource ParseInputs::parse(const std::string& filename) {
 
@@ -86,6 +99,12 @@ KarstNSim::ParamsSource ParseInputs::parse(const std::string& filename) {
 		std::cerr << "Error opening file: " << filename << std::endl;
 		std::cerr << "Error: " << std::strerror(errno) << std::endl;
 		throw std::runtime_error("Failed to open input file");
+	}
+
+	{
+		const std::string& p = filename;
+		const size_t pos = p.find_last_of("/\\");
+		params.simulation_input_dir = (pos == std::string::npos) ? std::string() : p.substr(0, pos);
 	}
 
 	std::string line;

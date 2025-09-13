@@ -95,12 +95,31 @@ namespace KarstNSim {
 		}
 	}
 
-	void KarsticNetwork::set_waypoints(const std::vector<Vector3>* waypoints, bool use_waypoints_radius, const std::vector<float>& propwaypointsradius, const std::vector<float>& propwaypointsimpactradius, float waypoints_weight) {
+	void KarsticNetwork::set_waypoints(const std::vector<Vector3>* waypoints,
+		bool use_waypoints_radius,
+		const std::vector<float>& propwaypointsradius,
+		const std::vector<float>& propwaypointsimpactradius,
+		float waypoints_weight)
+	{
+		const int n_pts = static_cast<int>(waypoints->size());
 
-		use_waypoints_radius_ = use_waypoints_radius;
+		// Mandatory: impact radius size must match
+		if (static_cast<int>(propwaypointsimpactradius.size()) != n_pts) {
+			std::cout << "[waypoints][error] impact_radius size mismatch: points=" << n_pts
+				<< " impact_radius=" << propwaypointsimpactradius.size() << std::endl;
+			throw std::runtime_error("Missing/invalid 'impact_radius' for waypoints: size mismatch.");
+		}
+
+		// Optional: per-waypoint radius only if sizes match
+		use_waypoints_radius_ = use_waypoints_radius
+			&& (static_cast<int>(propwaypointsradius.size()) == n_pts);
+		if (use_waypoints_radius && !use_waypoints_radius_) {
+			std::cout << "[waypoints][warn] per-waypoint 'radius' ignored (size mismatch)." << std::endl;
+		}
+
 		params.waypoints_weight = waypoints_weight;
-		for (int i = 0; i < waypoints->size(); i++)
-		{
+
+		for (int i = 0; i < n_pts; ++i) {
 			this->keypts.emplace_back(waypoints->at(i), KeyPointType::Waypoint);
 			if (use_waypoints_radius_) {
 				propwaypointsradius_.push_back({ propwaypointsradius[i], int(keypts.size() - 1) });
@@ -224,12 +243,10 @@ namespace KarstNSim {
 	{
 		// --- Defensive checks to prevent crashes and undefined behavior ---
 		if (sphere_centers == nullptr || sphere_centers->empty()) {
-			std::cout << "WARNING: no 'no-karst' spheres provided; skipping spheres setup." << std::endl;
 			return;
 		}
 
 		if (sphere_radius.empty()) {
-			std::cout << "WARNING: sphere_radius is empty; skipping 'no-karst' spheres setup to avoid crash." << std::endl;
 			return;
 		}
 
@@ -266,9 +283,6 @@ namespace KarstNSim {
 			params.spheres.push_back(Sphere(sphere_centers->at(i), r));
 			++added;
 		}
-
-		std::cout << "[ok] set_no_karst_spheres_parameters() -> added "
-			<< added << " sphere(s)" << std::endl;
 	}
 
 
@@ -338,9 +352,11 @@ namespace KarstNSim {
 		outfile.close();
 	}
 
-	void KarsticNetwork::read_connectivity_matrix(const std::vector<Vector3>* sinks, const std::vector<Vector3>* springs) {
+	void KarsticNetwork::read_connectivity_matrix(const std::string& simulation_input_dir, const std::vector<Vector3>* sinks, const std::vector<Vector3>* springs) {
 
-		std::string connectivity_matrix_path = params.directoryname + "/Input_files/connectivity_matrix.txt";
+		//std::string connectivity_matrix_path = params.directoryname + "/Input_files/connectivity_matrix.txt";
+		const std::string connectivity_matrix_path = simulation_input_dir + "/connectivity_matrix.txt";
+
 		int nb_sinks = static_cast<int>(sinks->size());
 		int nb_springs = static_cast<int>(springs->size());
 
@@ -600,9 +616,6 @@ namespace KarstNSim {
 				inception_horizons, water_tables, use_sampling_points, box, max_inception_surface_distance, sampling_points, create_vset_sampling,
 				use_density_property, k_pts, fraction_old_karst_perm, propdensity, propikp, topo_surface_);
 			const clock_t time2 = clock();
-			std::cout << " * Volumetric graph successfully generated ("
-				<< std::fixed << std::setprecision(3)
-				<< float(time2 - time1) / CLOCKS_PER_SEC << " s)" << std::endl;
 
 			std::cout << "Cost graph initialized ("
 				<< std::fixed << std::setprecision(3)
