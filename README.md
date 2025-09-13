@@ -91,24 +91,24 @@ A minimal, single-phase run on the synthetic dataset (as in Fig. 12 of the 2024 
 - intrinsic karstification potential,
 - inception surfaces.
 
-<img src="" alt="base_example.png" width="100%" align="center">
+<img src="base_example.png" alt="Base example" width="100%" align="center">
 
 ### 2) Polygenic karst (multi-phase reuse)
 Reuses a previously generated network by **down-weighting already traversed edges**, mimicking multi-phase karstification (here, base-level drop with flow redirected to another outlet). The example disables the fracture term to emulate a more homogeneous medium in the bottom of the aquifer, and showcases **waypoints** and **karst-free points** close to the aquifer substratum.
 
-<img src="" alt="polygenic_example.png" width="100%" align="center">
+<img src="polygenic_example.png" alt="Polygenic example" width="100%" align="center">
 
 ### 3) Amplification
 Starting from the **base** network, this example runs the amplification step to control density and topology by adding:
 - small-scale dead-end branches,  
 - a limited number of cycles/loops.
 
-<img src="" alt="amplification_example.png" width="100%" align="center">
+<img src="amplification_example.png" alt="Amplification example" width="100%" align="center">
 
 ### 4) Karst section generation (curvilinear SGS)
 Given the **amplified** network, this example simulates **equivalent radii on nodes** using a **curvilinear SGS** algorithm (Frantz et al., 2021). Variogram parameters mirror those in the paper; radii are visualized in log-scale and mapped to node sphere size for rendering.
 
-<img src="" alt="karst_section_generation_example.png" width="100%" align="center">
+<img src="karst_section_generation_example.png" alt="Karst section generation example" width="100%" align="center">
 
 The main option of KarstNSim not presented in the above examples is the ghost-rock-driven simulation. Read the config reference file for information on correct use.
 
