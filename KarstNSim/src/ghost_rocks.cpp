@@ -52,7 +52,7 @@ namespace KarstNSim {
 		closest_point_on_closest_segment_to_point_in_polyline(pt, polyline, closest_point, min_distance_sq);
 		// check that the z of the cell pt is within boundaries of the ghost-rock (and, if used, above the substratum horizon)
 		if (use_max_depth_constraint) {
-			if (pt.z < closest_point.z - length || pt.z > closest_point.z || GraphOperations::CheckBelowSurf(pt, &substratum_surf, centers2D)) {
+			if (pt.z < closest_point.z - length || pt.z > closest_point.z || GraphOperations::CheckBelowSurf(pt, substratum_surf, centers2D)) {
 				return false;
 			}
 		}

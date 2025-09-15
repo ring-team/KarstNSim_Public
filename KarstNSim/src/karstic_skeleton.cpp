@@ -451,16 +451,16 @@ namespace KarstNSim {
 		return new_pts_and_idx;
 	}
 
-	float KarsticSkeleton::compute_wt_ratio(GraphOperations* graph, std::vector<Surface>* water_tables) {
+	float KarsticSkeleton::compute_wt_ratio(const GraphOperations& graph, const std::vector<Surface>& water_tables) {
 		float ratio = 0;
 
-		float dist_btw_wt = magnitude(water_tables->at(0).get_boundbox_max() - water_tables->at(1).get_boundbox_max());
+		float dist_btw_wt = magnitude(water_tables.at(0).get_boundbox_max() - water_tables.at(1).get_boundbox_max());
 
 
 		for (auto& node : nodes) {
 
-			float dist1 = graph->distsurf(node.p, &water_tables->at(0), std::numeric_limits<float>::infinity(), water_tables->at(0).get_centers_cloud());
-			float dist2 = graph->distsurf(node.p, &water_tables->at(1), std::numeric_limits<float>::infinity(), water_tables->at(1).get_centers_cloud());
+			float dist1 = graph.distsurf(node.p, water_tables[0], std::numeric_limits<float>::infinity(), water_tables[0].get_centers_cloud());
+			float dist2 = graph.distsurf(node.p, water_tables[1], std::numeric_limits<float>::infinity(), water_tables[1].get_centers_cloud());
 
 			if (dist1*dist1 + dist2 * dist2 < 0.95*dist_btw_wt*dist_btw_wt) {
 				ratio += 1;
