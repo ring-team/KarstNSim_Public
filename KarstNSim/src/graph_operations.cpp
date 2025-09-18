@@ -95,11 +95,13 @@ namespace KarstNSim {
 		// Whatever the original dimensions of the Box are, they are transformed during the algorithm and back-transformed at the end.
 		std::vector<int> active_list({ 1 });
 		bool init_pt_in_grid = false;
-		Vector3  pos_init;
+		Vector3 pos_init;
 		int64_t flattened_index = 0;
 		int64_t converted_flat_index = 0;
+		const int max_attempts = 100000;
+		int attempt_count = 0;
 		if (use_density_property) {
-			while (!init_pt_in_grid) {
+			while (!init_pt_in_grid && attempt_count < max_attempts) {
 				pos_init.x = generateRandomFloat(0, dim1);
 				pos_init.y = generateRandomFloat(0, dim2);
 				pos_init.z = generateRandomFloat(0, dim3); // first random point of index 1
@@ -112,10 +114,14 @@ namespace KarstNSim {
 				if (propdensity[converted_flat_index] > 0 && CheckBelowSurf(real_pt, topo_surface, centers2D)) { // we make sure here that the 1st random point is indeed a) in the karstifiable zone (propdensity >0) and b) below topography
 					init_pt_in_grid = true;
 				}
+				attempt_count++;
+			}
+			if (!init_pt_in_grid) {
+				throw std::runtime_error("Failed to find a valid starting point in the grid after maximum attempts.");
 			}
 		}
 		else {
-			while (!init_pt_in_grid) {
+			while (!init_pt_in_grid && attempt_count < max_attempts) {
 				pos_init.x = generateRandomFloat(0, dim1);
 				pos_init.y = generateRandomFloat(0, dim2);
 				pos_init.z = generateRandomFloat(0, dim3);
@@ -126,6 +132,10 @@ namespace KarstNSim {
 				if (CheckBelowSurf(real_pt, topo_surface, centers2D)) { // we make sure here that the 1st random point is indeed below topography
 					init_pt_in_grid = true;
 				}
+				attempt_count++;
+			}
+			if (!init_pt_in_grid) {
+				throw std::runtime_error("Failed to find a valid starting point below topography after maximum attempts.");
 			}
 		}
 
