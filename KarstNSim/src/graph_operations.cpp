@@ -111,7 +111,8 @@ namespace KarstNSim {
 				real_pt.x = min.x + (pos_init.x * u.x / dim1 + pos_init.y * v.x / dim2 + pos_init.z * w.x / dim3);
 				real_pt.y = min.y + (pos_init.x * u.y / dim1 + pos_init.y * v.y / dim2 + pos_init.z * w.y / dim3);
 				real_pt.z = min.z + (pos_init.x * u.z / dim1 + pos_init.y * v.z / dim2 + pos_init.z * w.z / dim3);
-				if (propdensity[converted_flat_index] > 0 && CheckBelowSurf(real_pt, topo_surface, centers2D)) { // we make sure here that the 1st random point is indeed a) in the karstifiable zone (propdensity >0) and b) below topography
+				// we make sure here that the 1st random point is indeed a) in the karstifiable zone (propdensity >0) and b) below topography
+				if (propdensity[converted_flat_index] > 0 && CheckBelowSurf(real_pt, topo_surface, centers2D)) {
 					init_pt_in_grid = true;
 				}
 				attempt_count++;
@@ -138,6 +139,8 @@ namespace KarstNSim {
 				throw std::runtime_error("Failed to find a valid starting point below topography after maximum attempts.");
 			}
 		}
+
+		std::cout << " * Will start Poisson sampling with r_min = " << r_min << " and initial point at (" << pos_init.x << "," << pos_init.y << "," << pos_init.z << ")" << std::endl;
 
 		Vector3 new_p; // add the first point to the samples list
 		new_p.x = min.x + (pos_init.x * u.x / dim1 + pos_init.y * v.x / dim2 + pos_init.z * w.x / dim3);
@@ -603,15 +606,18 @@ namespace KarstNSim {
 				new_pt.z = sampling_points[i].z;
 				samples.push_back(new_pt);
 			}
+			std::cout << " * Using " << samples.size() << " user-defined sampling points." << std::endl;
 		}
 
 		// 1.2b else we sample them with modified Dwork poisson sphere sampling
 		else {
 			SampleSpaceDwork(box, use_density_property, k_pts, propdensity, topo_surface);
+			std::cout << " * Using " << samples.size() << " automatically sampled points." << std::endl;
 		}
 
 		// 1.3 remove points sampled inside the "no-karst" spheres
 		// /!\ NEVER make a no-karst sphere and a keypoint intersect (makes code crash)
+		size_t old_sample_size = samples.size();
 		PointCloud centers_sampling_pts(samples);
 		std::vector<Neighbour> all_candidates;
 		for (int sphere = 0; sphere < params.spheres.size(); sphere++) {
@@ -643,8 +649,10 @@ namespace KarstNSim {
 			}
 			remove_neighbors(nodes_on_wt_surfaces[wt], all_candidates_wt);
 		}
+		std::cout << " * Removed " << old_sample_size - samples.size() << " points from the sampling set because they were inside no-karst spheres. " << std::endl;
 
 		// 1.4 Add inception surface points to samples
+		old_sample_size = samples.size();
 		for (int i = 0; i < nodes_on_inception_surfaces.size(); i++) {
 			float value_itr = 1.;
 			if (!use_sampling_points && use_density_property) {
@@ -660,8 +668,10 @@ namespace KarstNSim {
 				process_node_in_samples(nodes_on_inception_surfaces[i], on_surf_flags_idx[0]);
 			}
 		}
+		std::cout << " * Added " << samples.size() - old_sample_size << " points from the inception surfaces to the sampling set. " << std::endl;
 
 		// 1.5 Add water table points to samples
+		old_sample_size = samples.size();
 		for (int i = 0; i < keypts.size(); i++) { // first the keypoints
 			if (keypts[i].type == KeyPointType::Spring) {
 				auto it = std::find(samples.begin(), samples.end(), keypts[i].p);
@@ -687,8 +697,10 @@ namespace KarstNSim {
 				}
 			}
 		}
+		std::cout << " * Added " << samples.size() - old_sample_size << " points from the water table surfaces to the sampling set. " << std::endl;
 
 		// 1.6 Add previously simulated karst networks samples
+		old_sample_size = samples.size();
 		for (int i = 0; i < params.PtsOldGraph.size(); i++) {
 			std::vector<int> idx_i;
 			for (int j = 0; j < 2; j++) { // =2 (start and end points of each segment of the old graph)
@@ -696,6 +708,7 @@ namespace KarstNSim {
 			}
 			params.IdxOldGraph.set_row(i, idx_i);
 		}
+		std::cout << " * Added " << samples.size() - old_sample_size << " points from the previously simulated karst networks to the sampling set. " << std::endl;
 		//IdxOldGraph = params.IdxOldGraph;
 		std::vector<std::string> noise_prop_name;
 		if (params.use_noise) {
