@@ -387,11 +387,10 @@ namespace KarstNSim {
 	public:
 		Surface(const std::string& name = "DefaultName"); //!< Default constructor with optional surface name.
 		Surface(std::vector<Vector3>, std::vector<Triangle>, const std::string& name = "DefaultName"); //!< Constructor that initializes the surface with points, triangles, and an optional name.
-		int get_nb_trgls(); //!< Returns the number of triangles in the surface.
-		int get_nb_pts(); //!< Returns the number of points in the surface.
+		int get_nb_trgls() const; //!< Returns the number of triangles in the surface.
+		int get_nb_pts() const; //!< Returns the number of points in the surface.
 		bool is_empty() const; //!< Checks if the surface is empty (no points or triangles).
-		const Triangle& get_triangle(const int& i); //!< Returns the triangle at index i.
-		const Triangle& get_triangle(const int& i) const; //!< Returns the triangle at index i (const version).
+		const Triangle& get_triangle(const int& i) const; //!< Returns the triangle at index i.
 		const Vector3& get_node(const int& i) const; //!< Returns the point (node) at index i.
 		Vector3 nearest(Vector3 p1, Vector3 p2, Vector3 ptest); //!< Finds the nearest point between two points p1 and p2 to the test point ptest.
 		Vector3 nearest(Vector3 p1, Vector3 p2, Vector3 p3, Vector3 ptest); //!< Finds the nearest point among three points p1, p2, and p3 to the test point ptest.
@@ -499,7 +498,7 @@ namespace KarstNSim {
 	\brief Returns the number of triangles in the surface.
 	\return The number of triangles.
 	*/
-	inline int Surface::get_nb_trgls() {
+	inline int Surface::get_nb_trgls() const {
 		return int(trgls_.size());
 	}
 
@@ -507,7 +506,7 @@ namespace KarstNSim {
 	\brief Returns the number of points in the surface.
 	\return The number of points.
 	*/
-	inline int Surface::get_nb_pts() {
+	inline int Surface::get_nb_pts() const {
 		return int(pts_.size());
 	}
 
@@ -521,15 +520,6 @@ namespace KarstNSim {
 
 	/*!
 	\brief Returns the triangle at index i.
-	\param i The index of the triangle.
-	\return A reference to the triangle at index i.
-	*/
-	inline const Triangle& Surface::get_triangle(const int& i) {
-		return trgls_[i];
-	}
-
-	/*!
-	\brief Returns the triangle at index i (const version).
 	\param i The index of the triangle.
 	\return A constant reference to the triangle at index i.
 	*/
