@@ -197,6 +197,12 @@ namespace KarstNSim {
 				}
 			}
 		}
+		if (!path.empty()) {
+			const std::size_t desired = path.size();
+			if (path_cost.size() < desired) {
+				path_cost.insert(path_cost.begin(), desired - path_cost.size(), 0.f);
+			}
+		}
 		return std::make_pair(path, path_cost);
 	}
 

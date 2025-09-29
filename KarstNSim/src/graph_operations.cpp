@@ -1218,7 +1218,10 @@ namespace KarstNSim {
 				if (!already_reached && !path.empty()) {
 					vadose_full.insert(vadose_full.end(), path.size() - 1, false);
 					path_full.insert(path_full.end(), path.begin() + 1, path.end());
-					path_cost_full.insert(path_cost_full.end(), path_cost.begin() + 1, path_cost.end());
+					const std::size_t skip = path_cost.empty() ? 0u : 1u;
+					if (path_cost.size() > skip) {
+						path_cost_full.insert(path_cost_full.end(), path_cost.begin() + skip, path_cost.end());
+					}
 				}
 
 				all_paths[i][j] = path_full;
