@@ -31,19 +31,13 @@ namespace KarstNSim {
 		}
 	}
 
-	// Function to check if a file exists
-	static bool file_exists(const std::string& file_path) {
-		std::error_code ec;
-		return std::filesystem::exists(file_path, ec) && !ec;
-	}
-
 	// Generate a unique filename by appending (0), (1), etc. if needed
 	std::filesystem::path make_unique_filename(const std::string& base_filename, const std::string& save_directory) {
 		std::filesystem::path dirPath(save_directory);
 		std::filesystem::path filePath(base_filename);
 		std::filesystem::path fullPath = dirPath / filePath;
-		
-		if (!file_exists(fullPath)) {
+
+		if (!std::filesystem::exists(fullPath)) {
 			return fullPath;  // Already unique
 		}
 
@@ -56,7 +50,7 @@ namespace KarstNSim {
 			std::string uniqueFilename = baseName + "(" + std::to_string(copyIndex) + ")" + extension;
 			uniquePath = dirPath / uniqueFilename;
 			copyIndex++;
-		} while (file_exists(uniquePath));
+		} while (std::filesystem::exists(uniquePath));
 		
 		return uniquePath;
 	}
