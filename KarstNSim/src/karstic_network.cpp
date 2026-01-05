@@ -616,6 +616,8 @@ namespace KarstNSim {
 
 			// Compute 3D cost graph
 
+			std::cout << "\nSTEP 1 - Generation of cost graph:\n\n";
+
 			GraphOperations graph;
 			graph.InitializeCostGraph(
 				create_nghb_graph, create_nghb_graph_property, keypts, params,
@@ -625,9 +627,11 @@ namespace KarstNSim {
 				fraction_old_karst_perm, propdensity, propikp, topo_surface_);
 			const clock_t time2 = clock();
 
-			std::cout << "Cost graph initialized (" << std::fixed
+			std::cout << "-> STEP 1 completed: Cost graph generated (" << std::fixed
 					<< std::setprecision(3) << float(time2 - time1) / CLOCKS_PER_SEC
-					<< " s)" << std::endl;
+					<< " s)\n";
+
+			std::cout << "\nSTEP 2 - Simulation of the karst network skeleton: \n\n";
 
 			// Compute karstic skeleton
 			std::vector<std::vector<int>> karst_paths;
@@ -653,8 +657,9 @@ namespace KarstNSim {
 
 			const clock_t time3 = clock();
 
-			std::cout << "Skeleton computed (" << std::fixed << std::setprecision(3)
+			std::cout << "-> STEP 2 completed: Skeleton computed (" << std::fixed << std::setprecision(3)
 					<< float(time3 - time2) / CLOCKS_PER_SEC << " s)" << std::endl;
+			std::cout << "\nSTEP 3 - Network amplification (cycles and deadends): \n\n";
 
 			// Network preparation
 			skel.detect_intersection_points(karst_paths);
@@ -666,7 +671,6 @@ namespace KarstNSim {
 				skel.amplify_deadend(&graph, max_distance_of_deadend_pts_, nb_deadend_points_, params);
 			}
 			const clock_t time5 = clock();
-
 			if (use_deadend_pts_) {
 				std::cout << "Network amplified with deadend points (" << std::fixed
 							<< std::setprecision(3) << float(time5 - time4) / CLOCKS_PER_SEC
@@ -679,35 +683,59 @@ namespace KarstNSim {
 					graph.add_noise();
 				}
 				std::pair<float, float> result = skel.amplify_noise(&graph, params);
-				const clock_t time5bis = clock();
+			}
+			const clock_t time5bis = clock();
+			if (use_amplification) {
+
+					std::cout << "Network amplified with cycles (" << std::fixed
+					<< std::setprecision(3) << float(time5bis - time5) / CLOCKS_PER_SEC
+					<< " s)" << std::endl;
+			}
+						
+			if (!(use_amplification) && !(use_deadend_pts_)) {
+				std::cout << "-> STEP 3 skipped (no amplification)\n";
+			} else {
+				std::cout << "-> STEP 3 completed: Network amplified (" << std::fixed << std::setprecision(3)
+					<< float(time5bis - time3) / CLOCKS_PER_SEC << " s)" << std::endl; 
 			}
 
 			const clock_t time6 = clock();
+			std::cout << "\nSTEP 4 - Simulation of conduit sections: \n\n";
 			skel.detect_intersection_points(karst_paths);
 			skel.update_branch_ID(karst_paths);
 
 			create_sections(skel);
 			const clock_t time7 = clock();
-
-			std::cout << "Conduits sections generated (" << std::fixed
+			if (geostatparams.is_used) {
+				std::cout << "-> STEP 4 completed: Conduit sections generated (" << std::fixed
 					<< std::setprecision(3) << float(time7 - time6) / CLOCKS_PER_SEC
 					<< " s)" << std::endl;
-
+			} else {
+				std::cout << "-> STEP 4 skipped (no section simulation required)\n";
+			}
 			// save network
 			auto res = skel.get_result(params, karstic_network_name);
 			const clock_t time8 = clock();
 
-			std::cout << "Karst network saved (" << std::fixed << std::setprecision(3)
+			std::cout << "\nKarst network saved (" << std::fixed << std::setprecision(3)
 					<< float(time8 - time7) / CLOCKS_PER_SEC << " s)" << std::endl;
 
 			return res;
 		} else if (sections_simulation_only) { // only generate sections
+		
+			std::cout << "\nSimulation of properties only..." << std::endl;
+		
 			std::vector<std::vector<float>> costs_graph(params.PtsOldGraph.size(), std::vector<float>(2, 0.0)); // dummy vector
 			std::vector<std::vector<char>> vadoseflags_graph(params.PtsOldGraph.size(), std::vector<char>(2, false)); // dummy vector
 			std::vector<int> springidx(params.PtsOldGraph.size(), 1);
 			KarsticSkeleton skel(params.PtsOldGraph, costs_graph, vadoseflags_graph, springidx);
 
 			create_sections(skel);
+			
+			const clock_t time2 = clock();
+			std::cout << "Conduit sections simulated (" << std::fixed << std::setprecision(3)
+					<< float(time2 - time1) / CLOCKS_PER_SEC << " s)" << std::endl << std::endl;
+
 			return skel.get_result(params, karstic_network_name);
 		}
 		return std::nullopt;

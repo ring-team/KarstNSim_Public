@@ -80,10 +80,12 @@ namespace KarstNSim {
 					minIndex = i;
 				}
 			}
+			std::cout << "* Using FVDPSS algorithm (Fast Variable Density Poisson-Sphere Sampling, adapted from Dwork et al. (2021)) with r_min = " << r_min << std::endl;
 		}
 		else { // else we keep a constant density everywhere
 			r_cst = params.graphPoissonRadius;
 			r_min = r_cst;
+			std::cout << "* Using Uniform Density Poisson-Sphere Sampling, with r = " << r_min << std::endl;
 		}
 		int dimx = (int)(dim1*std::sqrt(3) / r_min); // dimensions in the Bridson/Dwork algorithms must always be equal to sqrt(3)/r_min (rounded down)
 		int dimy = (int)(dim2*std::sqrt(3) / r_min);
@@ -98,7 +100,7 @@ namespace KarstNSim {
 		Vector3 pos_init;
 		int64_t flattened_index = 0;
 		int64_t converted_flat_index = 0;
-		const int max_attempts = 100000;
+		const int max_attempts = 10000;
 		int attempt_count = 0;
 		if (use_density_property) {
 			while (!init_pt_in_grid && attempt_count < max_attempts) {
@@ -140,8 +142,6 @@ namespace KarstNSim {
 			}
 		}
 
-		std::cout << " * Will start Poisson sampling with r_min = " << r_min << " and initial point at (" << pos_init.x << "," << pos_init.y << "," << pos_init.z << ")" << std::endl;
-
 		Vector3 new_p; // add the first point to the samples list
 		new_p.x = min.x + (pos_init.x * u.x / dim1 + pos_init.y * v.x / dim2 + pos_init.z * w.x / dim3);
 		new_p.y = min.y + (pos_init.x * u.y / dim1 + pos_init.y * v.y / dim2 + pos_init.z * w.y / dim3);
@@ -157,7 +157,7 @@ namespace KarstNSim {
 
 		const int64_t MAX_SAFE_SIZE = 500000000;
 		if (gridSize > MAX_SAFE_SIZE) {
-			throw std::runtime_error("Grid size exceeds safe limit for vector allocation. Increase value for rmin.");
+			throw std::runtime_error("Grid size exceeds safe limit for vector allocation. Increase value for r_min.");
 		}
 
 		// VER 1 : unordered map
@@ -593,6 +593,8 @@ namespace KarstNSim {
 
 		// 1 Sample points in the domain
 
+		std::cout << "1.1 Generating sampling cloud:\n";
+
 		// 1.1 Key points are added to sample set
 		for (int i = 0; i < keypts.size(); i++) {
 			samples.push_back(keypts[i].p);
@@ -606,13 +608,13 @@ namespace KarstNSim {
 				new_pt.z = sampling_points[i].z;
 				samples.push_back(new_pt);
 			}
-			std::cout << " * Using " << samples.size() << " user-defined sampling points." << std::endl;
+			std::cout << "* Using " << samples.size() << " user-defined sampling points" << std::endl;
 		}
 
 		// 1.2b else we sample them with modified Dwork poisson sphere sampling
 		else {
 			SampleSpaceDwork(box, use_density_property, k_pts, propdensity, topo_surface);
-			std::cout << " * Using " << samples.size() << " automatically sampled points." << std::endl;
+			std::cout << "* Using " << samples.size() << " automatically sampled points" << std::endl;
 		}
 
 		// 1.3 remove points sampled inside the "no-karst" spheres
@@ -649,7 +651,7 @@ namespace KarstNSim {
 			}
 			remove_neighbors(nodes_on_wt_surfaces[wt], all_candidates_wt);
 		}
-		std::cout << " * Removed " << old_sample_size - samples.size() << " points from the sampling set because they were inside no-karst spheres. " << std::endl;
+		std::cout << "* Removed " << old_sample_size - samples.size() << " points from the sampling set because they were inside no-karst spheres" << std::endl;
 
 		// 1.4 Add inception surface points to samples
 		old_sample_size = samples.size();
@@ -668,7 +670,7 @@ namespace KarstNSim {
 				process_node_in_samples(nodes_on_inception_surfaces[i], on_surf_flags_idx[0]);
 			}
 		}
-		std::cout << " * Added " << samples.size() - old_sample_size << " points from the inception surfaces to the sampling set. " << std::endl;
+		std::cout << "* Added " << samples.size() - old_sample_size << " points from the inception surfaces to the sampling set" << std::endl;
 
 		// 1.5 Add water table points to samples
 		old_sample_size = samples.size();
@@ -697,7 +699,7 @@ namespace KarstNSim {
 				}
 			}
 		}
-		std::cout << " * Added " << samples.size() - old_sample_size << " points from the water table surfaces to the sampling set. " << std::endl;
+		std::cout << "* Added " << samples.size() - old_sample_size << " points from the water table surfaces to the sampling set" << std::endl;
 
 		// 1.6 Add previously simulated karst networks samples
 		old_sample_size = samples.size();
@@ -708,7 +710,7 @@ namespace KarstNSim {
 			}
 			params.IdxOldGraph.set_row(i, idx_i);
 		}
-		std::cout << " * Added " << samples.size() - old_sample_size << " points from the previously simulated karst networks to the sampling set. " << std::endl;
+		std::cout << "* Added " << samples.size() - old_sample_size << " points from the previously simulated karst networks to the sampling set" << std::endl;
 		//IdxOldGraph = params.IdxOldGraph;
 		std::vector<std::string> noise_prop_name;
 		if (params.use_noise) {
@@ -731,10 +733,10 @@ namespace KarstNSim {
 		}
 
 		const clock_t time2 = clock();
-		std::cout << " * Points were successfully sampled / recovered ("
+		std::cout << "Points were successfully sampled / recovered ("
 			<< std::fixed << std::setprecision(3)
 			<< float(time2 - time1) / CLOCKS_PER_SEC << " s)" << std::endl;
-
+		std::cout << "1.2 Storing properties on the sampling cloud:"<<std::endl;
 		// 2 Find the karstification potential for each point of the sampling cloud
 		if (params.karstificationCost.used) {
 			const Vector3 u = box.get_u();
@@ -755,7 +757,7 @@ namespace KarstNSim {
 
 		const clock_t time21 = clock();
 
-		std::cout << "\t* Karstification potential was recovered if needed ("
+		std::cout << "* Karstification potential was recovered if needed ("
 			<< std::fixed << std::setprecision(3)
 			<< float(time21 - time2) / CLOCKS_PER_SEC << " s)" << std::endl;
 
@@ -765,7 +767,7 @@ namespace KarstNSim {
 
 		const clock_t time22 = clock();
 
-		std::cout << "\t* Points were flagged in vadose and phreatic zones ("
+		std::cout << "* Points were flagged in vadose and phreatic zones ("
 			<< std::fixed << std::setprecision(3)
 			<< float(time22 - time21) / CLOCKS_PER_SEC << " s)" << std::endl;
 
@@ -776,22 +778,22 @@ namespace KarstNSim {
 		}
 		const clock_t time23 = clock();
 
-		std::cout << "\t* Distance from points to horizons and water tables was computed ("
+		std::cout << "* Distance from points to horizons and water tables was computed ("
 			<< std::fixed << std::setprecision(3)
 			<< float(time23 - time22) / CLOCKS_PER_SEC << " s)" << std::endl;
 
 		const clock_t time3 = clock();
 
-		std::cout << " * Sampling points geometry fully analyzed to create graph ("
+		std::cout << "Sampling points geometry fully analyzed to create graph ("
 			<< float(time3 - time2) / CLOCKS_PER_SEC << " s)" << std::endl;
 
-
+		std::cout <<"1.3 Creation of nearest neighbor cost graph:"<<std::endl;
 		// 5 Nearest neighbour graph creation (initialization + cost computation on each edge)
 		BuildNearestNeighbourGraph(box, fraction_old_karst_perm, max_inception_surface_distance, keypts);
 
 		const clock_t time4 = clock();
 
-		std::cout << " * Nearest neighbor & cost graph generated ("
+		std::cout << "Nearest neighbor & cost graph generated ("
 			<< std::fixed << std::setprecision(3)
 			<< float(time4 - time3) / CLOCKS_PER_SEC << " s)" << std::endl;
 

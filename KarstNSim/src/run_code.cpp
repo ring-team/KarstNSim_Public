@@ -106,9 +106,9 @@ namespace KarstNSim {
 				? static_cast<unsigned int>(parameters.selected_seed + i)
 				: static_cast<unsigned int>(parameters.selected_seed);
 
-			std::cout << "\n========== SIMULATION NUMBER " << i
+			std::cout << "========== SIMULATION " << i
 				<< " STARTED WITH SEED " << used_seed
-				<< " ==========" << std::endl;
+				<< " ==========\n\n";
 
 			// Initialize with selected seed
 
@@ -251,7 +251,7 @@ namespace KarstNSim {
 			float real_time_needed = float(time2 - begin_time) / CLOCKS_PER_SEC;
 
 			std::cout << "Simulation finished (total computation time: "
-				<< real_time_needed << " s)" << std::endl;
+				<< real_time_needed << " s)" << std::endl << std::endl;
 
 			// File writing
 			std::string full_file_name = parameters.save_repository + "/simulation_times.txt";
@@ -276,7 +276,7 @@ namespace KarstNSim {
 				? static_cast<unsigned int>(parameters.selected_seed + i)
 				: static_cast<unsigned int>(parameters.selected_seed);
 
-			std::cout << "\n========== SIMULATION NUMBER " << i
+			std::cout << "\n========== SIMULATION " << i
 				<< " STARTED WITH SEED " << used_seed
 				<< " ==========" << std::endl;
 

@@ -17,7 +17,7 @@ If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
 */
 
 
-// --- Standard headers (add these if missing) ---
+// --- Standard headers ---
 #include <iostream>
 #include <string>
 #include <vector>
@@ -204,7 +204,16 @@ int main(int argc, char* argv[]) {
     KarstNSim::ParamsSource params = inputParser.parse(instructionFile);
 
     std::cout << "Parsing completed (success). Running simulation..." << std::endl;
-    std::cout << "Simulation started" << std::endl;
+	static const char* KARSTNSIM_LOGO = R"ASCII(
+	 _  __               _    _   _  ____   _           
+	| |/ /__ _ _ __ ___ | |_ | \ | |/ ___| (_) _ __ ___ 
+	| ' // _` | '__/ __|| __||  \| |\___ \ | || '_ ` _ \
+	| . \ (_| | |  \__ \| |_ | |\  | ___) || || | | | | |
+	|_|\_\__,_|_|  |___/ \__||_| \_||____/ |_||_| |_| |_|
+			KarstNSim v1.3
+	)ASCII";
+	
+	std::cout << "\n" << KARSTNSIM_LOGO << "\n\n";
 
     // Measure the start time
     auto startTime = std::chrono::high_resolution_clock::now();
@@ -220,7 +229,7 @@ int main(int argc, char* argv[]) {
 
     std::cout << "Simulation completed successfully. Elapsed time: " << duration << " seconds." << std::endl;
 
-    std::cout << "\nPress Enter to exit...";
+    std::cout << "\n\nPress Enter to exit...";
     std::cin.get();  // Wait for Enter key
 
     return 0;
