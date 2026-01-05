@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.8...3.28)
 project(KarstNSim VERSION 1.0 LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 14 CACHE STRING "The C++ standard to use")
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -38,13 +38,9 @@ set(KARSTNSIM_INCLUDES
     include/KarstNSim/run_code.h 
     include/KarstNSim/parse_inputs.h 
     include/KarstNSim/nanoflann.hpp
+    include/KarstNSim/models/results.h
 )
 
 include_directories("include")
 
 add_executable(karstnsim ${KARSTNSIM_SOURCES} ${KARSTNSIM_INCLUDES})
-
-# Linux GCC still needs explicit link with stdc++fs when using std::experimental::filesystem
-if (UNIX AND NOT APPLE)
-    target_link_libraries(karstnsim PRIVATE stdc++fs)
-endif()

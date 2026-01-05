@@ -23,13 +23,13 @@ namespace {
 using MySet = std::unordered_set<Vector3, myhash>;
 
 namespace KarstNSim {
-	void surface_sampling::multiple_surface_sampling(std::string directoryname, std::string network_name, Box* box, std::vector<Surface>* surface, std::vector<Vector3>& points, const int refine_surface_sampling, const bool create_vset_sampling)
+	void surface_sampling::multiple_surface_sampling(std::string directoryname, std::string network_name, const Box& box, const std::vector<Surface>& surface, std::vector<Vector3>& points, const int refine_surface_sampling, const bool create_vset_sampling)
 	{
 		// we iterate on the surfaces
 		MySet res; // unordered sets don't allow for duplicates, which is perfect for our usage here
-		for (int k = 0; k < surface->size(); k++) {
+		for (int k = 0; k < surface.size(); k++) {
 			// we iterate on the triangles of the surface
-			Surface surfk = surface->at(k);
+			Surface surfk = surface.at(k);
 			for (int j = 0; j < surfk.get_nb_trgls(); j++) {
 				bool allow_refinement = false;
 				std::vector<Vector3> trgl_pts;
@@ -40,14 +40,14 @@ namespace KarstNSim {
 					Vector3 p = surfk.get_node(trgl.point(i));
 					trgl_pts.push_back(p);
 					// continue only if the point is in the grid
-					if (box->contains(p) && !allow_refinement) {
+					if (box.contains(p) && !allow_refinement) {
 						allow_refinement = true;
 					}
 				}
 
 				if (allow_refinement && refine_surface_sampling != -1) {
 					for (int i = 0; i < 3; i++) {
-						if (box->contains(trgl_pts[i])) {
+						if (box.contains(trgl_pts[i])) {
 							res.insert(trgl_pts[i]);
 						}
 					}
@@ -75,13 +75,13 @@ namespace KarstNSim {
 							Vector3 u = (a + b) / 2;
 							Vector3 v = (c + b) / 2;
 							Vector3 w = (a + c) / 2;
-							if (box->contains(u)) {
+							if (box.contains(u)) {
 								res.insert(u);
 							}
-							if (box->contains(v)) {
+							if (box.contains(v)) {
 								res.insert(v);
 							}
-							if (box->contains(w)) {
+							if (box.contains(w)) {
 								res.insert(w);
 							}
 							new_tri.push_back(std::vector<Vector3>({ a,u,w }));

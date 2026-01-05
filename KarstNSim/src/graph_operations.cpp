@@ -21,25 +21,25 @@ namespace KarstNSim {
 	}
 
 	// Samples the domain with Dwork's algorithm adapted in 3D
-	void GraphOperations::SampleSpaceDwork(Box* box,
-		const bool use_density_property, const int k, std::vector<float> propdensity, Surface* topo_surface) {
+	void GraphOperations::SampleSpaceDwork(const Box& box,
+		const bool use_density_property, const int k, const std::vector<float>& propdensity, const Surface& topo_surface) {
 
 		//const clock_t time1 = clock();
-		PointCloud centers2D = topo_surface->get_centers_cloud(2);
+		PointCloud centers2D = topo_surface.get_centers_cloud(2);
 
-		float min_z_topo = topo_surface->get_boundbox_min().z;
+		float min_z_topo = topo_surface.get_boundbox_min().z;
 
 		// 1 //
 		//First, we get the Box characteristics (origin and dimensions in each direction as well as density property).
 		//The density property must be defined on a grid with int(sqrt(3) / r_min) cells in each direction, with r_min the
 		//minimum density defined in the whole grid (0<rmin<1, e.g., 0.01).
 
-		const Vector3& ptmin = box->get_basis();
-		const Vector3& ptmax = box->get_end();
+		const Vector3& ptmin = box.get_basis();
+		const Vector3& ptmax = box.get_end();
 
-		const Vector3 u = box->get_u();
-		const Vector3 v = box->get_v();
-		const Vector3 w = box->get_w();
+		const Vector3 u = box.get_u();
+		const Vector3 v = box.get_v();
+		const Vector3 w = box.get_w();
 
 		float delta_y = ptmax.y - ptmin.y;
 		float delta_x = ptmax.x - ptmin.x;
@@ -65,7 +65,7 @@ namespace KarstNSim {
 
 		Vector3 min(ptmin.x, ptmin.y, ptmin.z);
 		float r_min = 0;
-		int nu = box->get_nu(), nv = box->get_nv(), nw = box->get_nw(); //number of samples in u,v,w axis
+		int nu = box.get_nu(), nv = box.get_nv(), nw = box.get_nw(); //number of samples in u,v,w axis
 
 		float r_cst = 0;
 		// We open the property if that's what the user asked for
@@ -95,11 +95,13 @@ namespace KarstNSim {
 		// Whatever the original dimensions of the Box are, they are transformed during the algorithm and back-transformed at the end.
 		std::vector<int> active_list({ 1 });
 		bool init_pt_in_grid = false;
-		Vector3  pos_init;
+		Vector3 pos_init;
 		int64_t flattened_index = 0;
 		int64_t converted_flat_index = 0;
+		const int max_attempts = 100000;
+		int attempt_count = 0;
 		if (use_density_property) {
-			while (!init_pt_in_grid) {
+			while (!init_pt_in_grid && attempt_count < max_attempts) {
 				pos_init.x = generateRandomFloat(0, dim1);
 				pos_init.y = generateRandomFloat(0, dim2);
 				pos_init.z = generateRandomFloat(0, dim3); // first random point of index 1
@@ -109,13 +111,18 @@ namespace KarstNSim {
 				real_pt.x = min.x + (pos_init.x * u.x / dim1 + pos_init.y * v.x / dim2 + pos_init.z * w.x / dim3);
 				real_pt.y = min.y + (pos_init.x * u.y / dim1 + pos_init.y * v.y / dim2 + pos_init.z * w.y / dim3);
 				real_pt.z = min.z + (pos_init.x * u.z / dim1 + pos_init.y * v.z / dim2 + pos_init.z * w.z / dim3);
-				if (propdensity[converted_flat_index] > 0 && CheckBelowSurf(real_pt, topo_surface, centers2D)) { // we make sure here that the 1st random point is indeed a) in the karstifiable zone (propdensity >0) and b) below topography
+				// we make sure here that the 1st random point is indeed a) in the karstifiable zone (propdensity >0) and b) below topography
+				if (propdensity[converted_flat_index] > 0 && CheckBelowSurf(real_pt, topo_surface, centers2D)) {
 					init_pt_in_grid = true;
 				}
+				attempt_count++;
+			}
+			if (!init_pt_in_grid) {
+				throw std::runtime_error("Failed to find a valid starting point in the grid after maximum attempts.");
 			}
 		}
 		else {
-			while (!init_pt_in_grid) {
+			while (!init_pt_in_grid && attempt_count < max_attempts) {
 				pos_init.x = generateRandomFloat(0, dim1);
 				pos_init.y = generateRandomFloat(0, dim2);
 				pos_init.z = generateRandomFloat(0, dim3);
@@ -126,8 +133,14 @@ namespace KarstNSim {
 				if (CheckBelowSurf(real_pt, topo_surface, centers2D)) { // we make sure here that the 1st random point is indeed below topography
 					init_pt_in_grid = true;
 				}
+				attempt_count++;
+			}
+			if (!init_pt_in_grid) {
+				throw std::runtime_error("Failed to find a valid starting point below topography after maximum attempts.");
 			}
 		}
+
+		std::cout << " * Will start Poisson sampling with r_min = " << r_min << " and initial point at (" << pos_init.x << "," << pos_init.y << "," << pos_init.z << ")" << std::endl;
 
 		Vector3 new_p; // add the first point to the samples list
 		new_p.x = min.x + (pos_init.x * u.x / dim1 + pos_init.y * v.x / dim2 + pos_init.z * w.x / dim3);
@@ -307,11 +320,10 @@ namespace KarstNSim {
 			}
 		}
 
-		propdensity.clear();
 		grid.clear(); 	// Get rid of the map memory
 	}
 
-	bool GraphOperations::CheckBelowSurf(const Vector3& pt, const Surface* surface, const PointCloud& centers2D)
+	bool GraphOperations::CheckBelowSurf(const Vector3& pt, const Surface& surface, const PointCloud& centers2D)
 	{
 		const int number_of_tries = 5;
 		bool found_triangle = false;
@@ -320,9 +332,9 @@ namespace KarstNSim {
 		std::vector<Neighbour> candidates;
 		centers2D.findNearestNeighbors(pt2D, -1, number_of_tries, 1e25f, candidates);
 		for (int test = 0; test < number_of_tries; test++) {
-			const Triangle& trgl_i = surface->get_triangle(candidates[test].i);
+			const Triangle& trgl_i = surface.get_triangle(candidates[test].i);
 			const int& pt1 = trgl_i.point(0), pt2 = trgl_i.point(1), pt3 = trgl_i.point(2);
-			const Vector3& p1 = surface->get_node(pt1), p2 = surface->get_node(pt2), p3 = surface->get_node(pt3);
+			const Vector3& p1 = surface.get_node(pt1), p2 = surface.get_node(pt2), p3 = surface.get_node(pt3);
 			if (isInsideTriangle(p1, p2, p3, pt)) {
 				found_triangle = true;
 				P1 = p1;
@@ -335,7 +347,7 @@ namespace KarstNSim {
 		return (is_point_under_triangle(pt, P1, P2, P3));
 	}
 
-	float GraphOperations::distsurf(const Vector3& pt, Surface* surface, const float& max_inception_surface_distance, const PointCloud& centers2D)
+	float GraphOperations::distsurf(const Vector3& pt, const Surface& surface, const float& max_inception_surface_distance, const PointCloud& centers2D) const
 	{
 		const int number_of_tries = 5;
 		bool found_triangle = false;
@@ -345,9 +357,9 @@ namespace KarstNSim {
 		centers2D.findNearestNeighbors(pt2D, -1, number_of_tries, 1e25f, candidates);
 
 		for (int test = 0; test < number_of_tries; test++) {
-			const Triangle& trgl_i = surface->get_triangle(candidates[test].i);
+			const Triangle& trgl_i = surface.get_triangle(candidates[test].i);
 			const int& pt1 = trgl_i.point(0), pt2 = trgl_i.point(1), pt3 = trgl_i.point(2);
-			const Vector3& p1 = surface->get_node(pt1), p2 = surface->get_node(pt2), p3 = surface->get_node(pt3);
+			const Vector3& p1 = surface.get_node(pt1), p2 = surface.get_node(pt2), p3 = surface.get_node(pt3);
 
 			if (isInsideTriangle(p1, p2, p3, pt)) {
 				found_triangle = true;
@@ -370,33 +382,33 @@ namespace KarstNSim {
 		return distance;
 	}
 
-	void GraphOperations::DefineWSurfaceFlags(std::vector<Surface>* water_tables) {
+	void GraphOperations::DefineWSurfaceFlags(const std::vector<Surface>& water_tables) {
 
 		// First and foremost, a water table doesn't project on the whole domain all the time.
 		// Therefore any point outside of the projected perimeter of the water table can be considered in the vadose zone.
 		std::vector<PointCloud> all_centers2D;
 
 		std::vector<std::vector<float>> coord_boundbox_wt(params.nb_wt, std::vector<float>(4)); // elements are sorted as followed : xmin,ymin,xmax,ymax
-		for (int i = 0; i < water_tables->size(); i++) {
-			Vector3 min_wt = water_tables->at(i).get_boundbox_min();
+		for (int i = 0; i < water_tables.size(); i++) {
+			Vector3 min_wt = water_tables[i].get_boundbox_min();
 			coord_boundbox_wt[i][0] = min_wt.x;
 			coord_boundbox_wt[i][1] = min_wt.y;
-			Vector3 max_wt = water_tables->at(i).get_boundbox_max();
+			Vector3 max_wt = water_tables[i].get_boundbox_max();
 			coord_boundbox_wt[i][2] = max_wt.x;
 			coord_boundbox_wt[i][3] = max_wt.y;
-			PointCloud centers2D = water_tables->at(i).get_centers_cloud(2);
+			PointCloud centers2D = water_tables[i].get_centers_cloud(2);
 			all_centers2D.push_back(centers2D);
 		}
 		samples_surf_flags.resize(int(samples.size()), params.nb_wt);
 		for (int i = 0; i<int(samples.size()); i++) {
 
-			for (int j = 0; j < water_tables->size(); j++) {
+			for (int j = 0; j < water_tables.size(); j++) {
 				bool check;
 				if ((samples[i].x < coord_boundbox_wt[j][0]) || (samples[i].x > coord_boundbox_wt[j][2]) || (samples[i].y < coord_boundbox_wt[j][1]) || (samples[i].y > coord_boundbox_wt[j][3])) { // out of wt bonds
 					check = false;
 				}
 				else {
-					Surface* surf_j = &water_tables->at(j);
+					const Surface& surf_j = water_tables[j];
 
 					check = CheckBelowSurf(samples[i], surf_j, all_centers2D[j]);
 				}
@@ -405,19 +417,19 @@ namespace KarstNSim {
 		}
 	}
 
-	void GraphOperations::compute_euclidian_distance_from_wt(std::vector<Surface> *surfaces, const float max_inception_surface_distance) {
+	void GraphOperations::compute_euclidian_distance_from_wt(const std::vector<Surface>& surfaces, const float max_inception_surface_distance) {
 
 		std::vector<PointCloud> all_centers2D;
-		for (int i = 0; i < surfaces->size(); i++) {
-			PointCloud centers2D = surfaces->at(i).get_centers_cloud(2);
+		for (int i = 0; i < surfaces.size(); i++) {
+			PointCloud centers2D = surfaces[i].get_centers_cloud(2);
 			all_centers2D.push_back(centers2D);
 		}
 
 		samples_wt_dist.resize(int(samples.size()), params.nb_wt);
 		std::vector<float> max_dist_wt(params.nb_wt, 0.);
 		std::vector<float> min_dist_wt(params.nb_wt, std::numeric_limits<float>::infinity());
-		for (int j = 0; j < surfaces->size(); j++) {
-			Surface* surf_j = &surfaces->at(j);
+		for (int j = 0; j < surfaces.size(); j++) {
+			const Surface& surf_j = surfaces[j];
 			for (int i = 0; i<int(samples.size()); i++) {
 				float distance = distsurf(samples[i], surf_j, max_inception_surface_distance, all_centers2D[j]);
 				samples_wt_dist[i][j] = distance;
@@ -425,19 +437,19 @@ namespace KarstNSim {
 		}
 	}
 
-	void GraphOperations::compute_euclidian_distance_from_surfaces(std::vector<Surface> *surfaces, const float max_inception_surface_distance) {
+	void GraphOperations::compute_euclidian_distance_from_surfaces(const std::vector<Surface>& surfaces, const float max_inception_surface_distance) {
 
 		std::vector<PointCloud> all_centers2D;
-		for (int i = 0; i < surfaces->size(); i++) {
-			PointCloud centers2D = surfaces->at(i).get_centers_cloud(2);
+		for (int i = 0; i < surfaces.size(); i++) {
+			PointCloud centers2D = surfaces[i].get_centers_cloud(2);
 			all_centers2D.push_back(centers2D);
 		}
 
 		samples_surf_dist.resize(int(samples.size()));
 		for (int i = 0; i<int(samples.size()); i++) {
 			float max_dist_surf_iter = std::numeric_limits<float>::infinity();
-			for (int j = 0; j < surfaces->size(); j++) {
-				Surface* surf_j = &surfaces->at(j);
+			for (int j = 0; j < surfaces.size(); j++) {
+				const Surface& surf_j = surfaces[j];
 				float distance = distsurf(samples[i], surf_j, max_inception_surface_distance, all_centers2D[j]);
 				max_dist_surf_iter = std::min(max_dist_surf_iter, distance);
 			}
@@ -566,15 +578,15 @@ namespace KarstNSim {
 
 	void GraphOperations::InitializeCostGraph(const bool create_nghb_graph, const bool create_nghb_graph_property, const std::vector<KeyPoint>& keypts,
 		const GeologicalParameters& geologicalparams, std::vector<Vector3>& nodes_on_inception_surfaces, std::vector<std::vector<Vector3>>& nodes_on_wt_surfaces,
-		std::vector<Surface>* inception_horizons, std::vector<Surface>* water_tables, const bool use_sampling_points,
-		Box* box, const float max_inception_surface_distance,
-		std::vector<Vector3>* sampling_points, const bool create_vset_sampling, const bool use_density_property, const int k_pts,
-		const float fraction_old_karst_perm, std::vector<float> propdensity, std::vector<float> propikp, Surface* topo_surface)
+		const std::vector<Surface>& inception_horizons, const std::vector<Surface>& water_tables, const bool use_sampling_points,
+		const Box& box, const float max_inception_surface_distance,
+		const std::vector<Vector3>& sampling_points, const bool create_vset_sampling, const bool use_density_property, const int k_pts,
+		const float fraction_old_karst_perm, const std::vector<float>& propdensity, const std::vector<float>& propikp, const Surface& topo_surface)
 	{
-		PointCloud centers2D = topo_surface->get_centers_cloud(2);
+		PointCloud centers2D = topo_surface.get_centers_cloud(2);
 		const clock_t time1 = clock();
 		params = geologicalparams;
-		int nu = box->get_nu(), nv = box->get_nv();
+		int nu = box.get_nu(), nv = box.get_nv();
 		std::vector<std::vector<int>> on_wt_flags_idx(params.nb_wt);
 		std::vector<std::vector<int>> on_surf_flags_idx(1);
 		Vector3 new_pt;
@@ -588,21 +600,24 @@ namespace KarstNSim {
 
 		// 1.2a we recover previously sampled points if any
 		if (use_sampling_points) {
-			for (int i = 0; i < sampling_points->size(); i++) {
-				new_pt.x = sampling_points->at(i).x;
-				new_pt.y = sampling_points->at(i).y;
-				new_pt.z = sampling_points->at(i).z;
+			for (int i = 0; i < sampling_points.size(); i++) {
+				new_pt.x = sampling_points[i].x;
+				new_pt.y = sampling_points[i].y;
+				new_pt.z = sampling_points[i].z;
 				samples.push_back(new_pt);
 			}
+			std::cout << " * Using " << samples.size() << " user-defined sampling points." << std::endl;
 		}
 
 		// 1.2b else we sample them with modified Dwork poisson sphere sampling
 		else {
 			SampleSpaceDwork(box, use_density_property, k_pts, propdensity, topo_surface);
+			std::cout << " * Using " << samples.size() << " automatically sampled points." << std::endl;
 		}
 
 		// 1.3 remove points sampled inside the "no-karst" spheres
 		// /!\ NEVER make a no-karst sphere and a keypoint intersect (makes code crash)
+		size_t old_sample_size = samples.size();
 		PointCloud centers_sampling_pts(samples);
 		std::vector<Neighbour> all_candidates;
 		for (int sphere = 0; sphere < params.spheres.size(); sphere++) {
@@ -634,25 +649,29 @@ namespace KarstNSim {
 			}
 			remove_neighbors(nodes_on_wt_surfaces[wt], all_candidates_wt);
 		}
+		std::cout << " * Removed " << old_sample_size - samples.size() << " points from the sampling set because they were inside no-karst spheres. " << std::endl;
 
 		// 1.4 Add inception surface points to samples
+		old_sample_size = samples.size();
 		for (int i = 0; i < nodes_on_inception_surfaces.size(); i++) {
 			float value_itr = 1.;
 			if (!use_sampling_points && use_density_property) {
 				int u1, v1, w1;
-				box->xyz2uvw_with_limits_conditions(nodes_on_inception_surfaces[i], u1, v1, w1);
+				box.xyz2uvw_with_limits_conditions(nodes_on_inception_surfaces[i], u1, v1, w1);
 				value_itr = propdensity[u1 + nu * v1 + nv * nu*w1];
 			}
 			bool below_top_test = true;
-			if (!topo_surface->is_empty()) {
+			if (!topo_surface.is_empty()) {
 				below_top_test = CheckBelowSurf(nodes_on_inception_surfaces[i], topo_surface, centers2D);
 			}
 			if (below_top_test && value_itr > 0) {  // Accept only nodes that are below topo surf AND are associated to a karstifiable zone (ie. propdensity >0)
 				process_node_in_samples(nodes_on_inception_surfaces[i], on_surf_flags_idx[0]);
 			}
 		}
+		std::cout << " * Added " << samples.size() - old_sample_size << " points from the inception surfaces to the sampling set. " << std::endl;
 
 		// 1.5 Add water table points to samples
+		old_sample_size = samples.size();
 		for (int i = 0; i < keypts.size(); i++) { // first the keypoints
 			if (keypts[i].type == KeyPointType::Spring) {
 				auto it = std::find(samples.begin(), samples.end(), keypts[i].p);
@@ -666,11 +685,11 @@ namespace KarstNSim {
 				float value_itr = 1.;
 				if (!use_sampling_points && use_density_property) {
 					int u1, v1, w1;
-					box->xyz2uvw_with_limits_conditions(nodes_on_wt_surfaces[i][j], u1, v1, w1);
+					box.xyz2uvw_with_limits_conditions(nodes_on_wt_surfaces[i][j], u1, v1, w1);
 					value_itr = propdensity[u1 + nu * v1 + nv * nu*w1];
 				}
 				bool below_top_test = true;
-				if (!topo_surface->is_empty()) {
+				if (!topo_surface.is_empty()) {
 					below_top_test = CheckBelowSurf(nodes_on_wt_surfaces[i][j], topo_surface, centers2D);
 				}
 				if (below_top_test && value_itr > 0) {  // Accept only nodes that are below topo surf AND are associated to a karstifiable zone (ie. propdensity >0)
@@ -678,8 +697,10 @@ namespace KarstNSim {
 				}
 			}
 		}
+		std::cout << " * Added " << samples.size() - old_sample_size << " points from the water table surfaces to the sampling set. " << std::endl;
 
 		// 1.6 Add previously simulated karst networks samples
+		old_sample_size = samples.size();
 		for (int i = 0; i < params.PtsOldGraph.size(); i++) {
 			std::vector<int> idx_i;
 			for (int j = 0; j < 2; j++) { // =2 (start and end points of each segment of the old graph)
@@ -687,6 +708,7 @@ namespace KarstNSim {
 			}
 			params.IdxOldGraph.set_row(i, idx_i);
 		}
+		std::cout << " * Added " << samples.size() - old_sample_size << " points from the previously simulated karst networks to the sampling set. " << std::endl;
 		//IdxOldGraph = params.IdxOldGraph;
 		std::vector<std::string> noise_prop_name;
 		if (params.use_noise) {
@@ -715,13 +737,13 @@ namespace KarstNSim {
 
 		// 2 Find the karstification potential for each point of the sampling cloud
 		if (params.karstificationCost.used) {
-			const Vector3 u = box->get_u();
-			const Vector3 v = box->get_v();
-			const Vector3 w = box->get_w();
-			int nu = box->get_nu(), nv = box->get_nv();
+			const Vector3 u = box.get_u();
+			const Vector3 v = box.get_v();
+			const Vector3 w = box.get_w();
+			int nu = box.get_nu(), nv = box.get_nv();
 			for (int i = 0; i < samples.size(); i++) {
 				int u1, v1, w1;
-				box->xyz2uvw_with_limits_conditions(samples[i], u1, v1, w1);
+				box.xyz2uvw_with_limits_conditions(samples[i], u1, v1, w1);
 				float value_itr = propikp[u1 + nu * v1 + nv * nu*w1];
 				if (value_itr < 0) { // a value smaller than  means a No data value, which means a cell above topography
 					samples_layer_kp.push_back(1); // maximal cost (this happens because of the discrepancy between the background grid's resolution and the points' position close to the topography)
@@ -729,7 +751,6 @@ namespace KarstNSim {
 				}
 				samples_layer_kp.push_back(1 - propikp[u1 + nu * v1 + nv * nu*w1]);
 			}
-			propikp.clear();
 		}
 
 		const clock_t time21 = clock();
@@ -750,7 +771,7 @@ namespace KarstNSim {
 
 		// 4 Compute the distance from each point to the inception surfaces and the water table surfaces
 		compute_euclidian_distance_from_wt(water_tables, max_inception_surface_distance);
-		if (inception_horizons != nullptr) {
+		if (!inception_horizons.empty()) {
 			compute_euclidian_distance_from_surfaces(inception_horizons, max_inception_surface_distance);
 		}
 		const clock_t time23 = clock();
@@ -818,17 +839,17 @@ namespace KarstNSim {
 		}
 	}
 
-	void GraphOperations::BuildNearestNeighbourGraph(Box* box, const float fraction_old_karst_perm, float max_dist_surf, const std::vector<KeyPoint>& keypts)
+	void GraphOperations::BuildNearestNeighbourGraph(const Box& box, const float fraction_old_karst_perm, float max_dist_surf, const std::vector<KeyPoint>& keypts)
 	{
 
 		float time_neigbhors = 0.;
 		float time_costs = 0.;
 
-		const Vector3& ptmin = box->get_basis();
-		const Vector3& ptmax = box->get_end();
-		const Vector3 u = box->get_u();
-		const Vector3 v = box->get_v();
-		const Vector3 w = box->get_w();
+		const Vector3& ptmin = box.get_basis();
+		const Vector3& ptmax = box.get_end();
+		const Vector3 u = box.get_u();
+		const Vector3 v = box.get_v();
+		const Vector3 w = box.get_w();
 		float delta_y_abs = std::abs(ptmax.y - ptmin.y);
 		float delta_x_abs = std::abs(ptmax.x - ptmin.x);
 		float delta_z_abs = std::abs(ptmax.z - ptmin.z);
@@ -1059,7 +1080,7 @@ namespace KarstNSim {
 	}
 
 	void GraphOperations::ComputeKarsticSkeleton(const std::vector<KeyPoint>& pts, const float fraction_karst_perm, std::vector<std::vector<int>>& pathsFinal, std::vector<std::vector<float>>& costsFinal, std::vector<std::vector<char>>& vadoseFinal,
-		std::vector<int>& springidxFinal)
+		std::vector<int>& springidxFinal, bool save_new_connectivity_matrix)
 	{
 		float step1 = 0.0f, step2 = 0.0f, step3 = 0.0f, step4 = 0.0f, step5 = 0.0f, step6 = 0.0f, step7 = 0.0f, step8 = 0.0f, step_sink = 0.0f;
 		const clock_t time1 = clock();
@@ -1197,7 +1218,10 @@ namespace KarstNSim {
 				if (!already_reached && !path.empty()) {
 					vadose_full.insert(vadose_full.end(), path.size() - 1, false);
 					path_full.insert(path_full.end(), path.begin() + 1, path.end());
-					path_cost_full.insert(path_cost_full.end(), path_cost.begin() + 1, path_cost.end());
+					const std::size_t skip = path_cost.empty() ? 0u : 1u;
+					if (path_cost.size() > skip) {
+						path_cost_full.insert(path_cost_full.end(), path_cost.begin() + skip, path_cost.end());
+					}
 				}
 
 				all_paths[i][j] = path_full;
@@ -1284,9 +1308,11 @@ namespace KarstNSim {
 			}
 		}
 
-		std::string full_dir_name = params.directoryname + "/outputs";
-		std::string full_name = params.scenename + "_connectivity_matrix.txt";
-		save_connectivity_matrix(full_name, full_dir_name, new_connectivity_matrix);
+		if (save_new_connectivity_matrix) {
+			std::string full_dir_name = params.directoryname + "/outputs";
+			std::string full_name = params.scenename + "_connectivity_matrix.txt";
+			save_connectivity_matrix(full_name, full_dir_name, new_connectivity_matrix);
+		}
 
 		clock_t time11 = clock();
 		step8 += float(time11 - time10) / CLOCKS_PER_SEC;

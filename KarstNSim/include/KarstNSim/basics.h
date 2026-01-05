@@ -387,16 +387,15 @@ namespace KarstNSim {
 	public:
 		Surface(const std::string& name = "DefaultName"); //!< Default constructor with optional surface name.
 		Surface(std::vector<Vector3>, std::vector<Triangle>, const std::string& name = "DefaultName"); //!< Constructor that initializes the surface with points, triangles, and an optional name.
-		int get_nb_trgls(); //!< Returns the number of triangles in the surface.
-		int get_nb_pts(); //!< Returns the number of points in the surface.
+		int get_nb_trgls() const; //!< Returns the number of triangles in the surface.
+		int get_nb_pts() const; //!< Returns the number of points in the surface.
 		bool is_empty() const; //!< Checks if the surface is empty (no points or triangles).
-		const Triangle& get_triangle(const int& i); //!< Returns the triangle at index i.
-		const Triangle& get_triangle(const int& i) const; //!< Returns the triangle at index i (const version).
+		const Triangle& get_triangle(const int& i) const; //!< Returns the triangle at index i.
 		const Vector3& get_node(const int& i) const; //!< Returns the point (node) at index i.
 		Vector3 nearest(Vector3 p1, Vector3 p2, Vector3 ptest); //!< Finds the nearest point between two points p1 and p2 to the test point ptest.
 		Vector3 nearest(Vector3 p1, Vector3 p2, Vector3 p3, Vector3 ptest); //!< Finds the nearest point among three points p1, p2, and p3 to the test point ptest.
-		Vector3 get_boundbox_min(); //!< Returns the minimum bound of the surface (bounding box).
-		Vector3 get_boundbox_max(); //!< Returns the maximum bound of the surface (bounding box).
+		const Vector3 get_boundbox_min() const; //!< Returns the minimum bound of the surface (bounding box).
+		const Vector3 get_boundbox_max() const; //!< Returns the maximum bound of the surface (bounding box).
 		float get_circumradii(const int& i); //!< Returns the circumradius of the triangle at index i.
 		Vector3 get_trgl_center(const int& trgl_idx); //!< Returns the center of the triangle at index trgl_idx.
 		PointCloud get_centers_cloud(int dim) const; //!< Returns a PointCloud of the centers of the triangles in the surface.
@@ -499,7 +498,7 @@ namespace KarstNSim {
 	\brief Returns the number of triangles in the surface.
 	\return The number of triangles.
 	*/
-	inline int Surface::get_nb_trgls() {
+	inline int Surface::get_nb_trgls() const {
 		return int(trgls_.size());
 	}
 
@@ -507,7 +506,7 @@ namespace KarstNSim {
 	\brief Returns the number of points in the surface.
 	\return The number of points.
 	*/
-	inline int Surface::get_nb_pts() {
+	inline int Surface::get_nb_pts() const {
 		return int(pts_.size());
 	}
 
@@ -521,15 +520,6 @@ namespace KarstNSim {
 
 	/*!
 	\brief Returns the triangle at index i.
-	\param i The index of the triangle.
-	\return A reference to the triangle at index i.
-	*/
-	inline const Triangle& Surface::get_triangle(const int& i) {
-		return trgls_[i];
-	}
-
-	/*!
-	\brief Returns the triangle at index i (const version).
 	\param i The index of the triangle.
 	\return A constant reference to the triangle at index i.
 	*/
@@ -606,7 +596,7 @@ namespace KarstNSim {
 	\brief Returns the minimum bound of the surface (bounding box).
 	\return The minimum bound vector.
 	*/
-	inline Vector3 Surface::get_boundbox_min() {
+	inline const Vector3 Surface::get_boundbox_min() const {
 		return b_min_;
 	}
 
@@ -614,7 +604,7 @@ namespace KarstNSim {
 	\brief Returns the maximum bound of the surface (bounding box).
 	\return The maximum bound vector.
 	*/
-	inline Vector3 Surface::get_boundbox_max() {
+	inline const Vector3 Surface::get_boundbox_max() const {
 		return b_max_;
 	}
 
@@ -1002,7 +992,7 @@ namespace KarstNSim {
 		 * \param v The transformed v-coordinate.
 		 * \param w The transformed w-coordinate.
 		 */
-		void xyz2uvw(const Vector3& pt, int &u, int &v, int &w);
+		void xyz2uvw(const Vector3& pt, int &u, int &v, int &w) const;
 
 		/**
 		 * \brief Transforms a point from world coordinates to the uvw coordinate system, with bounds checking.
@@ -1011,7 +1001,7 @@ namespace KarstNSim {
 		 * \param v1 The transformed v-coordinate.
 		 * \param w1 The transformed w-coordinate.
 		 */
-		void xyz2uvw_with_limits_conditions(const Vector3& pt, int &u1, int &v1, int &w1);
+		void xyz2uvw_with_limits_conditions(const Vector3& pt, int &u1, int &v1, int &w1) const;
 
 		/**
 		 * \brief Converts the cell coordinates (u, v, w) to a 1D index.
@@ -1228,7 +1218,7 @@ namespace KarstNSim {
 		return end;
 	}
 
-	inline void Box::xyz2uvw(const Vector3& pt, int &up, int &vp, int &wp) {
+	inline void Box::xyz2uvw(const Vector3& pt, int &up, int &vp, int &wp) const {
 
 		// 1: normalize vector
 
@@ -1269,7 +1259,7 @@ namespace KarstNSim {
 		return point;
 	}
 
-	inline void Box::xyz2uvw_with_limits_conditions(const Vector3& pt, int &u1, int &v1, int &w1) {
+	inline void Box::xyz2uvw_with_limits_conditions(const Vector3& pt, int &u1, int &v1, int &w1) const {
 		xyz2uvw(pt, u1, v1, w1);
 		if (u1 < 0) {
 			u1 = 0;

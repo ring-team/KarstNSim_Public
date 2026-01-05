@@ -38,3 +38,5 @@ latex/
 *.app
 LOG.txt
 KarstNSim/build/*
+
+simulation_times.txt

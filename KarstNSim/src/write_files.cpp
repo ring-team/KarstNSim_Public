@@ -9,148 +9,62 @@ If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
 ***************************************************************/
 
 #include "KarstNSim/write_files.h"
-#include <cerrno>
-#include <cstring>
+#include <filesystem>
 
 namespace KarstNSim {
 
-	bool directory_exists(const std::string& directory) {
-		struct stat info;
-		if (stat(directory.c_str(), &info) != 0) {
-			return false;
-		}
-		return (info.st_mode & S_IFDIR) != 0;
+	static bool directory_exists(const std::string& directory) {
+		std::error_code ec;
+		return std::filesystem::is_directory(directory, ec) && !ec;
 	}
 
-	void create_directory(const std::string& directory) {
-#ifdef _WIN32
-		int res = _mkdir(directory.c_str());
-#else
-		int res = mkdir(directory.c_str(), 0777);
-#endif
-		if (res != 0) {
-			std::cerr << "Error creating directory: " << directory << " (" << strerror(errno) << ")" << std::endl;
+	static void create_directory(const std::string& directory) {
+		std::error_code ec;
+		if (!std::filesystem::create_directories(directory, ec) && ec) {
+			std::cerr << "Error creating directory: " << directory << " (" << ec.message() << ")" << std::endl;
 		}
 	}
 
-	// Function to check if a file exists
-	bool file_exists(const std::string& file_path) {
-		struct stat buffer;
-		return (stat(file_path.c_str(), &buffer) == 0);
+	static void ensure_directory_exists(const std::string& directory) {
+		if (!directory_exists(directory)) {
+			create_directory(directory);
+		}
 	}
 
-	// Function to modify the file name by reference to ensure uniqueness
-	void make_unique_filename(std::string& fileName, const std::string& saveDirectory) {
-		std::string baseName = fileName;
-		std::string extension = "";
+	// Generate a unique filename by appending (0), (1), etc. if needed
+	std::filesystem::path make_unique_filename(const std::string& base_filename, const std::string& save_directory) {
+		std::filesystem::path dirPath(save_directory);
+		std::filesystem::path filePath(base_filename);
+		std::filesystem::path fullPath = dirPath / filePath;
 
-		// Find the last dot to separate the file name and extension
-		size_t dotPos = fileName.find_last_of('.');
-		if (dotPos != std::string::npos) {
-			baseName = fileName.substr(0, dotPos);
-			extension = fileName.substr(dotPos);
+		if (!std::filesystem::exists(fullPath)) {
+			return fullPath;  // Already unique
 		}
+
+		std::string baseName = filePath.stem().string();
+		std::string extension = filePath.extension().string();
 
 		int copyIndex = 0;
-
-		// Keep modifying the file name until it's unique
-		while (file_exists(saveDirectory + '/' + fileName)) {
-			std::ostringstream oss;
-			oss << baseName << '(' << copyIndex << ')' << extension;
-			fileName = oss.str();
+		std::filesystem::path uniquePath;
+		do {
+			std::string uniqueFilename = baseName + "(" + std::to_string(copyIndex) + ")" + extension;
+			uniquePath = dirPath / uniqueFilename;
 			copyIndex++;
-		}
-	}
-
-	void make_unique_filename(std::string& file_name, const std::string& save_directory, Vector3 u, std::vector<std::string> property_names, std::vector<float> properties)
-	{
-
-		// Check if the save directory exists, if not, create it
-		if (!directory_exists(save_directory)) {
-			create_directory(save_directory);
-		}
-
-		// Ensure the file name is unique (modifies file_name by reference if needed)
-		make_unique_filename(file_name, save_directory);
-
-		std::ofstream out;
-		out.open(save_directory + '/' + file_name);
-		if (out.is_open() == false)
-		{
-			std::cout << "Cannot save skeleton to file (nodes): " << file_name << std::endl;
-			return;
-		}
-
-		out << "Index	X	Y	Z";
-		for (int j = 0; j < property_names.size(); j++) { // iterate on properties (if any)
-			out << "	" << property_names[j]; // get name of property j
-		}
-		out << "\n";
-
-		out << 1 << "	" << u[0] << "	" << u[1] << "	" << u[2];
-		if (properties.size()) {
-			for (int j = 0; j < int(properties.size()); j++) { // iterate on properties (if any)
-				out << "	" << std::fixed << std::setprecision(10) << properties[j];
-			}
-			out << "\n";
-		}
-		out.flush();
-		out.close();
-	}
-
-	// Adjust the file name to the "last" existing version
-	void adjust_file_name_to_last(std::string& file_name, const std::string& save_directory) {
-		std::string base_name = file_name;
-		std::string extension = "";
-
-		// Separate the file name and extension
-		size_t dot_pos = file_name.find_last_of('.');
-		if (dot_pos != std::string::npos) {
-			base_name = file_name.substr(0, dot_pos);
-			extension = file_name.substr(dot_pos);
-		}
-
-		int copy_index = 0;
-		std::string candidate_name = file_name;
-		std::string candidate_name_new = file_name;
-		std::ostringstream oss;
-		std::string ossstr = candidate_name;
-		oss << file_name;
-
-		// Search for the last available file name in the sequence
-		while (file_exists(save_directory + '/' + candidate_name_new)) {
-			candidate_name = ossstr;
-			std::ostringstream oss;
-			oss << base_name << '(' << copy_index << ')' << extension;
-			ossstr = oss.str();
-			candidate_name_new = ossstr;
-			copy_index++;
-		}
-
-		//// Adjust file_name to the "last existing" version
-		//if (copy_index > 0) {
-		//	std::ostringstream oss;
-		//	oss << base_name << '(' << (copy_index - 1) << ')' << extension;
-		//	
-		//}
-		file_name = candidate_name;
+		} while (std::filesystem::exists(uniquePath));
+		
+		return uniquePath;
 	}
 
 	// Save the point data to a unique file
-	void save_point(std::string& file_name, const std::string& save_directory, Vector3 u, std::vector<std::string> property_names, std::vector<float> properties) {
+	void save_point(const std::string& file_name, const std::string& save_directory, Vector3 u, std::vector<std::string> property_names, std::vector<float> properties) {
 
-		// Check if the save directory exists, if not, create it
-		if (!directory_exists(save_directory)) {
-			create_directory(save_directory);
-		}
+		ensure_directory_exists(save_directory);
 
-		// Ensure the file name is unique (modifies file_name by reference)
-		make_unique_filename(file_name, save_directory);
-
-		std::ofstream out;
-		out.open(save_directory + '/' + file_name);
-		if (out.is_open() == false) {
-			std::cout << "Cannot save skeleton to file (nodes): " << file_name << std::endl;
+		// Generate a unique file path
+		std::filesystem::path filePath = make_unique_filename(file_name, save_directory);
+		std::ofstream out(filePath);
+		if (!out.is_open()) {
+			std::cout << "Cannot save skeleton to file (nodes): " << filePath.filename() << std::endl;
 			return;
 		}
 
@@ -171,25 +85,21 @@ namespace KarstNSim {
 		out.close();
 	}
 
-	void save_surface(std::string& file_name, const std::string& save_directory, Surface s, std::vector<std::string> property_names, std::vector<std::vector<float>> properties)
+	void save_surface(const std::string& file_name, const std::string& save_directory, Surface s, std::vector<std::string> property_names, std::vector<std::vector<float>> properties)
 	{
 
-		// Check if the save directory exists, if not, create it
-		if (!directory_exists(save_directory)) {
-			create_directory(save_directory);
-		}
+		ensure_directory_exists(save_directory);
 
-		// Ensure the file name is unique (modifies file_name by reference if needed)
-		make_unique_filename(file_name, save_directory);
+		// Generate a unique file path
+		std::filesystem::path filePath = make_unique_filename(file_name, save_directory);
 
 		int nb_pts = s.get_nb_pts();
 		int nb_trgls = s.get_nb_trgls();
 
-		std::ofstream out;
-		out.open(save_directory + '/' + file_name);
-		if (out.is_open() == false)
+		std::ofstream out(filePath);
+		if (!out.is_open())
 		{
-			std::cout << "Cannot save skeleton to file (nodes): " << file_name << std::endl;
+			std::cout << "Cannot save skeleton to file (nodes): " << filePath.filename() << std::endl;
 			return;
 		}
 
@@ -220,23 +130,19 @@ namespace KarstNSim {
 		out.close();
 	}
 
-	void save_pointset(std::string& file_name, const std::string& save_directory, std::vector<Vector3> pset, std::vector<std::string> property_names, std::vector<std::vector<float>> properties)
+	void save_pointset(const std::string& file_name, const std::string& save_directory, std::vector<Vector3> pset, std::vector<std::string> property_names, std::vector<std::vector<float>> properties)
 	{
 
-		// Check if the save directory exists, if not, create it
-		if (!directory_exists(save_directory)) {
-			create_directory(save_directory);
-		}
+		ensure_directory_exists(save_directory);
 
-		// Ensure the file name is unique (modifies file_name by reference if needed)
-		make_unique_filename(file_name, save_directory);
+		// Generate a unique file path
+		std::filesystem::path filePath = make_unique_filename(file_name, save_directory);
 
 		int nb_pts = int(pset.size());
-		std::ofstream out;
-		out.open(save_directory + '/' + file_name);
-		if (out.is_open() == false)
+		std::ofstream out(filePath);
+		if (!out.is_open())
 		{
-			std::cout << "Cannot save skeleton to file (nodes): " << file_name << std::endl;
+			std::cout << "Cannot save skeleton to file (nodes): " << filePath.filename() << std::endl;
 			return;
 		}
 		out << "Index	X	Y	Z";
@@ -260,24 +166,20 @@ namespace KarstNSim {
 		out.close();
 	}
 
-	void save_line(std::string& file_name, const std::string& save_directory, Line pline, std::vector<std::string> property_names, std::vector<std::vector<std::vector<float>>> properties)
+	void save_line(const std::string& file_name, const std::string& save_directory, Line pline, std::vector<std::string> property_names, std::vector<std::vector<std::vector<float>>> properties)
 	{
 
-		// Check if the save directory exists, if not, create it
-		if (!directory_exists(save_directory)) {
-			create_directory(save_directory);
-		}
+		ensure_directory_exists(save_directory);
 
-		// Ensure the file name is unique (modifies file_name by reference if needed)
-		make_unique_filename(file_name, save_directory);
+		// Generate a unique file path
+		std::filesystem::path filePath = make_unique_filename(file_name, save_directory);
 
 		int nb_segs = pline.get_nb_segs();
 
-		std::ofstream out;
-		out.open(save_directory + '/' + file_name);
-		if (out.is_open() == false)
+		std::ofstream out(filePath);
+		if (!out.is_open())
 		{
-			std::cout << "Cannot save skeleton to file (nodes): " << file_name << std::endl;
+			std::cout << "Cannot save skeleton to file (nodes): " << filePath.filename() << std::endl;
 			return;
 		}
 
@@ -312,21 +214,17 @@ namespace KarstNSim {
 		out.close();
 	}
 
-	void save_connectivity_matrix(std::string& file_name, const std::string& save_directory, Array2D<int> matrix) {
+	void save_connectivity_matrix(const std::string& file_name, const std::string& save_directory, Array2D<int> matrix) {
 
-		// Check if the save directory exists, if not, create it
-		if (!directory_exists(save_directory)) {
-			create_directory(save_directory);
-		}
+		ensure_directory_exists(save_directory);
 
-		// Ensure the file name is unique (modifies file_name by reference if needed)
-		make_unique_filename(file_name, save_directory);
+		// Generate a unique file path
+		std::filesystem::path filePath = make_unique_filename(file_name, save_directory);
 
-		std::ofstream out;
-		out.open(save_directory + '/' + file_name);
-		if (out.is_open() == false)
+		std::ofstream out(filePath);
+		if (!out.is_open())
 		{
-			std::cout << "Cannot save connectivity matrix " << file_name << std::endl;
+			std::cout << "Cannot save connectivity matrix " << filePath.filename() << std::endl;
 			return;
 		}
 
@@ -346,22 +244,18 @@ namespace KarstNSim {
 
 	}
 
-	void save_box(std::string& file_name, const std::string& save_directory, Box box, std::vector<std::string> property_names, std::vector<std::vector<float>> properties)
+	void save_box(const std::string& file_name, const std::string& save_directory, Box box, std::vector<std::string> property_names, std::vector<std::vector<float>> properties)
 	{
 
-		// Check if the save directory exists, if not, create it
-		if (!directory_exists(save_directory)) {
-			create_directory(save_directory);
-		}
+		ensure_directory_exists(save_directory);
 
-		// Ensure the file name is unique (modifies file_name by reference if needed)
-		make_unique_filename(file_name, save_directory);
+		// Generate a unique file path
+		std::filesystem::path filePath = make_unique_filename(file_name, save_directory);
 
-		std::ofstream out;
-		out.open(save_directory + '/' + file_name);
-		if (out.is_open() == false)
+		std::ofstream out(filePath);
+		if (!out.is_open())
 		{
-			std::cout << "Cannot save skeleton to file (nodes): " << file_name << std::endl;
+			std::cout << "Cannot save skeleton to file (nodes): " << filePath.filename() << std::endl;
 			return;
 		}
 		int nb_prop = int(property_names.size());

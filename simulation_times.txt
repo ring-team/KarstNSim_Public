@@ -1,9 +1,0 @@
-example: 157.016 s for seed 1
-example: 101.765 s for seed 1
-example: 98.453 s for seed 1
-example: 154.918 s for seed 1
-base: 92.759 s for seed 1
-base: 99.308 s for seed 1
-polyphasic: 37.411 s for seed 1
-polyphasic: 105.655 s for seed 1
-section_gen: 0.324 s for seed 1

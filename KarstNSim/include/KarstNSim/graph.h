@@ -41,6 +41,7 @@ If you use this code, pleace cite : Paris et al., 2021, Computer Graphic Forum.
 #include "KarstNSim/write_files.h"
 #include "KarstNSim/randomgenerator.h"
 #include "KarstNSim/simplex_noise.h"
+#include "KarstNSim/models/results.h"
 #include <iomanip>
 
 namespace KarstNSim {
@@ -358,7 +359,7 @@ namespace KarstNSim {
 		\param centers2D The 2D coordinates of the centers of each triangle of the inception surface, stored in a PointCloud.
 		\return True if the point is below the surface, otherwise false.
 		*/
-		static bool CheckBelowSurf(const Vector3&, const Surface*, const PointCloud& centers2D);
+		static bool CheckBelowSurf(const Vector3&, const Surface&, const PointCloud& centers2D);
 
 
 		/*!
@@ -369,21 +370,21 @@ namespace KarstNSim {
 		\param centers2D The 2D coordinates of the centers of each triangle of the inception surface, stored in a PointCloud.
 		\return The computed distance to the surface.
 		*/
-		float distsurf(const Vector3& pt, Surface* surface, const float& max_inception_surface_distance, const PointCloud& centers2D);
+		float distsurf(const Vector3& pt, const Surface& surface, const float& max_inception_surface_distance, const PointCloud& centers2D) const;
 
 		/*!
 		\brief Computes the Euclidean distance of each sample to its closest inception surface (fills samples_surf_dist)
 		\param surfaces A vector of all the inception surfaces to compute the distance to.
 		\param max_inception_surface_distance Dmax, the maximum inception surface distance of influence.
 		*/
-		void compute_euclidian_distance_from_surfaces(std::vector<Surface> *surfaces, const float max_inception_surface_distance);
+		void compute_euclidian_distance_from_surfaces(const std::vector<Surface>& surfaces, const float max_inception_surface_distance);
 
 		/*!
 		\brief Computes the Euclidean distance of each sample to each water table (fills samples_wt_dist)
 		\param surfaces A vector of all the water table surfaces to compute the distance to.
 		\param distance Dmax, the maximum inception surface distance of influence.
 		*/
-		void compute_euclidian_distance_from_wt(std::vector<Surface> *surfaces, const float max_inception_surface_distance);
+		void compute_euclidian_distance_from_wt(const std::vector<Surface>& surfaces, const float max_inception_surface_distance);
 
 		/*!
 		\brief Saves the nearest neighbor graph (Warning: HEAVY).
@@ -423,10 +424,10 @@ namespace KarstNSim {
 		*/
 		void InitializeCostGraph(const bool create_nghb_graph, const bool create_nghb_graph_property, const std::vector<KeyPoint>& keypts,
 			const GeologicalParameters& geologicalparams, std::vector<Vector3>& nodes_on_inception_surfaces, std::vector<std::vector<Vector3>>& nodes_on_wt_surfaces,
-			std::vector<Surface>* inception_horizons,
-			std::vector<Surface>* water_tables, const bool use_sampling_points, Box* Box, const float max_inception_surface_distance, std::vector<Vector3>* sampling_points,
-			const bool create_surf_sampling, const bool use_density_property, int k_pts, const float fraction_karst_perm, std::vector<float> propdensity,
-			std::vector<float> propikp, Surface* topo_surface);
+			const std::vector<Surface>& inception_horizons,
+			const std::vector<Surface>& water_tables, const bool use_sampling_points, const Box& Box, const float max_inception_surface_distance, const std::vector<Vector3>& sampling_points,
+			const bool create_surf_sampling, const bool use_density_property, int k_pts, const float fraction_karst_perm, const std::vector<float>& propdensity,
+			const std::vector<float>& propikp, const Surface& topo_surface);
 
 
 		/*!
@@ -437,9 +438,10 @@ namespace KarstNSim {
 		\param costsFinal The costs associated with the final paths.
 		\param vadoseFinal Vadose zone flags for the final paths (true if in the vadose zone, false in the phreatic zone).
 		\param springidxFinal The index of the spring associated with each generated path of the skeleton.
+		\param save_new_matrix A flag indicating whether to save the new connectivity matrix (with resolved "uncertain" connections).
 		*/
 		void ComputeKarsticSkeleton(const std::vector<KeyPoint>& pts, const float fraction_karst_perm, std::vector<std::vector<int>>& pathsFinal, std::vector<std::vector<float>>& costsFinal, std::vector<std::vector<char>>& vadoseFinal,
-			std::vector<int>& springidxFinal);
+			std::vector<int>& springidxFinal, bool save_new_matrix);
 
 		/*!
 		\brief Finds the shortest path between two nodes in the graph.
@@ -512,13 +514,13 @@ namespace KarstNSim {
 		\param propdensity Property density, which is used if use_density_property is True.
 		\param topo_surface The topographic surface.
 		*/
-		void SampleSpaceDwork(Box* Box, const bool use_density_property, const int k, std::vector<float> propdensity, Surface* topo_surface);
+		void SampleSpaceDwork(const Box& box, const bool use_density_property, const int k, const std::vector<float>& propdensity, const Surface& topo_surface);
 
 		/*!
 		\brief Defines flags for the water table surfaces.
 		\param water_tables A vector of all the water table surfaces.
 		*/
-		void DefineWSurfaceFlags(std::vector<Surface>* water_tables);
+		void DefineWSurfaceFlags(const std::vector<Surface>& water_tables);
 
 		/*!
 		\brief Builds the nearest neighbor direct cost graph based on the provided parameters.
@@ -527,7 +529,7 @@ namespace KarstNSim {
 		\param max_dist_surf Dmax, the maximum distance of influence of inception surfaces.
 		\param keypts A vector of all KeyPoint objects (inlets, outlets, waypoints).
 		*/
-		void BuildNearestNeighbourGraph(Box*, const float fraction_old_karst_perm, float max_dist_surf, const std::vector<KeyPoint>& keypts);
+		void BuildNearestNeighbourGraph(const Box& box, const float fraction_old_karst_perm, float max_dist_surf, const std::vector<KeyPoint>& keypts);
 
 		/*!
 		\brief Saves the noise vector for the given set of points as a new box property.
@@ -611,7 +613,7 @@ namespace KarstNSim {
 		* @param water_tables the selected water tables
 		* @return a ratio between 0 and 1
 		*/
-		float compute_wt_ratio(GraphOperations* graph, std::vector<Surface>* water_tables);
+		float compute_wt_ratio(const GraphOperations& graph, const std::vector<Surface>& water_tables);
 
 		/*!
 		\brief Counts the number of vadose zone nodes for a specific spring water table.
@@ -694,7 +696,7 @@ namespace KarstNSim {
 		\param geologicalparams The geological parameters of the simulation.
 		\param network_name The name of the generated network.
 		*/
-		void create_line(const GeologicalParameters& geologicalparams, std::string network_name) const;
+		KarstNetworkResult get_result(const GeologicalParameters& geologicalparams, std::string network_name) const;
 
 		/*!
 		\brief Generates a set of deadend points in the karstic skeleton bounding box. Used in amplify_deadend.

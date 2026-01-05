@@ -100,12 +100,8 @@ KarstNSim::ParamsSource ParseInputs::parse(const std::string& filename) {
 		std::cerr << "Error: " << std::strerror(errno) << std::endl;
 		throw std::runtime_error("Failed to open input file");
 	}
-
-	{
-		const std::string& p = filename;
-		const size_t pos = p.find_last_of("/\\");
-		params.simulation_input_dir = (pos == std::string::npos) ? std::string() : p.substr(0, pos);
-	}
+	// default: input files are located in the same directory as the main input file
+	params.simulation_input_dir = std::filesystem::absolute(filename).parent_path().string();
 
 	std::string line;
 	while (std::getline(inputFile, line)) {
@@ -130,6 +126,10 @@ KarstNSim::ParamsSource ParseInputs::parse(const std::string& filename) {
 		}
 		else if (paramType == "main_repository:") {
 			iss >> params.save_repository;
+		}
+		else if (paramType == "simulation_input_dir:") {
+			// allow changing the input directory from the default (same as main input file)
+			iss >> params.simulation_input_dir;
 		}
 
 		// General parameters
@@ -609,6 +609,11 @@ KarstNSim::ParamsSource ParseInputs::parse(const std::string& filename) {
 		std::string flag;
 		iss >> flag;
 		params.create_nghb_graph_property = parse_boolean(flag);
+		}
+		else if (paramType == "create_solved_connectivity_matrix:") {
+		std::string flag;
+		iss >> flag;
+		params.create_solved_connectivity_matrix = parse_boolean(flag);
 		}
 		else if (paramType == "create_grid:") {
 		std::string flag;

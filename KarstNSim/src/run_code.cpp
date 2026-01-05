@@ -132,14 +132,14 @@ namespace KarstNSim {
 
 			std::string sim_name_iter = parameters.karstic_network_name + "_" + std::to_string(i + parameters.selected_seed - 1);
 
-			KarsticNetwork karst(sim_name_iter, &parameters.domain, params, keypts, &parameters.surf_wat_table);
+			KarsticNetwork karst(sim_name_iter, parameters.domain, params, keypts, parameters.surf_wat_table);
 			karst.set_save_directory(parameters.save_repository);
 
-			karst.set_sinks(&parameters.sinks, parameters.propsinksindex, parameters.propsinksorder, parameters.use_sinks_radius, parameters.propsinksradius);
-			karst.set_springs(&parameters.springs, parameters.propspringsindex, parameters.allow_single_outlet_connection, parameters.use_springs_radius, parameters.propspringsradius, parameters.propspringssurfindex);
+			karst.set_sinks(parameters.sinks, parameters.propsinksindex, parameters.propsinksorder, parameters.use_sinks_radius, parameters.propsinksradius);
+			karst.set_springs(parameters.springs, parameters.propspringsindex, parameters.allow_single_outlet_connection, parameters.use_springs_radius, parameters.propspringsradius, parameters.propspringssurfindex);
 
 			if (parameters.use_waypoints) {
-				karst.set_waypoints(&parameters.waypoints, parameters.use_waypoints_radius, parameters.waypoints_radius, parameters.waypoints_impact_radius, parameters.waypoints_weight);
+				karst.set_waypoints(parameters.waypoints, parameters.use_waypoints_radius, parameters.waypoints_radius, parameters.waypoints_impact_radius, parameters.waypoints_weight);
 			}
 
 			if (parameters.use_deadend_points) {
@@ -147,14 +147,14 @@ namespace KarstNSim {
 			}
 
 			if (parameters.use_previous_networks) {
-				karst.set_previous_networks(&parameters.previous_networks);
+				karst.set_previous_networks(parameters.previous_networks);
 			}
 
 			if (parameters.use_karstification_potential) {
 				karst.set_karstification_potential_parameters(parameters.karstification_potential_weight);
 
 				if (parameters.use_ghostrocks) {
-					karst.set_ghost_rocks(parameters.domain, parameters.propikp, &parameters.alteration_lines,
+					karst.set_ghost_rocks(parameters.domain, parameters.propikp, parameters.alteration_lines,
 						parameters.interpolate_lines, parameters.ghostrock_max_vertical_size,
 						parameters.use_max_depth_constraint, parameters.ghost_rock_weight,
 						&parameters.max_depth_horizon, parameters.ghostrock_width);
@@ -166,25 +166,25 @@ namespace KarstNSim {
 			}
 
 			if (!parameters.sections_simulation_only) {
-				karst.set_wt_surfaces_sampling(sim_name_iter, &parameters.surf_wat_table, parameters.refine_surface_sampling);
+				karst.set_wt_surfaces_sampling(sim_name_iter, parameters.surf_wat_table, parameters.refine_surface_sampling);
 
 				if (parameters.add_inception_surfaces) {
 					if (!parameters.use_sampling_points) {
-						karst.set_inception_surfaces_sampling(sim_name_iter, &parameters.inception_surfaces,
+						karst.set_inception_surfaces_sampling(sim_name_iter, parameters.inception_surfaces,
 							parameters.refine_surface_sampling, parameters.create_vset_sampling);
 					}
-					karst.set_inception_horizons_parameters(&parameters.inception_surfaces,
+					karst.set_inception_horizons_parameters(parameters.inception_surfaces,
 						parameters.inception_surface_constraint_weight);
 				}
 				else {
 					karst.disable_inception_horizon();
 				}
 
-				karst.set_topo_surface(&parameters.topo_surface);
+				karst.set_topo_surface(parameters.topo_surface);
 
 				if (parameters.use_fracture_constraints) {
-					karst.set_fracture_constraint_parameters(&parameters.fracture_families_orientations,
-						&parameters.fracture_families_tolerance,
+					karst.set_fracture_constraint_parameters(parameters.fracture_families_orientations,
+						parameters.fracture_families_tolerance,
 						parameters.fracture_constraint_weight);
 				}
 				else {
@@ -192,7 +192,7 @@ namespace KarstNSim {
 				}
 
 				if (parameters.use_no_karst_spheres) {
-					karst.set_no_karst_spheres_parameters(&parameters.sphere_centers, parameters.sphere_radius);
+					karst.set_no_karst_spheres_parameters(parameters.sphere_centers, parameters.sphere_radius);
 				}
 
 				if (parameters.use_amplification) {
@@ -211,7 +211,7 @@ namespace KarstNSim {
 
 				karst.set_water_table_weight(parameters.water_table_constraint_weight_vadose, parameters.water_table_constraint_weight_phreatic);
 				karst.set_simulation_parameters(parameters.nghb_count, parameters.use_max_nghb_radius, parameters.nghb_radius, parameters.poisson_radius, parameters.gamma, parameters.multiply_costs, parameters.vadose_cohesion);
-				karst.read_connectivity_matrix(parameters.simulation_input_dir, &parameters.sinks, &parameters.springs);
+				karst.read_connectivity_matrix(parameters.simulation_input_dir, parameters.sinks, parameters.springs);
 			}
 
 			if (parameters.simulate_sections) {
@@ -227,9 +227,26 @@ namespace KarstNSim {
 
 			std::cout << "Parameters were prepared for simulation (" << init_time << " s)" << std::endl;
 
-			float time_needed = karst.run_simulation(parameters.sections_simulation_only, parameters.create_nghb_graph, parameters.create_nghb_graph_property, parameters.use_amplification,
-				parameters.use_sampling_points, parameters.fraction_karst_perm, parameters.fraction_old_karst_perm, parameters.max_inception_surface_distance, &parameters.sampling_points, parameters.create_vset_sampling, parameters.use_density_property,
+			auto result = karst.run_simulation(parameters.sections_simulation_only, parameters.create_nghb_graph, parameters.create_nghb_graph_property, parameters.create_solved_connectivity_matrix, parameters.use_amplification,
+				parameters.use_sampling_points, parameters.fraction_karst_perm, parameters.fraction_old_karst_perm, parameters.max_inception_surface_distance, parameters.sampling_points, parameters.create_vset_sampling, parameters.use_density_property,
 				parameters.k_pts, parameters.propdensity, parameters.propikp);
+			
+			if (!result.has_value()) {
+				std::cout << "Simulation failed for seed " << used_seed << std::endl;
+				continue;
+			}
+			// save result to file
+			std::string full_name = sim_name_iter + "_karst.txt";
+			std::string full_dir_name = parameters.save_repository + "/outputs";
+			auto res_path = make_unique_filename(full_name, full_dir_name);
+			std::ofstream resfile(res_path);
+			if (resfile.is_open()) {
+				resfile << result->to_string();
+				resfile.close();
+			} else {
+				std::cout << "Failed to save karst network to file." << std::endl;
+			}
+
 			const clock_t time2 = clock();
 			float real_time_needed = float(time2 - begin_time) / CLOCKS_PER_SEC;
 
@@ -286,7 +303,7 @@ namespace KarstNSim {
 			std::string sim_name_iter = parameters.karstic_network_name + "_" + std::to_string(i + parameters.selected_seed - 1);
 
 
-			KarsticNetwork karst(sim_name_iter, &parameters.domain, params, keypts, &parameters.surf_wat_table);
+			KarsticNetwork karst(sim_name_iter, parameters.domain, params, keypts, parameters.surf_wat_table);
 
 			karst.set_save_directory(parameters.save_repository);
 
@@ -308,15 +325,17 @@ namespace KarstNSim {
 					throw std::runtime_error("Waypoints enabled but 'impact_radius' is missing or mismatched.");
 				}
 
-				karst.set_waypoints(&parameters.waypoints,
+				karst.set_waypoints(
+					parameters.waypoints,
 					can_use_radius,
 					parameters.waypoints_radius,
 					parameters.waypoints_impact_radius,
-					parameters.waypoints_weight);
+					parameters.waypoints_weight
+				);
 			}
 
 			if (parameters.use_previous_networks) {
-				karst.set_previous_networks(&parameters.previous_networks);
+				karst.set_previous_networks(parameters.previous_networks);
 			}
 
 			karst.set_geostat_params(parameters.geostat_params);
@@ -331,7 +350,7 @@ namespace KarstNSim {
 			std::cout << "Parameters were prepared for simulation (" << init_time << " s)" << std::endl;
 			std::cout << "Simulation of properties..." << std::endl;
 
-			karst.run_simulation_properties(skel, &parameters.alteration_lines, parameters.use_ghostrocks, parameters.ghostrock_max_vertical_size, parameters.use_max_depth_constraint, &parameters.max_depth_horizon, parameters.ghostrock_width);
+			karst.run_simulation_properties(skel, parameters.alteration_lines, parameters.use_ghostrocks, parameters.ghostrock_max_vertical_size, parameters.use_max_depth_constraint, parameters.max_depth_horizon, parameters.ghostrock_width);
 			const clock_t time2 = clock();
 			float real_time_needed = float(time2 - begin_time) / CLOCKS_PER_SEC;
 

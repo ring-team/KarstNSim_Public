@@ -49,7 +49,7 @@ namespace KarstNSim {
 		A value of n means that this fractal pattern operation is operated n times.
 		\param create_surface_sampling option which will create an ASCII file with only the points sampled on the surfaces if set to true.
 		*/
-		static void multiple_surface_sampling(std::string directoryname, std::string network_name, KarstNSim::Box* Box, std::vector<Surface>* Surface, std::vector<Vector3>& Points, const int refine_surface_sampling, const bool create_surface_sampling);
+		static void multiple_surface_sampling(std::string directoryname, std::string network_name, const KarstNSim::Box& Box, const std::vector<Surface>& Surface, std::vector<Vector3>& Points, const int refine_surface_sampling, const bool create_surface_sampling);
 
 	};
 }

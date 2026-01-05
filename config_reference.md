@@ -26,6 +26,7 @@ Unless stated otherwise, distances/lengths are in the same units as your model c
 ### `domain: <path>`
 - **Type**: `path` (text voxet/box description with density property and optionally IKP property)
 - **What it does**: Defines the 3D domain (origin, axes, grid size) used for sampling and grid-based properties (density and IKP (Intrinsic Karstification Potential), the second being optional). Density values range from 0 to 1 both excluded, and IKP from 0 to 1 both included. Any negative value is considered a NDV, but -99999 is the default NDV for both.
+- **Indexing reminder**: KarstNSim expects grid properties (`density`, `IKP`, etc.) to be flattened with the **u axis as the fastest varying index**, followed by **v**, then **w**. In other words, the linear index must be computed as `idx = u + nu * v + nu * nv * w` where `0 ≤ u < nu`, `0 ≤ v < nv`, `0 ≤ w < nw`. When exporting or building voxets from external tools, make sure the serialization order matches this convention; mismatches will map sampled points to the wrong cells.
 
 ### `selected_seed: <int>`
 - **Type**: `int` (≥ 0)

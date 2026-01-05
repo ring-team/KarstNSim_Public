@@ -35,6 +35,7 @@ If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
 #include <cstring>
 #include <iomanip>
 #include <stdexcept>
+#include <optional>
 
 namespace KarstNSim {
 
@@ -65,8 +66,8 @@ namespace KarstNSim {
 		\param water_tables water tables associated to each spring
 		*/
 
-		KarsticNetwork(const std::string& karstic_network_name, Box* Box, GeologicalParameters& params,
-			const std::vector<KeyPoint>& keypts, std::vector<Surface>* water_tables);
+		KarsticNetwork(const std::string& karstic_network_name, const Box& box, GeologicalParameters& params,
+			const std::vector<KeyPoint>& keypts, const std::vector<Surface>& water_tables);
 
 		/*!
 		\brief Set sink points into the key points vector
@@ -76,7 +77,7 @@ namespace KarstNSim {
 		\param use_sinks_radius Flag to indicate whether to use sink radii
 		\param propsinksradius Radii of sinks
 		*/
-		void set_sinks(const std::vector<Vector3>* sinks, const std::vector<int>& propsinksindex, const std::vector<int>& propsinksorder, bool use_sinks_radius, const std::vector<float>& propsinksradius);
+		void set_sinks(const std::vector<Vector3>& sinks, const std::vector<int>& propsinksindex, const std::vector<int>& propsinksorder, bool use_sinks_radius, const std::vector<float>& propsinksradius);
 
 		/*!
 		\brief Puts all spring points in the keypoint vector
@@ -87,7 +88,7 @@ namespace KarstNSim {
 		\param propsinksradius Radii of sinks
 		\param propspringswtsurf Associated water table surfaces for springs
 		*/
-		void set_springs(const std::vector<Vector3>* springs, const std::vector<int>& propspringsindex, const bool& allow_single_outlet_connection, bool use_sinks_radius, const std::vector<float>& propsinksradius, const std::vector<int>& propspringswtsurf);
+		void set_springs(const std::vector<Vector3>& springs, const std::vector<int>& propspringsindex, const bool& allow_single_outlet_connection, bool use_sinks_radius, const std::vector<float>& propsinksradius, const std::vector<int>& propspringswtsurf);
 
 		/*!
 		\brief Set way points into the key points vector
@@ -97,7 +98,7 @@ namespace KarstNSim {
 		\param propwaypointsimpactradius Impact radii for way points
 		\param waypoints_weight Weight for way points in simulation
 		*/
-		void set_waypoints(const std::vector<Vector3>* waypoints, bool use_waypoints_radius, const std::vector<float>& propwaypointsradius, const std::vector<float>& propwaypointsimpactradius, float waypoints_weight);
+		void set_waypoints(const std::vector<Vector3>& waypoints, bool use_waypoints_radius, const std::vector<float>& propwaypointsradius, const std::vector<float>& propwaypointsimpactradius, float waypoints_weight);
 
 		/*!
 		\brief Set the number and maximum distance of dead-end points
@@ -110,7 +111,7 @@ namespace KarstNSim {
 		\brief Adds previous networks to the generated graph
 		\param previous_networks Pointer to the list of lines representing the previous networks incorporated to the graph
 		*/
-		void set_previous_networks(const std::vector<Line>* previous_networks);
+		void set_previous_networks(const std::vector<Line>& previous_networks);
 
 		/*!
 		\brief Add nodes from surfaces for densified sampling
@@ -119,7 +120,7 @@ namespace KarstNSim {
 		\param refine_surface_sampling Level of surface sampling refinement
 		\param create_vset_sampling Flag to create a vertex set sampling
 		*/
-		void set_inception_surfaces_sampling(const std::string& network_name, std::vector<Surface>* surfaces_used_to_densify,
+		void set_inception_surfaces_sampling(const std::string& network_name, const std::vector<Surface>& surfaces_used_to_densify,
 			const int& refine_surface_sampling, const bool& create_vset_sampling);
 
 		/*!
@@ -127,14 +128,14 @@ namespace KarstNSim {
 		\param inception_horizons List of inception horizon surfaces
 		\param inception_horizon_constraint_weight Weight of the inception horizon constraint
 		*/
-		void set_wt_surfaces_sampling(const std::string& network_name, std::vector<Surface>* surfaces_used_to_densify,
+		void set_wt_surfaces_sampling(const std::string& network_name, const std::vector<Surface>& surfaces_used_to_densify,
 			const int& refine_surface_sampling);
 
 		/*!
 		\brief Set the topographic surface
 		\param topo_surface Pointer to the topographic surface
 		*/
-		void set_topo_surface(Surface* topo_surface);
+		void set_topo_surface(const Surface& topo_surface);
 
 		/*! \brief Configures ghost rocks for the simulation
 		\param grid Grid box representing the domain
@@ -147,14 +148,14 @@ namespace KarstNSim {
 		\param max_depth_horizon Pointer to maximum depth horizon surface
 		\param ghostrock_width Max width of ghost rock corridors
 		*/
-		void set_ghost_rocks(const Box& grid, std::vector<float>& ikp, Line* alteration_lines, const bool& interpolate_lines, const float& ghostrock_max_vertical_size, const bool& use_max_depth_constraint, const float& ghost_rock_weight, Surface* max_depth_horizon, const float& ghostrock_width);
+		void set_ghost_rocks(const Box& grid, std::vector<float>& ikp, const Line& alteration_lines, const bool& interpolate_lines, const float& ghostrock_max_vertical_size, const bool& use_max_depth_constraint, const float& ghost_rock_weight, Surface* max_depth_horizon, const float& ghostrock_width);
 
 		/*!
 		\brief Sets the simulation with the inception hoizon parameters if we want to use this constraint
 		\param inception_horizons Pointer list to surfaces representing the inception horizons
 		\param inception_horizon_constraint_weight Weight of the inception horizon constraint
 		*/
-		void set_inception_horizons_parameters(std::vector<Surface>* inception_horizons, const float& inception_horizon_constraint_weight);
+		void set_inception_horizons_parameters(const std::vector<Surface>& inception_horizons, const float& inception_horizon_constraint_weight);
 
 		/*!
 		\brief Sets the simulation so that it will not consider inception horizon constraint
@@ -174,7 +175,7 @@ namespace KarstNSim {
 		\param fracture_intensity intensity/norm of the fracture orienation vector
 		\param fracture_constraint_weight Weight of the fracture constraint
 		*/
-		void set_fracture_constraint_parameters(const std::vector<float>* fracture_families_orientations, const std::vector<float>* fracture_families_tolerance, const float& fracture_constraint_weight);
+		void set_fracture_constraint_parameters(const std::vector<float>& fracture_families_orientations, const std::vector<float>& fracture_families_tolerance, const float& fracture_constraint_weight);
 
 		/*!
 		\brief Sets the simulation so that it will not consider fracture constraint
@@ -186,7 +187,7 @@ namespace KarstNSim {
 		\param sphere_centers centers of the spheres
 		\param sphere_radius radius pf the spheres
 		*/
-		void set_no_karst_spheres_parameters(const std::vector<Vector3>* sphere_centers, const std::vector<float>& sphere_radius);
+		void set_no_karst_spheres_parameters(const std::vector<Vector3>& sphere_centers, const std::vector<float>& sphere_radius);
 
 		/*!
 		\brief Sets the simulation parameters for the sampling, neireast neighbor and gamma skeleton computation phases
@@ -215,7 +216,7 @@ namespace KarstNSim {
 		\param sinks Pointer to the list of sinks
 		\param springs Pointer to the list of springs
 		*/
-		void read_connectivity_matrix(const std::string& simulation_input_dir, const std::vector<Vector3>* sinks, const std::vector<Vector3>* springs);
+		void read_connectivity_matrix(const std::string& simulation_input_dir, const std::vector<Vector3>& sinks, const std::vector<Vector3>& springs);
 
 		/*! \brief Sets noise parameters for the simulation
 		\param use_noise Boolean indicating whether to use noise for the cycle amplification step only
@@ -241,12 +242,13 @@ namespace KarstNSim {
 		\param max_depth_horizon Pointer to maximum depth horizon surface
 		\param ghostrock_width Width of ghost rocks
 		*/
-		void run_simulation_properties(KarsticSkeleton& skel, Line* alteration_lines, const bool& use_ghost_rocks, const float& ghostrock_max_vertical_size, const bool& use_max_depth_constraint, Surface* max_depth_horizon, const float& ghostrock_width);
+		void run_simulation_properties(KarsticSkeleton& skel, const Line& alteration_lines, const bool& use_ghost_rocks, const float& ghostrock_max_vertical_size, const bool& use_max_depth_constraint, const Surface& max_depth_horizon, const float& ghostrock_width);
 
 		/*! \brief Runs the simulation and returns the time required for the simulation
 		\param sections_simulation_only Boolean indicating whether to simulate sections only (and skip everything else)
 		\param create_nghb_graph Boolean to create nearest neighbor graph
 		\param create_nghb_graph_property Boolean to create nearest neighbor graph property
+		\param create_solved_connectivity_matrix Boolean to create the "solved" connectivity matrix (with resolved "uncertain" connections)
 		\param use_amplification Boolean to use amplification phase
 		\param use_sampling_points_ Boolean to use sampling points
 		\param fraction_karst_perm Cohesion factor Pred
@@ -260,9 +262,11 @@ namespace KarstNSim {
 		\param propikp Vector of IKP property of the box
 		\return Simulation time
 		*/
-		float run_simulation(const bool& sections_simulation_only, const bool& create_nghb_graph, const bool& create_nghb_graph_property, const bool& use_amplification, const bool& use_sampling_points_,
-			const float& fraction_karst_perm, const float& fraction_old_karst_perm, const float& max_inception_surface_distance, std::vector<Vector3>* sampling_points_, const bool& create_vset_sampling_,
-			const bool& use_density_property_, const int& k_pts, const std::vector<float>& propdensity, const std::vector<float>& propikp);
+		std::optional<KarstNetworkResult> run_simulation(const bool &sections_simulation_only, const bool &create_nghb_graph, const bool &create_nghb_graph_property,
+							 const bool &create_solved_connectivity_matrix, const bool &use_amplification, const bool &use_sampling_points,
+							 const float &fraction_karst_perm, const float &fraction_old_karst_perm, const float &max_inception_surface_distance,
+							 const std::vector<Vector3>& sampling_points, const bool &create_vset_sampling, const bool &use_density_property,
+							 const int &k_pts, const std::vector<float> &propdensity, const std::vector<float> &propikp);
 
 		/*!
 		\brief Sets the save repertory if we want to create link and node files
@@ -324,14 +328,14 @@ namespace KarstNSim {
 		std::vector<std::vector<Vector3>> nodes_on_wt_surfaces; /*!< List of nodes on water table surfaces */
 		std::vector<Vector3> pt_sink; /*!< Sinks */
 		std::vector<Vector3> pt_spring; /*!< Springs */
-		std::vector<Surface>* inception_horizons = nullptr; /*!< Inception horizon surfaces */
-		std::vector<Surface>* water_tables = nullptr; /*!< Water table surfaces */
-		Surface* topo_surface_ = nullptr; /*!< Topographic surface */
+		std::vector<Surface> inception_horizons; /*!< Inception horizon surfaces */
+		std::vector<Surface> water_tables; /*!< Water table surfaces */
+		Surface topo_surface_; /*!< Topographic surface */
 		bool is_simulation_parametrized = false; /*!< Flag indicating whether the simulation is parametrized or not*/
 		bool use_deadend_pts_ = false; /*!< Flag indicating whether deadend amplification should be applied */
 		int nb_deadend_points_; /*!< Number of dead-end points */
 		float max_distance_of_deadend_pts_; /*!< Maximum distance for dead-end points */
-		Box* box; /*!< Bounding box of the simulation */
+		Box box; /*!< Bounding box of the simulation */
 		GeologicalParameters params; /*!< Geological parameters */
 		GeostatParams geostatparams; /*!< Geostatistical parameters */
 		std::vector<KeyPoint> keypts; /*!< Keypoints for simulation */
