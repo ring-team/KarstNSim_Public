@@ -1,9 +1,32 @@
 # KarstNSimPublic
 
-## Version 1.0
+## Version 1.3
 
-02/14/2024.
-Original version, as used in the 2024 [article](https://doi.org/10.1016/j.jhydrol.2024.130878).
+09/12/2025
+
+### Modifications
+
+Minor update in terms of code functionalities:
+- Added an input configuration reference manual (config_reference.md) which precises the type, theoretical and typical range of values, meaning, behavior and practical effect of all input parameters. Users can now refer to it for correct KarstNSim use, which avoids the requirement to generate the doxygen documentation for most users.
+- Updated the "base" example provided with some new functionalities, and added three other examples:
+	- A "Polygenic Karst" example which simulated the carving of new conduits following a base level drop from the base case.
+	- An "Amplification" example which uses the amplification step on the network generated in the "polygenic karst" example.
+	- A "Karst section generation" example, which, based on the amplified network, simulates an equivalent radius on the nodes of the network using a curvilinear SGS algorithm (Frantz et al. 2021).
+- Added more log lines during simulation so that the user is kept informed of the completion and time duration of each step. In case of a crash, the user can also, as a result, provide more precise information to the developer for a fix.
+- Some minor bug fixes.
+
+## Version 1.2
+
+02/14/2025.
+
+### Modifications
+
+Major update with new features from the PhD thesis (Gouy, 2025), including:
+- Amplification step to increase the network density and generate maze patterns (cycles). There is also an option to add noise to the cost graph, either just for the amplification step, or for the whole simulation.
+- New algorithm to pick inlet/outlet pairing when uncertain (no tracer tests and/or no strong geological argument): either by picking the pairings randomly, or only keeping the path from each inlet to the closest spring (by computing the cumulative shortest path cost). This allows to draw probable catchment areas of each spring.
+- Possibility to incorporate ghost-rocks in the simulation through surface alteration lines: the code will first interpolate an alterite volume beneath the line (with elliptic cross-section) and then reduce the cost of edges traversing this volume (through the intrinsic karstification potential subcost).
+- New key points available : waypoints and karst-free points. Both affect the path chosen during shortest path computations. Waypoints can be seen as soft data constraints, by reducing cost of all edges less than a given radius away from a waypoint (can be used when some conduits positions are known) and no-karst points also have a spherical effect zone around them which simply deletes any sampling point in it, hence blocking any path close to them.
+- Conduit dimensions simulation step using the 1D-Curvilinear Branchwise modified SGS algorithm of Frantz et al. (2021). Allows to generate any property on the skeleton nodes, such as Re (equivalent radius) and WH (widht-height ratio).
 
 ## Version 1.1
 
@@ -22,30 +45,7 @@ Original version, as used in the 2024 [article](https://doi.org/10.1016/j.jhydro
 - Changed the cost function from C = L(αICI + αFCF + αWTCWT + αPCP) to C = L(1 + αICI + αFCF + αWTCWT + αPCP). The added "+1" simplifies counterbalancing of costs, particularly the fracture cost, to control the level of fracturation of the network more easily, while maintaining complete proportionality between distance L and full cost C (and thus avoiding resolution artifacts).
 - A property "equivalent_radius" appears in the karst network output file. It is not currently implemented, hence returning a default value for now.
 
-## Version 1.2
+## Version 1.0
 
-02/14/2025.
-
-### Modifications
-
-Major update with new features from the PhD thesis (Gouy, 2025), including:
-- Amplification step to increase the network density and generate maze patterns (cycles). There is also an option to add noise to the cost graph, either just for the amplification step, or for the whole simulation.
-- New algorithm to pick inlet/outlet pairing when uncertain (no tracer tests and/or no strong geological argument): either by picking the pairings randomly, or only keeping the path from each inlet to the closest spring (by computing the cumulative shortest path cost). This allows to draw probable catchment areas of each spring.
-- Possibility to incorporate ghost-rocks in the simulation through surface alteration lines: the code will first interpolate an alterite volume beneath the line (with elliptic cross-section) and then reduce the cost of edges traversing this volume (through the intrinsic karstification potential subcost).
-- New key points available : waypoints and karst-free points. Both affect the path chosen during shortest path computations. Waypoints can be seen as soft data constraints, by reducing cost of all edges less than a given radius away from a waypoint (can be used when some conduits positions are known) and no-karst points also have a spherical effect zone around them which simply deletes any sampling point in it, hence blocking any path close to them.
-- Conduit dimensions simulation step using the 1D-Curvilinear Branchwise modified SGS algorithm of Frantz et al. (2021). Allows to generate any property on the skeleton nodes, such as Re (equivalent radius) and WH (widht-height ratio).
-
-## Version 1.3
-
-09/12/2025
-
-### Modifications
-
-Minor update in terms of code functionalities:
-- Added an input configuration reference manual (config_reference.md) which precises the type, theoretical and typical range of values, meaning, behavior and practical effect of all input parameters. Users can now refer to it for correct KarstNSim use, which avoids the requirement to generate the doxygen documentation for most users.
-- Updated the "base" example provided with some new functionalities, and added three other examples:
-	- A "Polygenic Karst" example which simulated the carving of new conduits following a base level drop from the base case.
-	- An "Amplification" example which uses the amplification step on the network generated in the "polygenic karst" example.
-	- A "Karst section generation" example, which, based on the amplified network, simulates an equivalent radius on the nodes of the network using a curvilinear SGS algorithm (Frantz et al. 2021).
-- Added more log lines during simulation so that the user is kept informed of the completion and time duration of each step. In case of a crash, the user can also, as a result, provide more precise information to the developer for a fix.
-- Some minor bug fixes.
+02/14/2024.
+Original version, as used in the 2024 [article](https://doi.org/10.1016/j.jhydrol.2024.130878).
