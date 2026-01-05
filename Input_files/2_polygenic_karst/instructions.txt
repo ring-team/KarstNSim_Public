@@ -161,4 +161,5 @@ multiply_costs: false
 create_vset_sampling: true
 create_nghb_graph: false
 create_nghb_graph_property: false
+create_solved_connectivity_matrix: true
 create_grid: false
