@@ -21,6 +21,7 @@ And several code improvements:
 - Possibility to not define a water table for certain (or all) springs. These springs are therefore relict or overflow springs that the user cannot associate with a particular perennial water body.
 - Improved shortest-path computation by using an exact bidirectional heap-based Dijkstra algorithm for inlet-outlet path searches (~2x speed).
 - Several bug fixes.
+- We provide access to a launcher for parallel simulations (parallel_launcher.py). Each job can be comprised of one KarstNSim simulation or a sequence of simulation (each with specific parameters).
 
 
 ## Version 1.3
