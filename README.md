@@ -9,10 +9,12 @@ It adapts the Karst simulation code proposed by <b> Paris, A., Guérin, E., Peyt
 This implementation includes modifications as compared to this initial independant version, in order to better suit geological data and information. 
 
 The first version of KarstNSim was done in the frame of <b> Benoit Thebault </b> master's thesis, supervised by Pauline Collon. It was presented in the 2022 RINGMeeting in: <b> Thebault, B., Collon, P., Antoine, C., Paris, A., Galin, E., 2022. Karstic network simulation with γ -graphs, in: 2022 RING Meeting. </b>
-Since 2022 summer, KarstNSim is developed in the frame of <b> Augustin Gouy</b> PhD thesis, supervised by Pauline Collon and Vincent Bailly-Comte.
-This public version corresponds to the version of KarstNSim used to generate results in the 2025 PhD thesis.
+From 2022 to 2025, KarstNSim has been developed in the frame of <b> Augustin Gouy</b>'s PhD thesis, supervised by Pauline Collon and Vincent Bailly-Comte.
+From 2025 onwards, KarstNSim benefits from developments by Augustin Gouy.
 
-It is recommended to read the methodology presented in the 2024 article and/or in the thesis to better apprehend the code.
+The current version corresponds to KarstNSim 2.
+
+It is recommended to read the methodology presented in the 2024 and 2026 articles and/or in the thesis to better apprehend the code.
 
 If you use this code, please cite the associated article :
 
@@ -106,7 +108,7 @@ Starting from the **base** network, this example runs the amplification step to 
 <img src="amplification_example.png" alt="Amplification example" width="100%" align="center">
 
 ### 4) Karst section generation (curvilinear SGS)
-Given the **amplified** network, this example simulates **equivalent radii on nodes** using a **curvilinear SGS** algorithm (Frantz et al., 2021). Variogram parameters mirror those in the paper; radii are visualized in log-scale and mapped to node sphere size for rendering.
+Given the **amplified** network, this example simulates **equivalent radii on nodes** using a **curvilinear SGS** algorithm (Frantz et al., 2021). Variogram parameters mirror those in the paper; radii are visualized in log-scale and mapped to node sphere size for rendering. No external drift has been added.
 
 <img src="karst_section_generation_example.png" alt="Karst section generation example" width="100%" align="center">
 

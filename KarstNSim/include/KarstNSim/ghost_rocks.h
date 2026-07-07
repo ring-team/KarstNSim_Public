@@ -94,6 +94,6 @@ namespace KarstNSim {
 	 * @param substratum_surf The substratum surface for depth constraint checks.
 	 * @param ghost_rock_weight The weight to apply to IKP values within ghost rocks.
 	 */
-	void paint_KP_with_ghostrocks(const Box& grid, std::vector<float>& ikp, float length, float width, const Line& polyline, const bool& use_max_depth_constraint, const Surface& substratum_surf, int ghost_rock_weight);
+	void paint_KP_with_ghostrocks(const Box& grid, std::vector<float>& ikp, float length, float width, const Line& polyline, const bool& use_max_depth_constraint, const Surface& substratum_surf, float ghost_rock_weight);
 
 }

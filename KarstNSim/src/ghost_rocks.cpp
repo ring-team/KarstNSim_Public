@@ -93,42 +93,71 @@ namespace KarstNSim {
 		}
 	}
 
-	void paint_KP_with_ghostrocks(const Box& grid, std::vector<float>& ikp, float length, float width, const Line& polyline, const bool& use_max_depth_constraint, const Surface& substratum_surf, int ghost_rock_weight) {
-
-		// Iterate through each voxel in the grid
+	void paint_KP_with_ghostrocks(
+		const Box& grid,
+		std::vector<float>& ikp,
+		float length,
+		float width,
+		const Line& polyline,
+		const bool& use_max_depth_constraint,
+		const Surface& substratum_surf,
+		float ghost_rock_weight)
+	{
 		PointCloud centers2D = substratum_surf.get_centers_cloud(2);
-		float width_z;
-		int power = 2;
-		int idx;
-		bool is_inside;
-		int compt = 0;
+
+		float width_z = 0.0f;
+		const int power = 2;
+		int idx = -1;
+		bool is_inside = false;
+		int painted_cell_count = 0;
+
+		const Vector2 bbox_min = polyline.get_bbox_min();
+		const Vector2 bbox_max = polyline.get_bbox_max();
+
+		// The fast plan-view rejection must include the maximum lateral radius of the
+		// ghost-rock corridor. Without this margin, straight or nearly axis-aligned
+		// alteration lines may reject nearly all cells before the actual corridor
+		// distance test is evaluated.
+		const float bbox_margin = 0.5f * width;
 
 		for (int u = 0; u < grid.get_nu(); ++u) {
 			for (int v = 0; v < grid.get_nv(); ++v) {
 				for (int w = 0; w < grid.get_nw(); ++w) {
-					// Calculate the coordinates of the voxel center
-					Vector3 pt = grid.uvw2xyz(u, v, w);
+					const Vector3 pt = grid.uvw2xyz(u, v, w);
 
-					// Bounding Box Check: Quick reject cells outside potential ghost rock influence
-					Vector2 bbox_min = polyline.get_bbox_min();
-					Vector2 bbox_max = polyline.get_bbox_max();
-					if (pt.x < bbox_min.x || pt.x > bbox_max.x || pt.y < bbox_min.y || pt.y > bbox_max.y) {
+					if (pt.x < bbox_min.x - bbox_margin ||
+						pt.x > bbox_max.x + bbox_margin ||
+						pt.y < bbox_min.y - bbox_margin ||
+						pt.y > bbox_max.y + bbox_margin) {
 						continue;
 					}
 
-					is_inside = is_pt_in_ghostrock(pt, length, width, polyline, use_max_depth_constraint, substratum_surf, power, centers2D, width_z);
+					is_inside = is_pt_in_ghostrock(
+						pt,
+						length,
+						width,
+						polyline,
+						use_max_depth_constraint,
+						substratum_surf,
+						power,
+						centers2D,
+						width_z
+					);
+
 					if (!is_inside) {
 						continue;
 					}
+
 					grid.ravel(u, v, w, idx);
-					if (ikp[idx] > -10000) {
-						ikp[idx] += ghost_rock_weight; // IKP increased when cell intersected by ghost rock
-						compt++;
+
+					if (ikp[idx] > -10000.0f) {
+						ikp[idx] += ghost_rock_weight;
+						++painted_cell_count;
 					}
 				}
 			}
 		}
-		// Standardize the values in ikp between 0 and 1
-		standardize_to_range(ikp, 0.0, 1.0);
+
+		standardize_to_range(ikp, 0.0f, 1.0f);
 	}
 }

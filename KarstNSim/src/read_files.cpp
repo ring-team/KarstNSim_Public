@@ -185,7 +185,12 @@ namespace KarstNSim {
 
 
 
-	void load_line(const std::string& file_name, const std::string& save_directory, Line& pline, std::vector<std::vector<std::vector<float>>>& properties)
+	void load_line(
+		const std::string& file_name,
+		const std::string& save_directory,
+		Line& pline,
+		std::vector<std::vector<std::vector<float>>>& properties,
+		std::vector<std::string>& property_names)
 	{
 		std::string line;
 		std::string full_name = save_directory + "/" + file_name;
@@ -193,75 +198,108 @@ namespace KarstNSim {
 
 		if (!in.is_open()) {
 			std::cerr << "Error opening file: " << full_name << std::endl;
-			std::cerr << "Reason: " << strerror(errno) << std::endl;
-			throw std::runtime_error("File not found: " + full_name);
+			return;
 		}
 
-		// Count total number of lines in the file
 		int total_lines = 0;
 		while (std::getline(in, line)) {
 			total_lines++;
 		}
-		in.clear(); // clear eof flag
-		in.seekg(0, std::ios::beg); // back to the start
 
-		// Skip headers and get the number of columns
-		std::getline(in, line); // skip first line (header)
-		std::getline(in, line); // read the second line for property size calculation
-		std::stringstream iss;
-		iss << line;
-		int nb_columns = 0;
-		std::string value;
-		while (iss >> value) nb_columns++;
-		int prop_size = nb_columns - 4; // Adjust according to actual properties
+		in.clear();
+		in.seekg(0, std::ios::beg);
 
-		in.clear(); // clear eof flag
-		in.seekg(0, std::ios::beg); // back to the start
+		if (total_lines <= 0) {
+			throw std::runtime_error(
+				"[load_line] Invalid line file: the file is empty."
+			);
+		}
 
-		// Calculate the number of lines to be processed
-		int data_lines = total_lines - 1; // minus 1 header
+		std::getline(in, line);
 
-		// Resize properties based on the number of data lines
-		properties.resize(data_lines / 2); // Each segment has 2 points
+		std::stringstream header_stream(line);
+		std::string token;
+		std::vector<std::string> header_tokens;
 
-		// Prepare to read data
-		std::getline(in, line); // Skip the header line
+		while (header_stream >> token) {
+			header_tokens.push_back(token);
+		}
 
-		bool count = false;
+		if (header_tokens.size() < 4) {
+			throw std::runtime_error(
+				"[load_line] Invalid line file header: expected at least Index, X, Y, and Z."
+			);
+		}
+
+		property_names.assign(header_tokens.begin() + 4, header_tokens.end());
+
+		const int prop_size = static_cast<int>(property_names.size());
+		const int data_lines = total_lines - 1;
+
+		if (data_lines < 0 || data_lines % 2 != 0) {
+			throw std::runtime_error(
+				"[load_line] Invalid line file: each segment must be represented by two endpoint rows."
+			);
+		}
+
+		properties.clear();
+		properties.resize(data_lines / 2);
+
 		std::vector<Segment> segs;
-		Vector3 u1, u2;
-		std::vector<float> prop(prop_size, 0.);
-		std::vector<float> prop2(prop_size, 0.);
+		segs.reserve(data_lines / 2);
 
+		Vector3 u1, u2;
+		std::vector<float> prop(prop_size, 0.0f);
+		std::vector<float> prop2(prop_size, 0.0f);
+
+		bool first_endpoint = true;
 		int line_count = 0;
+
 		while (std::getline(in, line) && line_count < data_lines) {
-			std::istringstream iss2(line);
+			std::istringstream data_stream(line);
+
 			int idx;
 			float x, y, z;
-			iss2 >> idx >> x >> y >> z;
 
-			if (!count) {
+			if (!(data_stream >> idx >> x >> y >> z)) {
+				throw std::runtime_error(
+					"[load_line] Invalid line file: endpoint row does not contain Index, X, Y, and Z."
+				);
+			}
+
+			if (first_endpoint) {
 				for (int k = 0; k < prop_size; k++) {
-					iss2 >> prop[k];
+					if (!(data_stream >> prop[k])) {
+						throw std::runtime_error(
+							"[load_line] Invalid line file: missing property value on first segment endpoint."
+						);
+					}
 				}
+
 				u1 = Vector3(x, y, z);
 			}
 			else {
 				for (int k = 0; k < prop_size; k++) {
-					iss2 >> prop2[k];
+					if (!(data_stream >> prop2[k])) {
+						throw std::runtime_error(
+							"[load_line] Invalid line file: missing property value on second segment endpoint."
+						);
+					}
 				}
+
 				u2 = Vector3(x, y, z);
 
-				// Create properties array for this segment
 				std::vector<std::vector<float>> props(prop_size, std::vector<float>(2));
+
 				for (int k = 0; k < prop_size; k++) {
 					props[k] = { prop[k], prop2[k] };
 				}
-				properties[line_count / 2] = props; // Store properties for this segment
+
+				properties[line_count / 2] = props;
 				segs.push_back(Segment(u1, u2));
 			}
 
-			count = !count; // Toggle count
+			first_endpoint = !first_endpoint;
 			line_count++;
 		}
 
@@ -270,103 +308,289 @@ namespace KarstNSim {
 	}
 
 
-	void load_box(const std::string& file_name, const std::string& save_directory, Box& box, std::vector<std::vector<float>>& properties)
+	void load_line(
+		const std::string& file_name,
+		const std::string& save_directory,
+		Line& pline,
+		std::vector<std::vector<std::vector<float>>>& properties)
+	{
+		std::vector<std::string> property_names;
+
+		load_line(
+			file_name,
+			save_directory,
+			pline,
+			properties,
+			property_names
+		);
+	}
+
+	void load_box(
+		const std::string& file_name,
+		const std::string& save_directory,
+		Box& box,
+		std::vector<std::vector<float>>& properties)
 	{
 		std::string line;
+		const std::string full_name = save_directory + "/" + file_name;
+		std::ifstream in(full_name);
+
+		if (!in.is_open()) {
+			throw std::runtime_error("[load_box] Error opening file: " + full_name);
+		}
+
+		// Skip the format header.
+		if (!std::getline(in, line)) {
+			throw std::runtime_error("[load_box] Empty box file: " + full_name);
+		}
+
+		std::string name;
+		int prop_size = 0;
+		Vector3 basis, u, v, w;
+		int nu = 0;
+		int nv = 0;
+		int nw = 0;
+		float x = 0.0f;
+		float y = 0.0f;
+		float z = 0.0f;
+
+		// Property number.
+		if (!std::getline(in, line)) {
+			throw std::runtime_error("[load_box] Missing property count in file: " + full_name);
+		}
+		std::stringstream iss1(line);
+		if (!(iss1 >> name >> prop_size) || prop_size <= 0) {
+			throw std::runtime_error("[load_box] Invalid property count in file: " + full_name);
+		}
+
+		// Basis.
+		if (!std::getline(in, line)) {
+			throw std::runtime_error("[load_box] Missing basis vector in file: " + full_name);
+		}
+		std::stringstream iss2(line);
+		if (!(iss2 >> name >> x >> y >> z)) {
+			throw std::runtime_error("[load_box] Invalid basis vector in file: " + full_name);
+		}
+		basis = Vector3(x, y, z);
+
+		// U vector.
+		if (!std::getline(in, line)) {
+			throw std::runtime_error("[load_box] Missing u vector in file: " + full_name);
+		}
+		std::stringstream iss3(line);
+		if (!(iss3 >> name >> x >> y >> z)) {
+			throw std::runtime_error("[load_box] Invalid u vector in file: " + full_name);
+		}
+		u = Vector3(x, y, z);
+
+		// V vector.
+		if (!std::getline(in, line)) {
+			throw std::runtime_error("[load_box] Missing v vector in file: " + full_name);
+		}
+		std::stringstream iss4(line);
+		if (!(iss4 >> name >> x >> y >> z)) {
+			throw std::runtime_error("[load_box] Invalid v vector in file: " + full_name);
+		}
+		v = Vector3(x, y, z);
+
+		// W vector.
+		if (!std::getline(in, line)) {
+			throw std::runtime_error("[load_box] Missing w vector in file: " + full_name);
+		}
+		std::stringstream iss5(line);
+		if (!(iss5 >> name >> x >> y >> z)) {
+			throw std::runtime_error("[load_box] Invalid w vector in file: " + full_name);
+		}
+		w = Vector3(x, y, z);
+
+		// Grid dimensions.
+		if (!std::getline(in, line)) {
+			throw std::runtime_error("[load_box] Missing nu value in file: " + full_name);
+		}
+		std::stringstream iss6(line);
+		if (!(iss6 >> name >> nu) || nu <= 0) {
+			throw std::runtime_error("[load_box] Invalid nu value in file: " + full_name);
+		}
+
+		if (!std::getline(in, line)) {
+			throw std::runtime_error("[load_box] Missing nv value in file: " + full_name);
+		}
+		std::stringstream iss7(line);
+		if (!(iss7 >> name >> nv) || nv <= 0) {
+			throw std::runtime_error("[load_box] Invalid nv value in file: " + full_name);
+		}
+
+		if (!std::getline(in, line)) {
+			throw std::runtime_error("[load_box] Missing nw value in file: " + full_name);
+		}
+		std::stringstream iss8(line);
+		if (!(iss8 >> name >> nw) || nw <= 0) {
+			throw std::runtime_error("[load_box] Invalid nw value in file: " + full_name);
+		}
+
+		box = Box(basis, u, v, w, nu, nv, nw);
+
+		// Skip the data column header.
+		if (!std::getline(in, line)) {
+			throw std::runtime_error("[load_box] Missing data header in file: " + full_name);
+		}
+
+		const int expected_data_lines = nu * nv * nw;
+		properties.clear();
+		properties.resize(static_cast<size_t>(expected_data_lines));
+
+		int line_count = 0;
+		while (std::getline(in, line) && line_count < expected_data_lines) {
+			if (line.empty()) {
+				continue;
+			}
+
+			std::istringstream iss(line);
+			int idx = -1;
+			std::vector<float> prop(static_cast<size_t>(prop_size), 0.0f);
+
+			if (!(iss >> idx)) {
+				throw std::runtime_error("[load_box] Invalid cell index in file: " + full_name);
+			}
+
+			for (int k = 0; k < prop_size; ++k) {
+				if (!(iss >> prop[static_cast<size_t>(k)])) {
+					throw std::runtime_error("[load_box] Invalid property value in file: " + full_name);
+				}
+			}
+
+			properties[static_cast<size_t>(line_count)] = prop;
+			++line_count;
+		}
+
+		if (line_count != expected_data_lines) {
+			throw std::runtime_error(
+				"[load_box] Box property count mismatch in file: " + full_name +
+				". Expected " + std::to_string(expected_data_lines) +
+				" cells, read " + std::to_string(line_count) + "."
+			);
+		}
+
+		in.close();
+	}
+
+	KarstNSim::InputGraph translate_input_graph(const std::string& file_name, const std::string& save_directory) {
+
 		std::string full_name = save_directory + "/" + file_name;
 		std::ifstream in(full_name);
 
 		if (!in.is_open()) {
-			std::cerr << "Error opening file: " << full_name << std::endl;
-			std::cerr << "Reason: " << strerror(errno) << std::endl;
-			throw std::runtime_error("File not found: " + full_name);
+			throw std::runtime_error("Error opening input graph file: " + full_name);
 		}
 
-		// Count total number of lines in the file
-		int total_lines = 0;
+		std::string line;
+		std::string tag;
+
+		int nb_nodes = -1;
+		int nb_edges = -1;
+
+		std::vector<Vector3> nodes;
+		std::vector<Vector2i> edges;
+
+		// -----------------------------
+		// Read NODES section header
+		// -----------------------------
 		while (std::getline(in, line)) {
-			total_lines++;
-		}
-		in.clear(); // Clear eof flag
-		in.seekg(0, std::ios::beg); // Back to the start
-
-		// Skip headers and get property size and other characteristics
-		std::getline(in, line); // Skip first line (header)
-
-		std::string name;
-		int prop_size;
-		Vector3 basis, u, v, w;
-		int nu, nv, nw;
-		float x, y, z;
-
-		// Property number
-		std::getline(in, line);
-		std::stringstream iss1(line);
-		iss1 >> name >> prop_size;
-
-		// Basis
-		std::getline(in, line);
-		std::stringstream iss2(line);
-		iss2 >> name >> x >> y >> z;
-		basis = Vector3(x, y, z);
-
-		// u
-		std::getline(in, line);
-		std::stringstream iss3(line);
-		iss3 >> name >> x >> y >> z;
-		u = Vector3(x, y, z);
-
-		// v
-		std::getline(in, line);
-		std::stringstream iss4(line);
-		iss4 >> name >> x >> y >> z;
-		v = Vector3(x, y, z);
-
-		// w
-		std::getline(in, line);
-		std::stringstream iss5(line);
-		iss5 >> name >> x >> y >> z;
-		w = Vector3(x, y, z);
-
-		// nu
-		std::getline(in, line);
-		std::stringstream iss6(line);
-		iss6 >> name >> nu;
-
-		// nv
-		std::getline(in, line);
-		std::stringstream iss7(line);
-		iss7 >> name >> nv;
-
-		// nw
-		std::getline(in, line);
-		std::stringstream iss8(line);
-		iss8 >> name >> nw;
-
-		box = Box(basis, u, v, w, nu, nv, nw);
-
-		// Skip next line (header)
-		std::getline(in, line);
-
-		// Calculate the number of data lines
-		int data_lines = total_lines - 9; // Total lines minus 9 header lines (1+8)
-
-		// Resize properties based on the number of data lines
-		properties.resize(data_lines);
-
-		// Read the property values
-		int line_count = 0;
-		while (std::getline(in, line) && line_count < data_lines) {
-			std::istringstream iss(line);
-			int idx;
-			std::vector<float> prop(prop_size, 0.);
-			iss >> idx;
-			for (int k = 0; k < prop_size; k++) {
-				iss >> prop[k];
+			if (line.empty() || line[0] == '#') {
+				continue;
 			}
-			properties[line_count] = prop; // Store the properties in the array
-			line_count++;
+			std::istringstream iss(line);
+			iss >> tag;
+			if (tag == "NODES") {
+				iss >> nb_nodes;
+				break;
+			}
 		}
+
+		if (nb_nodes < 0) {
+			throw std::runtime_error("Invalid input graph file: missing 'NODES <count>' section.");
+		}
+
+		nodes.resize(nb_nodes);
+
+		// -----------------------------
+		// Read node list
+		// -----------------------------
+		for (int i = 0; i < nb_nodes; ++i) {
+			if (!std::getline(in, line)) {
+				throw std::runtime_error("Invalid input graph file: unexpected end of file while reading nodes.");
+			}
+
+			if (line.empty() || line[0] == '#') {
+				--i;
+				continue;
+			}
+
+			std::istringstream iss(line);
+			int node_id;
+			float x, y, z;
+			iss >> node_id >> x >> y >> z;
+
+			if (!iss) {
+				throw std::runtime_error("Invalid input graph file: malformed node line: " + line);
+			}
+			if (node_id < 0 || node_id >= nb_nodes) {
+				throw std::runtime_error("Invalid input graph file: node id out of range: " + std::to_string(node_id));
+			}
+
+			nodes[node_id] = Vector3(x, y, z);
+		}
+
+		// -----------------------------
+		// Read EDGES section header
+		// -----------------------------
+		while (std::getline(in, line)) {
+			if (line.empty() || line[0] == '#') {
+				continue;
+			}
+			std::istringstream iss(line);
+			iss >> tag;
+			if (tag == "EDGES") {
+				iss >> nb_edges;
+				break;
+			}
+		}
+
+		if (nb_edges < 0) {
+			throw std::runtime_error("Invalid input graph file: missing 'EDGES <count>' section.");
+		}
+
+		edges.reserve(nb_edges);
+
+		// -----------------------------
+		// Read edge list
+		// -----------------------------
+		for (int i = 0; i < nb_edges; ++i) {
+			if (!std::getline(in, line)) {
+				throw std::runtime_error("Invalid input graph file: unexpected end of file while reading edges.");
+			}
+
+			if (line.empty() || line[0] == '#') {
+				--i;
+				continue;
+			}
+
+			std::istringstream iss(line);
+			int a, b;
+			iss >> a >> b;
+
+			if (!iss) {
+				throw std::runtime_error("Invalid input graph file: malformed edge line: " + line);
+			}
+			if (a < 0 || a >= nb_nodes || b < 0 || b >= nb_nodes) {
+				throw std::runtime_error("Invalid input graph file: edge endpoint out of range: " + line);
+			}
+
+			edges.push_back(Vector2i(a, b));
+		}
+
 		in.close();
+
+		return KarstNSim::InputGraph(nodes, edges);
 	}
 }

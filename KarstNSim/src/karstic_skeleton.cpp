@@ -15,6 +15,56 @@ If you use this code, please cite : Paris et al., 2021, Computer Graphic Forum.
 #include "KarstNSim/graph.h"
 #include "KarstNSim/read_files.h"
 
+namespace {
+	int select_lowest_spring_cost_channel_1based(const KarstNSim::GeologicalParameters& params)
+	{
+		if (params.z_list.empty()) {
+			throw std::runtime_error(
+				"[skeleton] Cannot select a reference spring: params.z_list is empty."
+			);
+		}
+
+		auto min_it = std::min_element(
+			params.z_list.begin(),
+			params.z_list.end(),
+			[](const KarstNSim::GeologicalParameters::Propidx& a,
+				const KarstNSim::GeologicalParameters::Propidx& b) {
+			return a.prop < b.prop;
+		}
+		);
+
+		const int lowest_spring_keypoint_index = min_it->index;
+
+		auto it = std::find_if(
+			params.propspringswtindex.begin(),
+			params.propspringswtindex.end(),
+			[lowest_spring_keypoint_index](const KarstNSim::GeologicalParameters::Propidx& item) {
+			return item.index == lowest_spring_keypoint_index;
+		}
+		);
+
+		if (it == params.propspringswtindex.end()) {
+			throw std::runtime_error(
+				"[skeleton] Cannot find the water-table association of the lowest spring."
+			);
+		}
+
+		const int wt_idx = static_cast<int>(it->prop);
+
+		if (wt_idx > 0) {
+			return wt_idx;
+		}
+
+		if (params.no_wt_cost_index >= 0) {
+			return params.no_wt_cost_index + 1;
+		}
+
+		throw std::runtime_error(
+			"[skeleton] The lowest spring has no associated water table, but the vadose-only cost channel was not initialized."
+		);
+	}
+}
+
 namespace KarstNSim {
 	KarsticSkeleton::KarsticSkeleton(const GraphOperations* graph, const std::vector<std::vector<int>>& paths, const std::vector<std::vector<float>> costs, const  std::vector<std::vector<char>> vadose, const std::vector<int>& springidx)
 	{
@@ -182,17 +232,25 @@ namespace KarstNSim {
 		float mean_cycles_length_inter_wt = 0.;
 		int cycles_created = 0;
 
-		// This scans z_list, finds the index in KeyPts associated with the lowest altitude spring, and finds its associated water table index
-		auto min_it = std::min_element(params.z_list.begin(), params.z_list.end(),
-			[](const GeologicalParameters::Propidx& a, const GeologicalParameters::Propidx& b) {
-			return a.prop < b.prop; // Compare based on prop
-		});
-		int order = min_it->index; // This is the index of the smallest prop
-		auto it = std::find_if(params.propspringswtindex.begin(), params.propspringswtindex.end(),
-			[order](const GeologicalParameters::Propidx& item) {
-			return item.index == order; // Condition to match the index
-		});
-		int idx_specific_wt = it->prop;
+		const int idx_specific_wt = select_lowest_spring_cost_channel_1based(params);
+
+		// --- PARAMETER GUARDS: amplification distance window ---
+		if (params.min_distance_amplification > params.max_distance_amplification) {
+			throw std::runtime_error(
+				"Invalid amplification distance window: min_distance_amplification > max_distance_amplification. "
+				"Please fix your instruction file."
+			);
+		}
+		if (params.max_distance_amplification <= 0.f) {
+			throw std::runtime_error(
+				"Invalid amplification distance window: max_distance_amplification must be > 0."
+			);
+		}
+		if (params.min_distance_amplification < 0.f) {
+			throw std::runtime_error(
+				"Invalid amplification distance window: min_distance_amplification must be >= 0."
+			);
+		}
 
 		while (cycles_created < params.nb_cycles)
 		{
@@ -204,7 +262,11 @@ namespace KarstNSim {
 
 			// Check if edge already exists or u and v are the same vertex
 			if (u != v && !edge_exists(u, v)) {
-				float distance = magnitude(nodes[u].p - nodes[v].p);
+				const float distance = graph_anisotropic_distance(
+					nodes[u].p,
+					nodes[v].p,
+					params.vertical_distance_stretching_factor
+				);
 
 				if (distance >= params.min_distance_amplification && distance <= params.max_distance_amplification) { // also, check if the euclidian distance separating them is less than the threshold value defined by the user
 
@@ -276,17 +338,7 @@ namespace KarstNSim {
 		std::vector<std::vector<char>> newPaths_vadose;
 		std::vector<int> springidx;
 
-		// This scans z_list, finds the index in KeyPts associated with the lowest altitude spring, and finds its associated water table index
-		auto min_it = std::min_element(params.z_list.begin(), params.z_list.end(),
-			[](const GeologicalParameters::Propidx& a, const GeologicalParameters::Propidx& b) {
-			return a.prop < b.prop; // Compare based on prop
-		});
-		int order = min_it->index; // This is the index of the smallest prop
-		auto it = std::find_if(params.propspringswtindex.begin(), params.propspringswtindex.end(),
-			[order](const GeologicalParameters::Propidx& item) {
-			return item.index == order; // Condition to match the index
-		});
-		int idx_specific_wt = it->prop;
+		const int idx_specific_wt = select_lowest_spring_cost_channel_1based(params);
 
 		while (max_loops > 0)
 		{
@@ -329,23 +381,13 @@ namespace KarstNSim {
 		std::vector<std::vector<char>> newPaths_vadose;
 		std::vector<int> springidx;
 
-		// This scans z_list, finds the index in KeyPts associated with the lowest altitude spring, and finds its associated water table index
-		auto min_it = std::min_element(params.z_list.begin(), params.z_list.end(),
-			[](const GeologicalParameters::Propidx& a, const GeologicalParameters::Propidx& b) {
-			return a.prop < b.prop; // Compare based on prop
-		});
-		int order = min_it->index; // This is the index of the smallest prop
-		auto it = std::find_if(params.propspringswtindex.begin(), params.propspringswtindex.end(),
-			[order](const GeologicalParameters::Propidx& item) {
-			return item.index == order; // Condition to match the index
-		});
-		int idx_specific_wt = it->prop;
+		const int idx_specific_wt = select_lowest_spring_cost_channel_1based(params);
 
 		while (max_loops > 0)
 		{
 			int u = int(generateRandomFloat(0, float(nodes.size()))); // Select two random vertices of the main graph
 			int v = int(generateRandomFloat(0, float(nodes.size())));
-			int int_u_index = nodes[u].index; // Store those vertices' indices in the volumetric graph
+			int int_u_index = nodes[u].index; // Store those vertices' indices in the graph
 			int int_v_index = nodes[v].index;
 
 			// Check if edge already exists or u and v are the same vertex
@@ -371,24 +413,13 @@ namespace KarstNSim {
 
 	void KarsticSkeleton::amplify_deadend(GraphOperations* graph, float max_distance_of_deadend_pts, int nb_deadend_points, const GeologicalParameters& params) {
 
-		std::pair<std::vector<Vector3>, std::pair<std::vector<int>, std::vector<int>>> new_deadend_pts = generate_deadend_points(graph, max_distance_of_deadend_pts, nb_deadend_points);
-		std::vector<std::vector<int>> newPaths;
+		std::pair<std::vector<Vector3>, std::pair<std::vector<int>, std::vector<int>>> new_deadend_pts =
+			generate_deadend_points(graph, max_distance_of_deadend_pts, nb_deadend_points, params); std::vector<std::vector<int>> newPaths;
 		std::vector<std::vector<float>> newPaths_cost;
 		std::vector<std::vector<char>> newPaths_vadose;
 		std::vector<int> springidx;
 
-		// This scans z_list, finds the index in KeyPts associated with the lowest altitude spring, and finds its associated water table index
-		auto min_it = std::min_element(params.z_list.begin(), params.z_list.end(),
-			[](const GeologicalParameters::Propidx& a, const GeologicalParameters::Propidx& b) {
-			return a.prop < b.prop; // Compare based on prop
-		});
-		int order = min_it->index; // This is the index of the smallest prop
-		auto it = std::find_if(params.propspringswtindex.begin(), params.propspringswtindex.end(),
-			[order](const GeologicalParameters::Propidx& item) {
-			return item.index == order; // Condition to match the index
-		});
-		int idx_specific_wt = it->prop;
-
+		const int idx_specific_wt = select_lowest_spring_cost_channel_1based(params);
 		for (int i = 0; i < nb_deadend_points; i++)
 		{
 			// Check if edge already exists or u and v are the same vertex
@@ -405,15 +436,21 @@ namespace KarstNSim {
 		append_paths(graph, newPaths, newPaths_cost, newPaths_vadose, springidx);
 	}
 
-	std::pair<std::vector<Vector3>, std::pair<std::vector<int>, std::vector<int>>> KarsticSkeleton::generate_deadend_points(GraphOperations* graph, float max_distance_of_deadend_pts, int nb_deadend_points)
-	{
-		int z_stretch_factor = 50; // useful to not create too many deadends far in z from the main branches (can be unrealistic)
+	std::pair<std::vector<Vector3>, std::pair<std::vector<int>, std::vector<int>>> KarsticSkeleton::generate_deadend_points(
+		GraphOperations* graph,
+		float max_distance_of_deadend_pts,
+		int nb_deadend_points,
+		const GeologicalParameters& params
+	) {
+
 		std::vector<Vector3> samples_stretched;
+		samples_stretched.reserve(graph->samples.size());
+
 		for (int i = 0; i < graph->samples.size(); i++) {
 			Vector3 p_stretched{
 				graph->samples[i].x,
 				graph->samples[i].y,
-				graph->samples[i].z*z_stretch_factor
+				graph->samples[i].z * params.vertical_distance_stretching_factor
 			};
 			samples_stretched.push_back(p_stretched);
 		}
@@ -431,7 +468,7 @@ namespace KarstNSim {
 
 			// select a random node of the graph and get its nearest neighbors in the graph to choose a random point among them
 			int random_idx = int(generateRandomInt(0, int(nodes.size()) - 1));
-			Vector3 vec(nodes[random_idx].p.x, nodes[random_idx].p.y, nodes[random_idx].p.z*z_stretch_factor);
+			Vector3 vec(nodes[random_idx].p.x, nodes[random_idx].p.y, nodes[random_idx].p.z*params.vertical_distance_stretching_factor);
 			std::vector<Neighbour> candidates;
 			pointcloud.findNearestNeighbors(vec, -1, 10000, distmax, candidates); // find closest (at most) 10000 neighbors within a distance threshold from the random node
 			int random_idx_candidates = int(generateRandomInt(0, int(candidates.size()) - 1));
@@ -439,7 +476,7 @@ namespace KarstNSim {
 			if (candidates[random_idx_candidates].d > 1e-4) {
 				new_pts.push_back(p);
 				new_pts_idx.push_back(candidates[random_idx_candidates].i);
-				vec.z /= z_stretch_factor; // undo the stretching in z
+				vec.z /= params.vertical_distance_stretching_factor; // undo the stretching in z
 				closest_pts_idx.push_back(graph->NodeIndex(vec));
 				nb_added_pts++;
 			}
@@ -877,7 +914,8 @@ namespace KarstNSim {
 		{
 			Vector3 nodePos = nodes[i].p;
 			nodeIndexMapping.insert(std::make_pair(nodes[i].index, i + 1));
-			out << nodePos[0] << " " << nodePos[1] << " " << nodePos[2] << "\n";
+			out << std::fixed << std::setprecision(3)
+				<< nodePos[0] << " " << nodePos[1] << " " << nodePos[2] << "\n";
 		}
 		out.flush();
 		out.close();
@@ -949,46 +987,157 @@ namespace KarstNSim {
 		}
 	}
 
-	KarstNetworkResult KarsticSkeleton::get_result(const GeologicalParameters& geologicalparams, std::string network_name) const
+	KarstNetworkResult KarsticSkeleton::create_line(
+		const GeologicalParameters& geologicalparams,
+		const std::string& network_name) const
 	{
+		(void)network_name;
+
+		constexpr float NO_DATA_VALUE = -99999.0f;
+		constexpr float EPSILON_COST = 1e-10f;
 
 		KarstNetworkResult result;
 
-		std::vector<int> list_new_branch_id;
-		std::vector<int> used_id = { 0 };
-		std::vector<std::vector<int>> seen_br_id = { nodes[0].branch_id_ascend };
+		const bool add_drift_props =
+			geologicalparams.use_drift_zwt || geologicalparams.use_drift_curv;
 
-		for (int i = 0; i < nodes.size(); i++) {
-			for (int j = 0; j < nodes[i].connections.size(); j++) {
-				auto it = find(seen_br_id.begin(), seen_br_id.end(), nodes[nodes[i].connections[j].destindex].branch_id_ascend);
+		// Total number of cost channels, including the optional internal
+		// vadose-only no-water-table channel.
+		const int nb_cost_channels = std::max(0, geologicalparams.nb_wt);
 
-				float epsilon = 1e-10;
-				// Find the index of the first element in cost that is not effectively zero (it corresponds to the spring index to which the path leads to)
-				int index_spring = std::distance(nodes[i].cost.begin(), std::find_if(nodes[i].cost.begin(), nodes[i].cost.end(),
-					[epsilon](float c) { return std::fabs(c) > epsilon; }));
+		// The no-water-table channel is an internal vadose-only cost channel.
+		// It does not carry any discriminating physical water-table flag and
+		// must not be exported as vadose_flag_wt_*.
+		const int nb_physical_wt =
+			geologicalparams.no_wt_cost_index >= 0
+			? std::min(geologicalparams.no_wt_cost_index, nb_cost_channels)
+			: nb_cost_channels;
 
-				ResultPoint start, end;
-				start.p = nodes[i].p;
-				start.cost = float(nodes[i].cost[index_spring]);
-				start.equivalent_radius = float(nodes[i].eq_radius);
-				start.vadose_flag = float(nodes[i].vadose[index_spring]);
+		std::vector<int> exported_vadose_channels;
 
-				end.p = nodes[nodes[i].connections[j].destindex].p;
-				end.cost = float(nodes[nodes[i].connections[j].destindex].cost[index_spring]);
-				end.equivalent_radius = float(nodes[nodes[i].connections[j].destindex].eq_radius);
-				end.vadose_flag = float(nodes[nodes[i].connections[j].destindex].vadose[index_spring]);
+		for (int wt_channel = 0; wt_channel < nb_physical_wt; ++wt_channel) {
+			const int wt_index_1based = wt_channel + 1;
 
-				// set branch ids
-				if (it != seen_br_id.end()) { //id already found
-					ptrdiff_t pos = it - seen_br_id.begin();
-					start.branch_id = used_id[pos];
-					end.branch_id = used_id[pos];
+			const bool is_used_by_at_least_one_spring =
+				std::find_if(
+					geologicalparams.propspringswtindex.begin(),
+					geologicalparams.propspringswtindex.end(),
+					[wt_index_1based](const GeologicalParameters::Propidx& spring_wt_index)
+			{
+				return static_cast<int>(spring_wt_index.prop) == wt_index_1based;
+			}
+				) != geologicalparams.propspringswtindex.end();
+
+			if (is_used_by_at_least_one_spring) {
+				exported_vadose_channels.push_back(wt_channel);
+			}
+		}
+
+		result.vadose_property_names.clear();
+		for (const int wt_channel : exported_vadose_channels) {
+			result.vadose_property_names.push_back(
+				"vadose_flag_wt_" + std::to_string(wt_channel + 1)
+			);
+		}
+		result.has_drift_properties = add_drift_props;
+
+		for (int i = 0; i < static_cast<int>(nodes.size()); ++i) {
+			for (int j = 0; j < static_cast<int>(nodes[i].connections.size()); ++j) {
+
+				const int dest = nodes[i].connections[j].destindex;
+
+				if (dest < 0 || dest >= static_cast<int>(nodes.size())) {
+					throw std::runtime_error(
+						"[skeleton] Cannot export line: invalid connection index."
+					);
 				}
-				else {	//id not found
-					seen_br_id.push_back(nodes[nodes[i].connections[j].destindex].branch_id_ascend);
-					start.branch_id = used_id[find(seen_br_id.begin(), seen_br_id.end(), nodes[i].branch_id_ascend) - seen_br_id.begin()];
-					used_id.push_back(used_id.back() + 1);
-					end.branch_id = used_id.back();
+
+				auto it_spring = std::find_if(
+					nodes[i].cost.begin(),
+					nodes[i].cost.end(),
+					[EPSILON_COST](float c)
+				{
+					return std::isfinite(c) && std::fabs(c) > EPSILON_COST;
+				}
+				);
+
+				int index_spring = -1;
+				if (it_spring != nodes[i].cost.end()) {
+					index_spring = static_cast<int>(
+						std::distance(nodes[i].cost.begin(), it_spring)
+						);
+				}
+
+				float start_cost = 0.0f;
+				float end_cost = 0.0f;
+
+				if (index_spring >= 0) {
+					if (index_spring < static_cast<int>(nodes[i].cost.size())) {
+						start_cost = nodes[i].cost[index_spring];
+					}
+					if (index_spring < static_cast<int>(nodes[dest].cost.size())) {
+						end_cost = nodes[dest].cost[index_spring];
+					}
+				}
+
+				if (!std::isfinite(start_cost) || start_cost <= 0.0f) {
+					start_cost = 0.0f;
+				}
+				if (!std::isfinite(end_cost) || end_cost <= 0.0f) {
+					end_cost = 0.0f;
+				}
+
+				ResultPoint start;
+				ResultPoint end;
+
+				start.p = nodes[i].p;
+				end.p = nodes[dest].p;
+
+				start.cost = start_cost;
+				end.cost = end_cost;
+
+				start.equivalent_radius = static_cast<float>(nodes[i].eq_radius);
+				end.equivalent_radius = static_cast<float>(nodes[dest].eq_radius);
+
+				// Export the branch IDs computed by update_branch_ID().
+				// Intersections keep branch_id == -1; branch numbering starts at 0.
+				start.branch_id = nodes[i].branch_id;
+				end.branch_id = nodes[dest].branch_id;
+
+				start.vadose_flags.clear();
+				end.vadose_flags.clear();
+
+				for (const int wt_channel : exported_vadose_channels) {
+					float start_vadose = NO_DATA_VALUE;
+					float end_vadose = NO_DATA_VALUE;
+
+					if (wt_channel < static_cast<int>(nodes[i].vadose.size()) &&
+						nodes[i].vadose[wt_channel] != -1) {
+						start_vadose = static_cast<float>(nodes[i].vadose[wt_channel]);
+					}
+
+					if (wt_channel < static_cast<int>(nodes[dest].vadose.size()) &&
+						nodes[dest].vadose[wt_channel] != -1) {
+						end_vadose = static_cast<float>(nodes[dest].vadose[wt_channel]);
+					}
+
+					start.vadose_flags.push_back(start_vadose);
+					end.vadose_flags.push_back(end_vadose);
+				}
+
+				// Optional legacy scalar fallback, if ResultPoint::vadose_flag is still
+				// used somewhere else in the public code or bindings.
+				start.vadose_flag =
+					start.vadose_flags.empty() ? NO_DATA_VALUE : start.vadose_flags.front();
+				end.vadose_flag =
+					end.vadose_flags.empty() ? NO_DATA_VALUE : end.vadose_flags.front();
+
+				if (add_drift_props) {
+					start.external_drift = nodes[i].drift_value;
+					start.kriging_weight = nodes[i].drift_weight;
+
+					end.external_drift = nodes[dest].drift_value;
+					end.kriging_weight = nodes[dest].drift_weight;
 				}
 
 				result.add_segment(start, end);
@@ -1105,14 +1254,43 @@ namespace KarstNSim {
 		}
 	}
 
-	// Method to compute and populate branch_sizes attribute
+	void KarsticSkeleton::refresh_vadose_flags_from_graph(
+		GraphOperations* graph,
+		const GeologicalParameters& params)
+	{
+		if (graph == nullptr) {
+			throw std::runtime_error(
+				"[skeleton] Cannot refresh vadose flags: graph pointer is null."
+			);
+		}
 
+		Array2D<char>& graph_wt_flags = graph->get_samples_surf_flags();
+
+		for (KarsticNode& node : nodes) {
+			if (node.index < 0 || node.index >= graph->get_nb_sampling_pts()) {
+				throw std::runtime_error(
+					"[skeleton] Cannot refresh vadose flags: a skeleton node has an invalid graph index."
+				);
+			}
+
+			node.vadose.assign(params.nb_wt, -1);
+
+			for (int channel = 0; channel < params.nb_wt; ++channel) {
+				// In samples_surf_flags, true means below the water table, i.e. phreatic.
+				node.vadose[channel] = graph_wt_flags(node.index, channel) ? 0 : 1;
+			}
+		}
+	}
+
+	// Method to compute and populate branch_sizes attribute
 	void KarsticSkeleton::compute_branch_sizes() {
 		std::unordered_map<int, int> branchSizeMap;
 
-		// Count sizes of branches
+		branch_sizes.clear();
+		nb_of_intersections = 0;
+
 		for (const KarsticNode& node : nodes) {
-			if (node.branch_id == -1) { // -1 branch id tag, which means intersection, is handled separately
+			if (node.branch_id == -1) {
 				nb_of_intersections++;
 			}
 			else {
@@ -1120,12 +1298,9 @@ namespace KarstNSim {
 			}
 		}
 
-		// Sort branchSizeMap by keys (branch IDs)
 		std::vector<std::pair<int, int>> sortedBranchSizes(branchSizeMap.begin(), branchSizeMap.end());
 		std::sort(sortedBranchSizes.begin(), sortedBranchSizes.end());
 
-		// Populate branch_sizes vector
-		branch_sizes.clear();
 		for (const auto& pair : sortedBranchSizes) {
 			branch_sizes.push_back(pair.second);
 		}

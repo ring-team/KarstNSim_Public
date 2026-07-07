@@ -38,5 +38,6 @@ latex/
 *.app
 LOG.txt
 KarstNSim/build/*
-
+python_project/*
+batch_runs/*
 simulation_times.txt

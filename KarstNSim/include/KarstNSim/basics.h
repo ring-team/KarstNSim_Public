@@ -219,6 +219,70 @@ namespace KarstNSim {
 		return pts;
 	}
 
+	/*!
+	\class InputGraph
+	\brief Class representing a simple input graph defined by unique nodes and indexed connections.
+
+	This class is intended to store large user-defined support graphs in a compact form.
+	Unlike the Line class, which stores the graph segment by segment and therefore repeats
+	node coordinates for each edge, InputGraph stores each node only once and represents
+	graph connectivity through integer indices.
+
+	The graph is assumed to be undirected at storage level: each connection is defined by
+	a pair of node indices. Directed edges used internally by the cost graph are rebuilt
+	later during graph construction.
+
+	\warning InputGraph stores topology only. No edge cost is stored in this object.
+	All geological edge costs must be recomputed afterwards from the simulation parameters.
+	*/
+	class InputGraph
+	{
+	public:
+		std::vector<Vector3> nodes; //!< Unique graph nodes.
+		std::vector<Vector2i> edges; //!< Indexed node pairs defining graph connections.
+
+	public:
+		/*!
+		\brief Default constructor of the InputGraph class.
+		*/
+		inline InputGraph() {}
+
+		/*!
+		\brief Constructor from a list of nodes and indexed edges.
+		\param nodes Unique graph nodes.
+		\param edges Indexed graph connections.
+		*/
+		inline InputGraph(const std::vector<Vector3>& nodes, const std::vector<Vector2i>& edges)
+			: nodes(nodes), edges(edges) {
+		}
+
+		/*!
+		\brief Returns the number of nodes in the graph.
+		\return Number of stored nodes.
+		*/
+		inline int get_nb_nodes() const { return int(nodes.size()); }
+
+		/*!
+		\brief Returns the number of indexed edges in the graph.
+		\return Number of stored connections.
+		*/
+		inline int get_nb_edges() const { return int(edges.size()); }
+
+		/*!
+		\brief Returns a node by index.
+		\param i Node index.
+		\return Constant reference to the node coordinates.
+		*/
+		inline const Vector3& get_node(const int& i) const { return nodes[i]; }
+
+		/*!
+		\brief Returns an indexed edge by index.
+		\param i Edge index.
+		\return Constant reference to the indexed connection.
+		*/
+		inline const Vector2i& get_edge(const int& i) const { return edges[i]; }
+	};
+
 
 	/*!
 	\class Sphere

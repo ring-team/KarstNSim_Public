@@ -63,6 +63,22 @@ namespace KarstNSim {
 	void load_pointset(const std::string& file_name, const std::string& save_directory, std::vector<Vector3>& pset, std::vector<std::vector<float>>& properties);
 
 	/**
+	 * @brief Loads a line, its associated properties, and the property names from an ASCII file.
+	 *
+	 * @param file_name The path to the input ASCII file.
+	 * @param save_directory The directory where input ASCII file should be searched.
+	 * @param pline A Line object where the line data will be stored.
+	 * @param properties A 3D vector to store the associated properties of the line.
+	 * @param property_names Names of the properties read from the ASCII header.
+	 */
+	void load_line(
+		const std::string& file_name,
+		const std::string& save_directory,
+		Line& pline,
+		std::vector<std::vector<std::vector<float>>>& properties,
+		std::vector<std::string>& property_names);
+
+	/**
 	 * @brief Loads a line and its associated properties from an ASCII file.
 	 *
 	 * @param file_name The path to the input ASCII file.
@@ -81,4 +97,13 @@ namespace KarstNSim {
 	 * @param properties A 2D vector to store the associated properties of the box.
 	 */
 	void load_box(const std::string& file_name, const std::string& save_directory, Box& box, std::vector<std::vector<float>>& properties);
+
+	/**
+	 * @brief Loads a graph from an ASCII file.
+	 *
+	 * @param file_name The path to the input ASCII file.
+	 * @param save_directory The directory where input ASCII file should be searched.
+	 * @return The graph in InputGraph class format
+	 */
+	KarstNSim::InputGraph translate_input_graph(const std::string& file_name, const std::string& save_directory);
 }

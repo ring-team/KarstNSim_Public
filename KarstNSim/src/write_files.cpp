@@ -13,12 +13,12 @@ If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
 
 namespace KarstNSim {
 
-	static bool directory_exists(const std::string& directory) {
+	bool directory_exists(const std::string& directory) {
 		std::error_code ec;
 		return std::filesystem::is_directory(directory, ec) && !ec;
 	}
 
-	static void create_directory(const std::string& directory) {
+	void create_directory(const std::string& directory) {
 		std::error_code ec;
 		if (!std::filesystem::create_directories(directory, ec) && ec) {
 			std::cerr << "Error creating directory: " << directory << " (" << ec.message() << ")" << std::endl;
@@ -74,7 +74,9 @@ namespace KarstNSim {
 		}
 		out << "\n";
 
-		out << 1 << "	" << u[0] << "	" << u[1] << "	" << u[2];
+		out << 1 << "	"
+			<< std::fixed << std::setprecision(3)
+			<< u[0] << "	" << u[1] << "	" << u[2];
 		if (properties.size()) {
 			for (int j = 0; j < int(properties.size()); j++) { // iterate on properties (if any)
 				out << "	" << std::fixed << std::setprecision(10) << properties[j];
@@ -112,7 +114,9 @@ namespace KarstNSim {
 		for (int i = 0; i < nb_pts; i++)
 		{
 			Vector3 v = s.get_node(i);
-			out << "VRTX " << i + 1 << "	" << v[0] << "	" << v[1] << "	" << v[2];
+			out << "VRTX " << i + 1 << "	"
+				<< std::fixed << std::setprecision(3)
+				<< v[0] << "	" << v[1] << "	" << v[2];
 			if (properties.size()) {
 				for (int j = 0; j < properties[0].size(); j++) { // iterate on properties (if any)
 					out << "	" << std::fixed << std::setprecision(10) << properties[i][j];
@@ -154,7 +158,9 @@ namespace KarstNSim {
 		{
 
 			Vector3 v = pset[i];
-			out << i + 1 << "	" << v[0] << "	" << v[1] << "	" << v[2];
+			out << i + 1 << "	"
+				<< std::fixed << std::setprecision(3)
+				<< v[0] << "	" << v[1] << "	" << v[2];
 			if (properties.size()) {
 				for (int j = 0; j < properties[0].size(); j++) { // iterate on properties (if any)
 					out << "	" << std::fixed << std::setprecision(10) << properties[i][j];
@@ -195,14 +201,18 @@ namespace KarstNSim {
 			Segment seg = pline.get_seg(i);
 			Vector3 start = seg.start();
 			Vector3 end = seg.end();
-			out << i + 1 << "	" << start[0] << "	" << start[1] << "	" << start[2];
+			out << i + 1 << "	"
+				<< std::fixed << std::setprecision(3)
+				<< start[0] << "	" << start[1] << "	" << start[2];
 			if (properties.size()) {
 				for (int j = 0; j < properties[0].size(); j++) { // iterate on properties (if any)
 					out << "	" << std::fixed << std::setprecision(10) << properties[i][j][0];
 				}
 			}
 			out << "\n";
-			out << i + 1 << "	" << end[0] << "	" << end[1] << "	" << end[2];
+			out << i + 1 << "	"
+				<< std::fixed << std::setprecision(3)
+				<< end[0] << "	" << end[1] << "	" << end[2];
 			if (properties.size()) {
 				for (int j = 0; j < properties[0].size(); j++) { // iterate on properties (if any)
 					out << "	" << std::fixed << std::setprecision(10) << properties[i][j][1];
@@ -269,10 +279,21 @@ namespace KarstNSim {
 
 		out << "Parameters" << "\n";
 		out << "number_properties	" << nb_prop << "\n";
-		out << "basis	" << basis.x << "	" << basis.y << "	" << basis.z << "\n";
-		out << "u	" << u.x << "	" << u.y << "	" << u.z << "\n";
-		out << "v	" << v.x << "	" << v.y << "	" << v.z << "\n";
-		out << "w	" << w.x << "	" << w.y << "	" << w.z << "\n";
+		out << "basis	"
+			<< std::fixed << std::setprecision(3)
+			<< basis.x << "	" << basis.y << "	" << basis.z << "\n";
+
+		out << "u	"
+			<< std::fixed << std::setprecision(3)
+			<< u.x << "	" << u.y << "	" << u.z << "\n";
+
+		out << "v	"
+			<< std::fixed << std::setprecision(3)
+			<< v.x << "	" << v.y << "	" << v.z << "\n";
+
+		out << "w	"
+			<< std::fixed << std::setprecision(3)
+			<< w.x << "	" << w.y << "	" << w.z << "\n";
 		out << "nu	" << nu << "\n";
 		out << "nv	" << nv << "\n";
 		out << "nw	" << nw << "\n";

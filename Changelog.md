@@ -1,8 +1,31 @@
 # KarstNSimPublic
 
+
+## Version 2.0
+
+07/07/2026.
+
+### Modifications
+
+This update adds several new options:
+
+- A graph can be given as an input, instead of generating the NGHB graph. This is especially useful if the KarstNSim karst skeleton should be conformal to another grid, for instance a groundwater model grid. The grid should simply be transformed into an edges & nodes graph format and imported as an input to KarstNSim.
+- An external drift can now be superimposed onto the CB-SGS simulation of conduit sizes. It it automatically inferred based on observations.
+- New shortest path computation options are available :
+	- vertical_distance_stretching_factor: Vertical anisotropy factor used for selected graph-related distances. Any computed Euclidean distance will have its vertical component scaled by the provided factor. This includes cost computation and distances for amplification (dead-end points and cycle distances). A large factor (eg. 10) can be used if conduits are expected to propagate as horizontally as possible.
+	- gradient_constraint_weight: Factor multiplied to cumulative cost distances to reflect the influence of the gradient (difference in altitude) between inlets and outlets.
+	- outlet_selection_cost_factor: Tolerance factor to keep paths to outlets almost as close as the closest outlet to a given inlet. Useful for outlets close together and part of the same system.
+
+And several code improvements:
+
+- Possibility to not define a water table for certain (or all) springs. These springs are therefore relict or overflow springs that the user cannot associate with a particular perennial water body.
+- Improved shortest-path computation by using an exact bidirectional heap-based Dijkstra algorithm for inlet-outlet path searches (~2x speed).
+- Several bug fixes.
+
+
 ## Version 1.3
 
-09/12/2025
+09/12/2025.
 
 ### Modifications
 

@@ -24,8 +24,8 @@ Unless stated otherwise, distances/lengths are in the same units as your model c
 ## 2) General parameters
 
 ### `domain: <path>`
-- **Type**: `path` (text voxet/box description with density property and optionally IKP property)
-- **What it does**: Defines the 3D domain (origin, axes, grid size) used for sampling and grid-based properties (density and IKP (Intrinsic Karstification Potential), the second being optional). Density values range from 0 to 1 both excluded, and IKP from 0 to 1 both included. Any negative value is considered a NDV, but -99999 is the default NDV for both.
+- **Type**: `path` (text voxet/box description with optional density property and IKP property)
+- **What it does**: Defines the 3D domain (origin, axes, grid size) used for sampling and optional grid-based properties (density and IKP (Intrinsic Karstification Potential)). Density values range from 0 to 1 both excluded, and IKP from 0 to 1 both included. Any negative value is considered a NDV, but -99999 is the default NDV for both.
 - **Indexing reminder**: KarstNSim expects grid properties (`density`, `IKP`, etc.) to be flattened with the **u axis as the fastest varying index**, followed by **v**, then **w**. In other words, the linear index must be computed as `idx = u + nu * v + nu * nv * w` where `0 ≤ u < nu`, `0 ≤ v < nv`, `0 ≤ w < nw`. When exporting or building voxets from external tools, make sure the serialization order matches this convention; mismatches will map sampled points to the wrong cells.
 
 ### `selected_seed: <int>`
@@ -76,6 +76,17 @@ Two modes are available; choose **one**.
 
 ## 4) N-nearest neighbor graph
 
+You have the option to import a graph onto which all the simulation steps will be computed (simulation support), or create a new one based on an N-nearest neighbor logic.
+Be aware that if you import an input graph, this graph should include exactly all the sampling points, the inlets, the outlets, the waypoints, and the surface points as its nodes, and no other point.
+
+1) **Import a graph**
+
+- `use_input_nghb_graph: <bool>` — **Type**: `bool`  
+- `input_nghb_graph: <path>` — **Type**: `path` (existing graph in a graph format)  
+**Behavior**: Imports the input graph to the simulation. This is especially useful if (i) you've already simulated a network and saved the previously generated nghb graph, and want to reuse exactly the same for subsequent simulations, but this does not really save computation time, or (ii) you need the KarstNSim network to be conformal to a given grid (ie. a hydrogeological model grid) in order to perform groundwater simulation afterwards.  
+
+2) ** Create a NGHB graph during simulation **
+
 - `nghb_count: <int>` — **Type**: `int` (≥ 1)  
 - `use_max_nghb_radius: <bool>` — **Type**: `bool`  
 - `nghb_radius: <float>` — **Type**: `float` (> 0)  
@@ -92,7 +103,14 @@ Two modes are available; choose **one**.
 - `use_sinks_radius: <bool>` — **Type**: `bool` (read per-sink radius from properties if true)  
 - `springs: <path>` — **Type**: `path` (point set with mandatory "Index" and "Surfindex" properties)  
 - `use_springs_radius: <bool>` — **Type**: `bool`  
-**Behavior**: Define inlet(s) and outlet(s). Inlets MUST be associated with two properties: Index, which allows to pair them in the connectivity matrix with springs, and Order, which controls the order of iteration of sinks (order 1 first, then 2 etc.). Sinks of the same order are iterated in a random order within that group. Springs must be associated with an Index property, to pair them with inlets in the connectivity matrix, and with a Surfindex property which links each spring to its watertable (watertable file names end with a number ; that number is their index). Radii can be optionally read per point when the respective `use_*_radius` flag is true. These radii will be used as observation data to constrain the conduit size simulation.
+**Behavior**: Define inlet(s) and outlet(s). Inlets MUST be associated with two properties: Index (1-based), which allows to pair them in the connectivity matrix with springs, and Order (1-based too),
+ which controls the order of iteration of sinks (order 1 first, then 2 etc.).
+Sinks of the same order are iterated in a random order within that group.
+Springs must be associated with an Index property (1-based), to pair them with inlets in the connectivity matrix,
+ and with a Surfindex property which links each spring to its watertable (watertable file names end with a number ;
+ that number is their index, it is 1-based). It is possible to define Surfindex=0 for springs that are perched / not associated with any perennial water body.
+ Radii can be optionally read per sink/spring node when the respective `use_*_radius` flag is true.
+ These radii will be used as observation data to constrain the conduit size simulation if activated. They do not have another effect.
 
 ### Outlet selection for ambiguous links
 - `allow_single_outlet_connection: <bool>` — **Type**: `bool`  
@@ -104,7 +122,9 @@ Two modes are available; choose **one**.
 - `waypoints: <path>` — **Type**: `path` (point set with mandatory "waypoints_impact_radius" property)
 - `waypoints_weight: <float>` — **Type**: `float` (≥ 0 and < 1)  
 - `use_waypoints_radius: <bool>` — **Type**: `bool` (read per-waypoint radius if true)  
-**Behavior**: Waypoints locally reduce costs based on their weight (costs are locally multiplied by the waypoint weight). An Impact Radius property must be defined for each waypoint (in the pointset file), which defines the radius of impact of each waypoint to reduce the cost. This is different from the optionally added Radius property, which can be added to the waypoints and which will locally constrain the conduit size simulation.
+**Behavior**: Waypoints locally reduce costs based on their weight (costs are locally multiplied by the waypoint weight). An Impact Radius property must be defined for each waypoint (in the pointset file),
+ which defines the radius of impact of each waypoint to reduce the cost. This is different from the optionally added Radius property,
+ which can be added to the waypoints if `use_waypoints_radius` is true, and which will locally constrain the conduit size simulation in the same way as sinks and springs.
 **Practical effect**: Waypoints can be seen as soft-data constraints. They are used to honor surveyed conduits/passages or enforce transit through checkpoints.
 
 ---
@@ -185,7 +205,8 @@ Two modes are available; choose **one**.
 - `water_table_constraint_weight_vadose: <float>` — **Type**: `float` (≥ 0)  
 - `water_table_constraint_weight_phreatic: <float>` — **Type**: `float` (≥ 0)  
 **Behavior**: Classifies nodes as vadose/phreatic relative to their associated water table and adds dedicated cost terms with independent weights for vadose and phreatic zones.
-**Important**: The format of the watertable surface file name must very precisely be "(name)_k" with k the index of the water table. The spring pointset has a mandatory property called surfindex which links each spring to its watertable k. There is currently no option to avoid defining any water table in the simulation ; this option will be developed in the future (perched springs).
+**Important**: The format of the watertable surface file name must very precisely be "(name)_k" with k the index of the water table. The spring pointset has a mandatory property called surfindex which links each spring to its watertable k.
+The user can define perched/relict springs without associated water bodies by defining surfindex = 0 and not associating any water table.
 **Practical effects**: Larger weights strengthen vertically downward conduits in the vadose zone (and penalize any horizontal or vertically upward conduit) and base level (water table) control in the phreatic zone.
 
 
@@ -223,7 +244,6 @@ Two modes are available; choose **one**.
 **Behavior**: Applies simplex-noise–based heterogeneity to cost field. Frequency/octaves set spatial texture; weight sets intensity.  
 **Practical effects**: In all cases, use moderate values to avoid overpowering the other costs.
 
-
 ---
 
 ## 16) Sections (equivalent radii) simulation
@@ -245,8 +265,12 @@ Two modes are available; choose **one**.
 - `nb_points_interbranch` and `proportion_interbranch` tune how much cross-branch correlation is allowed.  
 - `*_range_of_neighborhood` and `number_max_of_neighborhood_points` control kriging neighborhood max size.
 **Allowed Kriging Models**: `"Exponential"`, `"Spherical"`, `"Gaussian"`
-**Note**: A functionality to incorporate external drifts in the curvilinear branchwise SGS algorithm is currently being developed.
 
+** External drift **: These options allow to add an external drift encompassing long-range variations in conduit size. The drift is separated between a vadose-phreatic trend and an upstream-downstream trend (conduits becoming larger in the phreatic zone and in the downstream part of the network, respectively). Both can be applied at the same time. The drift values are directly inferred from observational data.
+** Warning **: It is not possible to add a drift if no data (inlets, outlets, waypoints radii) are provided. At least two data are needed, but preferably min. 10 to 20.
+- `use_drift_zwt: <bool>` — **Type**: `bool` (to add a vadose/phreatic trend)
+- `use_drift_curv: <bool>` — **Type**: `bool` (to add an upstream/downstream trend)
+  
 ---
 
 ## 17) Cost graph combination & cohesion
@@ -263,6 +287,45 @@ Two modes are available; choose **one**.
 
 - `multiply_costs: <bool>` — **Type**: `bool`  
   **Behavior**: Combine sub-costs by multiplication instead of summation. Not recommended, but might be useful in some cases (cost penalties become much more predominant, even if only in one sub-cost).
+
+- `vertical_distance_stretching_factor: <float>` — **Type**: `float` (> 0)
+  **Behavior**: Vertical anisotropy factor used for selected graph-related distances. Any computed Euclidean distance will have its vertical component scaled by the provided factor. This includes cost computation and distances for amplification (dead-end points and cycle distances). A large factor (eg. 10) can be used if conduits are expected to propagate as horizontally as possible.
+
+- `gradient_constraint_weight: ` — **Type**: `float` (≥ 0, default `0`)  
+  **Behavior**: When `allow_single_outlet_connection = true`, ambiguous inlet/outlet links
+  (`2` values in the connectivity matrix) are selected using a corrected cumulative path cost:
+
+  `corrected_cost = cumulative_cost * (1 + gradient_constraint_weight * normalized_gradient_penalty)`
+
+  where `normalized_gradient_penalty` is computed, for each inlet, from the vertical drop
+  between this inlet and each candidate outlet. The outlet with the largest vertical drop
+  receives a penalty of `0`; the outlet with the smallest vertical drop receives a penalty
+  of `1`; intermediate outlets are linearly interpolated.
+
+  **Practical effect**: Higher values favor outlets located at lower elevation, i.e. paths
+  with stronger inlet-to-outlet hydraulic gradient, even if their raw cumulative graph cost
+  is larger.
+  
+- `outlet_selection_cost_factor: ` — **Type**: `float` (≥ 1, default `1`)  
+  **Behavior**: When `allow_single_outlet_connection = true`, ambiguous inlet/outlet links
+  (`2` values in the connectivity matrix) are filtered using the corrected cumulative
+  path cost.
+
+  Let `best_corrected_cost` be the minimum corrected cumulative cost among the candidate
+  outlets for a given inlet. KarstNSim keeps every ambiguous candidate path satisfying:
+
+  `corrected_cost <= best_corrected_cost * outlet_selection_cost_factor`
+
+  The corrected cost includes the optional `gradient_constraint_weight` correction.
+  Therefore, this factor is applied after the elevation-drop correction, not on the raw
+  cumulative graph cost. This will typically be used to link an inlet to outlets part of the same
+  system, which would typically be close together and yield a very similar cumulative cost from the inlet.
+
+  **Examples**:
+  - `1`: keep only the minimum corrected-cost path.
+  - `1.1`: keep paths up to 10% more expensive than the best corrected path.
+  - `2`: keep paths up to 100% more expensive than the best corrected path.
+
 
 ---
 

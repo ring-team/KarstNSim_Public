@@ -32,6 +32,19 @@ If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
 #include <sstream>
 
 namespace KarstNSim {
+
+	/*!
+	\brief Checks whether a directory exists on disk.
+	\param directory Path to the directory to test.
+	\return True if the directory exists, false otherwise.
+	*/
+	bool directory_exists(const std::string& directory);
+
+	/*!
+	\brief Creates a directory on disk if it does not already exist.
+	\param directory Path to the directory to create.
+	*/
+	void create_directory(const std::string& directory);
 	/**
 	 * @brief Generate a unique filename by appending (0), (1), etc. if needed
 	 *

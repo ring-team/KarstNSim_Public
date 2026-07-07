@@ -316,12 +316,12 @@ public:
 	}
 	bool operator==(const Vector3& u) const
 	{
-		float eps = 1e-2f;
+		float eps = 1e-1f;
 		return (std::abs(x - u.x) < eps && std::abs(y - u.y) < eps && std::abs(z - u.z) < eps);
 	}
 	bool operator!=(const Vector3& u) const
 	{
-		float eps = 1e-2f;
+		float eps = 1e-1f;
 		return (std::abs(x - u.x) > eps || std::abs(y - u.y) > eps || std::abs(z - u.z) > eps);
 	}
 	Vector3 operator-(const Vector3& u) const
@@ -515,6 +515,7 @@ namespace KarstNSim
 	{
 		return (u.x * u.x)*one_over_delta_x_squared + (u.y * u.y)*one_over_delta_y_squared + (u.z * u.z)*one_over_delta_z_squared;
 	}
+
 
 	inline Vector3 Normalize(const Vector3& v)
 	{

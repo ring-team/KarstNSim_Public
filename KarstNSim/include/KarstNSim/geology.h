@@ -47,7 +47,7 @@ namespace KarstNSim {
 	public:
 		Vector3 p; //!< position of KeyPoint
 		KeyPointType type; //!< KeyPointType of KeyPoint
-		int wt_idx; //!< Only relevant for Spring KeyPointType. Keeps track of the index of each spring keypoint (to couple them with their water table)
+		int wt_idx; //!< One-based water table index for spring keypoints. A value of 0 means that the spring has no associated water table and must be treated as a vadose-only outlet.
 	public:
 
 		/*!
@@ -140,15 +140,24 @@ namespace KarstNSim {
 		int nb_springs; //!< Number of springs in the simulation.
 		int nb_wt; //!< Number of water tables in the simulation.
 		int nb_inception_surf = 0; //!< Number of inception surfaces in the simulation.
+		int nb_wt_surfaces = 0; //!< Number of physical water table surfaces provided by the user.
+		bool has_springs_without_wt = false; //!< True if at least one spring is not associated with any water table surface.
+		int no_wt_cost_index = -1; //!< Zero-based internal cost channel used for vadose-only paths toward springs without an associated water table.
 
 		bool multiply_costs; //!< Flag to multiply cost terms during cost function computation instead of adding them.
 		bool allow_single_outlet; //!< Allow a connection to a single outlet for each inlet, not more. This will use the ``closest'' spring algorithm (see Thesis for details)
 		bool vadose_cohesion; //!< Flag to enable vadose zone cohesion in the simulation (cohesion only in phreatic zone if set to false).
+		float vertical_distance_stretching_factor=1.0f; //!< Stretching factor in the vertical direction used to artificially increase vertical distances and penalize vertical edges
+
+		bool use_input_nghb_graph = false; //!< Flag defining if the user has defined an input nearest neighbor graph for the simulation
+		KarstNSim::InputGraph input_nghb_graph; //!<< InputGraph object representing the input nearest neighbor graph
 
 		Array2D<Vector3> PtsOldGraph; //!< Coordinates of points from a previously simulated karst network. Used for polyphasic karstification.
 		Array2D<int> IdxOldGraph; //!< Indices of points from a previously simulated karst network. Used for polyphasic karstification.
 		std::vector<int> sinks_index; //!< Indices of sink points in the samples vector (main attribute of GraphOperations).
 		Array2D<int> connectivity_matrix; //!< Connectivity matrix for inlet/outlet relationships.
+		float gradient_constraint_weight = 0.0f; //!< Weight applied to cumulative path costs during ambiguous outlet selection, based on normalized inlet-outlet elevation drop.
+		float outlet_selection_cost_factor = 1.0f; //!< Multiplicative threshold factor used to preserve ambiguous outlet paths close to the best corrected cumulative path cost.
 
 		std::vector<float> fractures_orientations; //!< Orientations of fractures in the geological structure.
 		std::vector<float> fractures_tolerances; //!< Tolerances for fracture orientations.
@@ -185,7 +194,9 @@ namespace KarstNSim {
 		float waypoints_weight; //!< Weighting factor for waypoint contributions in the simulation.
 		std::vector<Propidx> waypointsimpactradius; //!< List of impact radii of each waypoint.
 		std::vector<Propidx> z_list; //!< List of Z-coordinates of each spring.
-		std::vector<Propidx> propspringswtindex; //!< List of index of water table associated with each spring.
+		std::vector<Propidx> propspringswtindex; //!< One-based water table index associated with each spring keypoint. A value of 0 marks a spring without an associated water table.
+		bool use_drift_zwt = false; //!< Flag indicating if an external drift based on a vadose/phreatic conduit size trend should be applied
+		bool use_drift_curv = false; //!< Flag indicating if an external drift based on an upstream/downstream conduit size trend should be applied
 
 	};
 }

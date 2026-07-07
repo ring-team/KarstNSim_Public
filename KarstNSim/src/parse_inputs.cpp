@@ -417,6 +417,21 @@ KarstNSim::ParamsSource ParseInputs::parse(const std::string& filename) {
 		params.sections_simulation_only = parse_boolean(flag);
 		}
 
+		// Previous nghb graph (if needed)
+
+		else if (paramType == "use_input_nghb_graph:") {
+			std::string flag;
+			iss >> flag;
+			params.use_input_nghb_graph = parse_boolean(flag);
+		}
+		else if (paramType == "input_nghb_graph:") {
+			std::string graph_path;
+			KarstNSim::InputGraph graph;
+			iss >> graph_path;
+			graph = KarstNSim::translate_input_graph(graph_path, params.save_repository);
+			params.input_nghb_graph = graph;
+		}
+
 		// No-karst spheres
 
 		else if (paramType == "use_no_karst_spheres:") {
@@ -592,6 +607,12 @@ KarstNSim::ParamsSource ParseInputs::parse(const std::string& filename) {
 		else if (paramType == "proportion_interbranch:") {
 		iss >> params.geostat_params.proportion_interbranch;
 		}
+		else if (paramType == "use_drift_zwt:") {
+			iss >> params.geostat_params.use_drift_zwt;
+		}
+		else if (paramType == "use_drift_curv:") {
+			iss >> params.geostat_params.use_drift_curv;
+		}
 
 		// Save objects
 
@@ -638,6 +659,15 @@ KarstNSim::ParamsSource ParseInputs::parse(const std::string& filename) {
 		std::string flag;
 		iss >> flag;
 		params.vadose_cohesion = parse_boolean(flag);
+		}
+		else if (paramType == "vertical_distance_stretching_factor:") {
+		iss >> params.vertical_distance_stretching_factor;
+		}
+		else if (paramType == "gradient_constraint_weight") {
+		iss >> params.gradient_constraint_weight;
+		}
+		else if (paramType == "outlet_selection_cost_factor") {
+		iss >> params.outlet_selection_cost_factor;
 		}
 	}
 	inputFile.close();

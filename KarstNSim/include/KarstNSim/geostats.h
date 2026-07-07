@@ -19,9 +19,12 @@ This work was performed in the frame of the RING project at Université de Lorra
 @author Augustin GOUY
 **/
 
+#include <queue>
+#include <limits>
+#include <algorithm>
 #include "KarstNSim/graph.h"
 #include "KarstNSim/randomgenerator.h"
-
+#include "KarstNSim/vec.h"
 /*!
 	\struct GeostatParams
 	\brief Struct to group all input parameters for geostatistical simulation of conduit shapes.
@@ -56,6 +59,10 @@ struct GeostatParams {
 	int number_max_of_neighborhood_points; //!< Maximum number of points in a neighborhood used for covariance matrix.
 	int nb_points_interbranch; //!< Number of points considered per branch for inter-branch variogram.
 	float proportion_interbranch; //!< Proportion of points considered per branch for inter-branch variogram.
+	bool use_drift_zwt = false; //!< Flag indicating if an external drift based on the distance to the water table should be enabled.
+	bool use_drift_curv = false; //!< Flag indicating if an external drift based on an upstream/downstream increasing drain size trend should be enabled.
+	std::vector<float> drift_output; //!< Simulated drift term for each node of the karst skeleton. Only filled if a drift is applied.
+	std::vector<float> weights_output; //!< Simulated drift weight for each node of the karst skeleton. Only filled if a drift is applied.
 };
 
 /**
@@ -103,6 +110,66 @@ float variogram_value(
 \return True if the inversion is successful, false otherwise.
 */
 bool invert_matrix(const std::vector<std::vector<float>>& input, std::vector<std::vector<float>>& output);
+
+/**
+\brief Computes shortest-path distances from a source node to a list of target nodes using a truncated Dijkstra search.
+
+This helper function is used internally by kriging_in_point_on_the_fly() to avoid
+relying on the global dense distance matrix. It computes the minimum path length
+between the source and each target node in the graph, but only explores nodes within
+a maximum distance threshold (range_cap). For unreachable nodes or distances beyond
+the threshold, the returned distance is set to infinity.
+
+\param src Index of the source node.
+\param curve Pointer to the KarsticSkeleton containing the graph structure.
+\param targets Indices of target nodes for which distances are required.
+\param range_cap Maximum search radius; nodes beyond this distance are ignored.
+\return Vector of distances (same order as targets). Values are infinity for unreachable nodes.
+*/
+std::vector<float> dijkstra_to_targets_truncated(
+	int src,
+	const KarstNSim::KarsticSkeleton* curve,
+	const std::vector<int>& targets,
+	float range_cap
+);
+
+/**
+\brief Estimates the value and variance of a property at a given node using kriging,
+	   computing all required distances on the fly from the graph structure.
+
+This version removes the dependency on the dense distance matrix (mat_distance) and
+instead computes local distances dynamically using truncated Dijkstra searches.
+It provides identical kriging results as the standard function for the same
+neighborhood and variogram parameters, but with much lower memory footprint
+and better scalability for large graphs.
+
+\param current_node_index Index of the current node.
+\param neighborhood Indices of neighborhood nodes.
+\param kriging_distribution Pointer to the random distribution used for SGS kriging.
+\param curve Pointer to the KarsticSkeleton providing graph connectivity and node coordinates.
+\param vario_range Range parameter of the variogram.
+\param vario_sill Sill parameter of the variogram.
+\param vario_nugget Nugget parameter of the variogram.
+\param vario_model Type of variogram model ("Exponential", "Spherical", etc.).
+\param node_values Values of the nodes in the graph (NDV = -99999).
+\param[out] var_estimation Estimated variance (used for SGS simulation).
+\param[out] val_estimation Estimated value (used for SGS simulation).
+\param range_cap Maximum distance (graph path length) considered for neighborhood influence.
+*/
+void kriging_in_point_on_the_fly(
+	int current_node_index,
+	const std::vector<int>& neighborhood,
+	const std::vector<float>* kriging_distribution,
+	const KarstNSim::KarsticSkeleton* curve,
+	const float& vario_range,
+	const float& vario_sill,
+	const float& vario_nugget,
+	const std::string& vario_model,
+	const std::vector<float>& node_values,
+	float& var_estimation,
+	float& val_estimation,
+	float range_cap
+);
 
 /**
 \brief Estimates the value and variance of a property at a given node using kriging.
@@ -168,7 +235,7 @@ void save_data(const std::vector<float>& data, const std::string& filename);
 */
 void SGS3(
 	const KarstNSim::KarsticSkeleton* curve,
-	std::vector<float>&  simulated_property,
+	std::vector<float>& simulated_property,
 	const std::vector<float>* simulation_distribution,
 	const float& global_vario_range,
 	const float& global_range_of_neighborhood,
@@ -200,4 +267,104 @@ void SGS3(
 */
 static int compute_prop_branch(const int& total_nb_nodes_branch, const int& nb_points_interbranch, const float& proportion_interbranch);
 
+/**
+\brief Computes the total upstream curvilinear length for each node in the karstic network.
+
+This function recursively accumulates distances along all upstream branches of a given node
+by traversing the branch ancestry defined in branch_id_ascend. It is used to capture the cumulative
+position of the node in the network, from an upstream-downstream perspective.
+
+\param curve Pointer to the KarsticSkeleton graph.
+\return A vector of curvilinear lengths for each node in the graph.
+*/
+std::vector<float> compute_upstream_curvilinear_length(const KarstNSim::KarsticSkeleton* curve);
+
+/**
+\brief Computes an external drift field using a robust weighted linear regression.
+
+The drift is modeled as a linear combination of user-specified explanatory variables:
+- vertical distance to water table (z_phreatic - z),
+- upstream curvilinear length.
+Outliers in the observed equivalent radius (e.g., due to phantomization) are detected using
+the MAD (Median Absolute Deviation) criterion, and their influence is nullified in the regression.
+
+\param curve Pointer to the KarsticSkeleton graph.
+\param z_phreatic Reference water table elevation.
+\param use_drift_zwt Whether to include the water table trend.
+\param use_drift_curv Whether to include the upstream length trend.
+\param eq_radius_values Observed equivalent radius values at each node.
+\param[out] weights_out Output vector of weights (1 if used, 0 if filtered as outlier).
+\return External drift values m(u) for each node.
+*/
+std::vector<float> compute_external_drift(
+	const KarstNSim::KarsticSkeleton* curve,
+	const std::vector<Vector3>& springs_xyz,
+	const float& z_phreatic,
+	const bool& use_drift_zwt,
+	const bool& use_drift_curv,
+	const std::vector<float>& eq_radius_values,
+	std::vector<float>& weights_out);
+
+/**
+\brief Performs SGS simulation using an external drift field to account for large-scale trends.
+
+This version enhances the classical branchwise SGS by decoupling large-scale deterministic trends
+from local spatial variability. The drift m(u) is inferred by robust regression and added back
+to the simulated residuals ε(u). Both the drift and the final weights are returned for diagnostics.
+
+\param curve Pointer to the KarsticSkeleton graph.
+\param simulated_property Vector to store the final simulated values (drift + residuals).
+\param simulation_distribution Pointer to the Gaussian-transformed distribution used in SGS.
+\param global_vario_range Range for the global variogram model.
+\param global_range_of_neighborhood Neighborhood search radius for global step.
+\param global_vario_sill Sill for the global variogram model.
+\param global_vario_nugget Nugget for the global variogram model.
+\param global_vario_model Type of global variogram (e.g., Spherical, Gaussian).
+\param interbranch_vario_range Range for inter-branch variogram model.
+\param interbranch_range_of_neighborhood Neighborhood range for inter-branch.
+\param interbranch_vario_sill Sill for inter-branch variogram.
+\param interbranch_vario_nugget Nugget for inter-branch variogram.
+\param interbranch_vario_model Type of inter-branch variogram.
+\param intrabranch_vario_range Range for intra-branch variogram model.
+\param intrabranch_range_of_neighborhood Neighborhood range for intra-branch.
+\param intrabranch_vario_sill Sill for intra-branch variogram.
+\param intrabranch_vario_nugget Nugget for intra-branch variogram.
+\param intrabranch_vario_model Type of intra-branch variogram.
+\param number_max_of_neighborhood_points Maximum number of conditioning nodes for kriging.
+\param nb_points_interbranch Maximum number of inter-branch points per branch.
+\param proportion_interbranch Fraction of nodes to simulate in inter-branch step.
+\param z_phreatic Constant elevation of the water table used in the drift.
+\param use_drift_zwt Whether to activate the vadose/phreatic trend in the drift.
+\param use_drift_curv Whether to activate the upstream length trend in the drift.
+\param[out] drift_output Vector storing the external drift values m(u) for each node.
+\param[out] weights_output Vector storing the weights assigned to each observation during regression.
+*/
+void SGS3_with_external_drift(
+	const KarstNSim::KarsticSkeleton* curve,
+	const std::vector<Vector3>& springs_xyz,
+	std::vector<float>& simulated_property,
+	const std::vector<float>* simulation_distribution,
+	const float& global_vario_range,
+	const float& global_range_of_neighborhood,
+	const float& global_vario_sill,
+	const float& global_vario_nugget,
+	const std::string& global_vario_model,
+	const float& interbranch_vario_range,
+	const float& interbranch_range_of_neighborhood,
+	const float& interbranch_vario_sill,
+	const float& interbranch_vario_nugget,
+	const std::string& interbranch_vario_model,
+	const float& intrabranch_vario_range,
+	const float& intrabranch_range_of_neighborhood,
+	const float& intrabranch_vario_sill,
+	const float& intrabranch_vario_nugget,
+	const std::string& intrabranch_vario_model,
+	const int& number_max_of_neighborhood_points,
+	const int& nb_points_interbranch,
+	const float& proportion_interbranch,
+	const float& z_phreatic,
+	const bool& use_drift_zwt,
+	const bool& use_drift_curv,
+	std::vector<float>& drift_output,
+	std::vector<float>& weights_output);
 

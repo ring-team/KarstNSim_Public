@@ -32,6 +32,7 @@ If you use this code, pleace cite : Paris et al., 2021, Computer Graphic Forum.
 #include <random>
 #include <stdlib.h>
 #include <queue>
+#include <cstdint>
 #include <unordered_map>
 #include <KarstNSim/nanoflann.hpp>
 #include "KarstNSim/surface_sampling.h"
@@ -43,8 +44,40 @@ If you use this code, pleace cite : Paris et al., 2021, Computer Graphic Forum.
 #include "KarstNSim/simplex_noise.h"
 #include "KarstNSim/models/results.h"
 #include <iomanip>
+#include <unordered_set>
 
 namespace KarstNSim {
+
+
+	/*!
+	\brief Computes an anisotropic distance between two points for graph-related metrics.
+
+	\param a First point.
+	\param b Second point.
+	\param vertical_graph_distance_factor Vertical factor applied to the z displacement.
+	\return An anisotropic Euclidean distance in which the vertical component is
+	scaled by the provided factor.
+
+	\details
+	This helper must only be used in graph-related metrics for which vertical
+	penalization is desired, such as:
+	- edge-distance contribution in the cost function,
+	- random node-pair selection for cycle amplification,
+	- dead-end candidate search.
+
+	It must not be used for geometric reporting, geostatistics, curvilinear
+	distances, or any output intended to represent true geometric length.
+	*/
+	inline float graph_anisotropic_distance(
+		const Vector3& a,
+		const Vector3& b,
+		const float vertical_graph_distance_factor
+	) {
+		const float dx = a.x - b.x;
+		const float dy = a.y - b.y;
+		const float dz = (a.z - b.z) * vertical_graph_distance_factor;
+		return std::sqrt(dx * dx + dy * dy + dz * dz);
+	}
 
 	/*!
 	\class KarsticConnection
@@ -97,7 +130,9 @@ namespace KarstNSim {
 		Vector3 p; /*!< Position of the node in 3D space. */
 		std::vector<float> cost; /*!< Vector of cost values associated with the node, one per water table. */
 		std::vector<int> vadose; /*!< Vector of Vadose/phreatic status (one per water table): 1 (vadose), 0 (phreatic), -1 (default). */
-		float eq_radius = 0.; /*!< Equivalent radius of the node. */
+		float eq_radius = -99999.0f; /*!< Equivalent radius of the node. */
+		float drift_value = -99999.0f; /*!< External drift value used during SGS */
+		float drift_weight = -99999.0f; /*!< Drift weight used during SGS */
 		std::vector<KarsticConnection> connections; /*!< Connections to neighboring nodes. */
 		float distance = 0.; /*!< Debugging aid; holds a temporary distance value. */
 		int branch_id; /*!< Identifier for the current branch. */
@@ -155,6 +190,20 @@ namespace KarstNSim {
 	};
 
 	/*!
+	\enum ShortestPathMethod
+	\brief Defines exact shortest-path algorithms used during skeleton computation.
+
+	Both methods are exact and require non-negative edge weights. NormalDijkstra is
+	kept for legacy support, while BidirectionalDijkstra is the preferred option for
+	source-target shortest-path computations.
+	*/
+	enum class ShortestPathMethod
+	{
+		NormalDijkstra = 0, //!< Existing reference implementation based on std::set.
+		BidirectionalDijkstra = 1 //!< Exact bidirectional Dijkstra using a reverse adjacency index.
+	};
+
+	/*!
 	\class CostGraph
 	\brief Class representing a nearest neighbor directed cost graph, using an adjacency graph `adj` that consists of a vector of vector of GraphEdge objects.
 		   This class also defines methods for updating and pruning the graph, with Dijkstra's algorithm being a key component.
@@ -206,6 +255,19 @@ namespace KarstNSim {
 		\brief The adjacency graph represented as a vector of vector of GraphEdge objects.
 		*/
 		Array2D<GraphEdge> adj;
+		
+		/*!
+		\brief Reverse adjacency index used by exact bidirectional Dijkstra.
+
+		The reverse index stores references to existing outgoing edges instead of
+		duplicating edge weights. For each reversed arc, reverse_sources_ stores
+		the predecessor node and reverse_edge_slots_ stores the local edge slot in
+		adj[predecessor].
+		*/
+		mutable bool reverse_adjacency_ready_ = false;
+		mutable std::vector<std::size_t> reverse_offsets_;
+		mutable std::vector<int> reverse_sources_;
+		mutable std::vector<std::uint16_t> reverse_edge_slots_;
 
 	protected:
 
@@ -249,6 +311,31 @@ namespace KarstNSim {
 		*/
 		int GetIdxNeighbor(const int& s, const int& t);
 
+				/*!
+		\brief Releases all optional shortest-path preprocessing buffers.
+		*/
+		void ClearShortestPathPreprocessing() const;
+
+		/*!
+		\brief Invalidates shortest-path preprocessing buffers after graph updates.
+		*/
+		void InvalidateShortestPathPreprocessing() const;
+
+		/*!
+		\brief Builds the reverse adjacency index used by bidirectional Dijkstra.
+		*/
+		void BuildReverseAdjacency() const;
+
+		/*!
+		\brief Returns the directed edge weight from source to target.
+		\param source Source node index.
+		\param target Target node index.
+		\param outlet_count Cost channel to read.
+		\return Directed edge weight, or infinity if the edge does not exist.
+		*/
+		float GetDirectedEdgeWeight(int source, int target, int outlet_count) const;
+
+
 		/*!
 		\brief Computes the shortest paths from a source node to all other nodes using Dijkstra's algorithm. In practice, it's used for phreatic shortest path computation between the vadose ending point (source) and the spring (target).
 		\param outlet_count The index of the water table associated with the outlet currently considered.
@@ -258,6 +345,16 @@ namespace KarstNSim {
 		\param target Optional parameter to specify a specific target node (the spring) (instead of computing all other nodes, the algorithm will stop as soon as a shortest path is found to this target node) (optional, default value is -1).
 		*/
 		void DijkstraComputePaths(int outlet_count, int source, std::vector<float>& distance, std::vector<int>& previous, int target = -1) const;
+
+		
+		/*!
+		\brief Computes one exact source-target shortest path using bidirectional Dijkstra.
+
+		The graph may be directed in cost. The backward search therefore uses a
+		reverse adjacency index that reads the original directed edge weights.
+		*/
+		void DijkstraComputePathsBidirectional(int outlet_count, int source, int target, std::vector<float>& distance, std::vector<int>& previous) const;
+
 
 		/*!
 		\brief Computes the shortest paths from a source node to the closest point below a given triangulated surface, using Dijkstra's algorithm. In practice, it's used for vadose shortest path computation between the inlet and a vadose ending point (below water table).
@@ -271,6 +368,25 @@ namespace KarstNSim {
 		\param already_reached Reference to a boolean flag indicating whether the target has already been reached. This corresponds to cases where the phreatic path doesnt have to be computed, since the vadose ending point IS the spring directly.
 		*/
 		void DijkstraComputePathsSurface(int outlet_count, int source, int& reach, std::vector<float>& distance, std::vector<int>& previous, const  Array2D<char>& samples_surf_flags, int target, bool &already_reached) const;
+
+				/*!
+		\brief Computes the shortest path from a source node to the closest node belonging to a surface using bidirectional Dijkstra.
+
+		The forward search starts from the source node, while the backward search is
+		initialized from all nodes flagged on the target surface. This preserves the same
+		output contract as DijkstraComputePathsSurface(): reach is set to the selected
+		surface node, distance and previous can be passed to DijkstraGetShortestPathTo(),
+		and already_reached is true if the selected surface node is the outlet target.
+		*/
+		void DijkstraComputePathsSurfaceBidirectional(
+			int outlet_count,
+			int source,
+			int& reach,
+			std::vector<float>& distance,
+			std::vector<int>& previous,
+			const Array2D<char>& samples_surf_flags,
+			int target,
+			bool& already_reached) const;
 
 		/*!
 		\brief Retrieves the shortest path and distances from a source node to a target node. Must be used after DijkstraComputePathsSurface or DijkstraComputePaths.
@@ -300,7 +416,7 @@ namespace KarstNSim {
 			int index;     //!< The index of the internal key point.
 			Vector3 p;     //!< The position of the internal key point.
 			KeyPointType type; //!< The type of the key point.
-			int wt_idx;    //!< The index of the water table (relevant only for Spring keypoints).
+			int wt_idx;    //!< One-based water table index for spring keypoints. A value of 0 means no associated water table.
 		};
 
 	protected:
@@ -532,6 +648,57 @@ namespace KarstNSim {
 		void BuildNearestNeighbourGraph(const Box& box, const float fraction_old_karst_perm, float max_dist_surf, const std::vector<KeyPoint>& keypts);
 
 		/*!
+		\brief Matches all nodes of a user-defined input graph to their corresponding indices in the sampling cloud.
+
+		This method does not assume any ordering consistency between the input graph nodes and the
+		sampling cloud. Matching is therefore performed geometrically using the same quantized
+		point key logic as elsewhere in the graph import pipeline.
+
+		For each node of the input graph, the method stores the corresponding index in the current
+		sampling cloud if a match is found, or -1 otherwise.
+
+		\param[in] input_nghb_graph User-defined support graph stored as unique nodes and indexed connections.
+		\param[out] input_graph_node_idx_in_samples Mapping from input graph node index to sample index.
+		*/
+		void register_input_nghb_graph_nodes(
+			const InputGraph& input_nghb_graph,
+			std::vector<int>& input_graph_node_idx_in_samples);
+
+		/*!
+		\brief Builds the directed cost graph from a user-defined indexed support graph instead of computing a k-nearest-neighbor graph.
+
+		This method reproduces the same workflow as BuildNearestNeighbourGraph(), except that
+		the graph topology is not generated from a nearest-neighbor search. Instead, it is read
+		from an input support graph already defined by unique nodes and indexed connections.
+
+		The input graph nodes must first have been geometrically matched to the current sampling
+		cloud through register_input_nghb_graph_nodes(). Then, each valid indexed connection of
+		the input graph is converted into two directed edges in the adjacency graph, one in each
+		direction, with geological costs recomputed independently through ComputeEdgeCost().
+
+		After topology construction and geological cost computation, the exact same post-processing
+		steps as in BuildNearestNeighbourGraph() are applied:
+		- distance cost multiplication,
+		- optional global noise addition,
+		- cost reduction on previously karstified edges,
+		- cost reduction around waypoint influence spheres.
+
+		\param box Simulation domain box.
+		\param input_nghb_graph User-defined support graph stored as unique nodes and indexed connections.
+		\param input_graph_node_idx_in_samples Mapping from each input graph node index to the corresponding index in the current sampling cloud.
+		\param fraction_old_karst_perm Cost reduction factor applied to already karstified edges from previous iterations.
+		\param max_dist_surf Maximum distance to constrained surfaces used during geological cost computation.
+		\param keypts Key points of the simulation, used notably for waypoint influence zones.
+		*/
+		void BuildNearestNeighbourGraphFromInput(
+			const Box&,
+			const InputGraph& input_nghb_graph,
+			const std::vector<int>& input_graph_node_idx_in_samples,
+			const float fraction_old_karst_perm,
+			float max_dist_surf,
+			const std::vector<KeyPoint>& keypts);
+
+		/*!
 		\brief Saves the noise vector for the given set of points as a new box property.
 		\param Points A vector of Vector3 points for which the noise values are to be computed (in principle, the whole samples cloud).
 		\return A pair of vectors. The first vector contains the noise values, and the second contains the name of the new box property.
@@ -587,6 +754,26 @@ namespace KarstNSim {
 		\return The number of cycles detected in the network.
 		*/
 		int compute_nb_cycles();
+
+		/**
+		 * @brief Recomputes vadose flags for all skeleton nodes and all water-table
+		 *        cost channels from the final sampling-cloud flags.
+		 *
+		 * This method must be called after all skeleton amplification steps. It avoids
+		 * keeping stale or single-channel vadose flags on nodes added during cycle or
+		 * dead-end amplification.
+		 *
+		 * Values are stored as:
+		 * - 1 for vadose,
+		 * - 0 for phreatic,
+		 * - -1 when the channel cannot be assigned.
+		 *
+		 * @param[in] graph Graph object containing the sampling-cloud water-table flags.
+		 * @param[in] params Geological parameters defining the water-table channel count.
+		 */
+		void refresh_vadose_flags_from_graph(
+			GraphOperations* graph,
+			const GeologicalParameters& params);
 
 		/*!
 		\brief Detects the intersection points in the network.
@@ -692,20 +879,40 @@ namespace KarstNSim {
 
 
 		/*!
-		\brief Creates a Line object using the karst skeleton. Line objects can the be saved using save_line (in write_files.h).
-		\param geologicalparams The geological parameters of the simulation.
-		\param network_name The name of the generated network.
+		\brief Creates the exportable karst network result from the skeleton.
+
+		\details
+		This method converts the current skeleton topology and node properties into a
+		KarstNetworkResult object. The exported branch identifier is the branch_id
+		computed on skeleton nodes; intersections keep branch_id == -1. Vadose flags
+		are exported only for physical water-table channels effectively used by at
+		least one spring. The internal vadose-only no-water-table cost channel is not
+		exported as a water-table flag.
+
+		\param geologicalparams Geological and simulation parameters.
+		\param network_name Name of the generated network, kept for interface symmetry.
+		\return Exportable karst network result.
 		*/
-		KarstNetworkResult get_result(const GeologicalParameters& geologicalparams, std::string network_name) const;
+		KarstNetworkResult create_line(
+			const GeologicalParameters& geologicalparams,
+			const std::string& network_name) const;
 
 		/*!
-		\brief Generates a set of deadend points in the karstic skeleton bounding box. Used in amplify_deadend.
+		\brief Generates a set of deadend points in the karstic skeleton bounding box.
+
 		\param graph A pointer to GraphOperations used for generating deadend points.
 		\param max_distance_of_deadend_pts The maximum distance for creating deadend points.
 		\param nb_deadend_points The number of deadend points to generate.
-		\return A pair of a vector of the simulated deadend points and of a pair of the indices of both these new points and their closest neighbor in the already existing sampling cloud.
+		\param params Geological parameters, including the vertical graph distance factor.
+		\return A pair of the simulated deadend points and the indices of both these new points
+		and their closest neighbor in the existing sampling cloud.
 		*/
-		std::pair<std::vector<Vector3>, std::pair<std::vector<int>, std::vector<int>>> generate_deadend_points(GraphOperations* graph, float max_distance_of_deadend_pts, int nb_deadend_points);
+		std::pair<std::vector<Vector3>, std::pair<std::vector<int>, std::vector<int>>> generate_deadend_points(
+			GraphOperations* graph,
+			float max_distance_of_deadend_pts,
+			int nb_deadend_points,
+			const GeologicalParameters& params
+		);
 
 		/*!
 		\brief Cleans up the karst skeleton object (e.g., by removing duplicates).

@@ -34,7 +34,12 @@ sampling_points: Input_files/3_amplification/base_0_pts.txt
 use_density_property: true
 k_pts: 10
 
-// N nearest-neighbor graph parameters :
+// Use a pre-existing graph for simulation support... :
+
+use_input_nghb_graph: false
+//input_nghb_graph:
+
+// ... Or generate a new one, with N nearest-neighbor graph parameters :
 
 nghb_count: 100
 use_max_nghb_radius: false
@@ -148,6 +153,8 @@ intrabranch_vario_model = "Exponential"
 number_max_of_neighborhood_points = 16
 nb_points_interbranch = 7
 proportion_interbranch = 0.1
+use_drift_zwt = false
+use_drift_curv = false
 
 // Other general cost graph parameters (gamma-graph parameter, cost reduction (cohesion) factor, and option to multiply costs instead of summing them) :
 
@@ -155,6 +162,9 @@ gamma: 2.0
 fraction_karst_perm: 0.9
 vadose_cohesion: true
 multiply_costs: false
+vertical_distance_stretching_factor: 1
+gradient_constraint_weight: 0.0
+outlet_selection_cost_factor: 1.0
 
 // Save parameters (if you want to save sampling points, cost graph and cost property) :
 

@@ -63,7 +63,7 @@ namespace KarstNSim {
 		\param Box boundary box of the domain where we will run the simulation
 		\param params class that stores all simulation parameters
 		\param keypts contains all keypoints to constrain the simulation
-		\param water_tables water tables associated to each spring
+		\param water_tables water table surfaces. Some springs may intentionally have no associated water table.
 		*/
 
 		KarsticNetwork(const std::string& karstic_network_name, const Box& box, GeologicalParameters& params,
@@ -86,9 +86,38 @@ namespace KarstNSim {
 		\param allow_single_outlet_connection Option that will force each inlet to be only connected to its nearest spring when set to true
 		\param use_sinks_radius Flag to indicate whether to use sink radii
 		\param propsinksradius Radii of sinks
-		\param propspringswtsurf Associated water table surfaces for springs
+		\param propspringswtsurf One-based water table surface index associated with each spring. A value of 0 means that the spring has no associated water table and is handled as a vadose-only outlet.
 		*/
 		void set_springs(const std::vector<Vector3>& springs, const std::vector<int>& propspringsindex, const bool& allow_single_outlet_connection, bool use_sinks_radius, const std::vector<float>& propsinksradius, const std::vector<int>& propspringswtsurf);
+
+
+		/*!
+		\brief Set sink points for sections-only simulations, without requiring connectivity metadata.
+
+		This lightweight setup is intended for `sections_simulation_only` mode, where the karst
+		skeleton is reconstructed from an existing graph and sink connectivity metadata is not used.
+		It still stores sink coordinates as keypoints and preserves optional sink radii so that
+		fixed conduit sizes can be imposed at sink extremities during section simulation.
+
+		\param sinks List of sink points.
+		\param use_sinks_radius Flag indicating whether per-sink radii should be stored.
+		\param propsinksradius Radii of sinks, one per sink if enabled.
+		*/
+		void set_sinks_sections_only(const std::vector<Vector3>& sinks, bool use_sinks_radius, const std::vector<float>& propsinksradius);
+
+		/*!
+		\brief Set spring points for sections-only simulations, without requiring connectivity or water-table metadata.
+
+		This lightweight setup is intended for `sections_simulation_only` mode, where the karst
+		skeleton is reconstructed from an existing graph and spring connectivity metadata is not used.
+		It still stores spring coordinates, spring elevations, and optional spring radii so that
+		section simulation can use spring constraints and optional drift-related inputs.
+
+		\param springs List of spring points.
+		\param use_springs_radius Flag indicating whether per-spring radii should be stored.
+		\param propspringsradius Radii of springs, one per spring if enabled.
+		*/
+		void set_springs_sections_only(const std::vector<Vector3>& springs, bool use_springs_radius, const std::vector<float>& propspringsradius);
 
 		/*!
 		\brief Set way points into the key points vector
@@ -112,6 +141,20 @@ namespace KarstNSim {
 		\param previous_networks Pointer to the list of lines representing the previous networks incorporated to the graph
 		*/
 		void set_previous_networks(const std::vector<Line>& previous_networks);
+
+		/**
+		 * @brief Store a user-defined neighbor graph that will be used directly
+		 *        as the simulation support graph instead of rebuilding a k-nearest
+		 *        neighbor graph from the sampling cloud.
+		 *
+		 * The input graph is expected to be provided as a line object whose
+		 * segments define the graph edges. No edge cost is read from the input
+		 * object; all costs are recomputed afterwards from the geological
+		 * constraints and simulation parameters.
+		 *
+		 * @param[in] input_nghb_graph User-defined neighbor graph.
+		 */
+		void set_input_nghb_graph(const InputGraph& input_nghb_graph);
 
 		/*!
 		\brief Add nodes from surfaces for densified sampling
@@ -198,8 +241,10 @@ namespace KarstNSim {
 		\param gamma Parameter used for the beta-skeleton appraoch to build the network
 		\param multiply_costs Boolean to indicate whether to multiply costs (instead of summing them)
 		\param vadose_cohesion Boolean for vadose cohesion consideration: if true, cohesion is applied everywhere, if false, cohesion is only applied in the phreatic zone
+		\param vertical_graph_distance_factor Vertical anisotropy factor used for selected graph-related distances.
 		*/
-		void set_simulation_parameters(const int& nghb_count, const bool& use_max_nghb_radius, const float& nghb_radius, const float& poisson_radius, const float& gamma, const bool& multiply_costs, const bool& vadose_cohesion);
+		void set_simulation_parameters(const int& nghb_count, const bool& use_max_nghb_radius, const float& nghb_radius, const float& poisson_radius, const float& gamma,
+			const bool& multiply_costs, const bool& vadose_cohesion, const float& vertical_distance_stretching_factor);
 
 		/*!
 		\brief Sets the domain geometry and the boundary box dimensions with the Box class attribute
@@ -232,17 +277,6 @@ namespace KarstNSim {
 		\param skel Reference to the KarsticSkeleton object
 		*/
 		void create_sections(KarsticSkeleton& skel);
-
-		/*! \brief Runs a KarstNSim simulation, by skipping ALL steps except the equivalent section simulation using the 1D-curvilinear branchwise SGS algorithm.
-		\param skel Reference to the KarsticSkeleton object
-		\param alteration_lines Pointer to alteration lines
-		\param use_ghost_rocks Boolean indicating whether to use ghost rocks
-		\param ghostrock_max_vertical_size Maximum vertical size of ghost rocks
-		\param use_max_depth_constraint Boolean indicating whether to use maximum depth constraint
-		\param max_depth_horizon Pointer to maximum depth horizon surface
-		\param ghostrock_width Width of ghost rocks
-		*/
-		void run_simulation_properties(KarsticSkeleton& skel, const Line& alteration_lines, const bool& use_ghost_rocks, const float& ghostrock_max_vertical_size, const bool& use_max_depth_constraint, const Surface& max_depth_horizon, const float& ghostrock_width);
 
 		/*! \brief Runs the simulation and returns the time required for the simulation
 		\param sections_simulation_only Boolean indicating whether to simulate sections only (and skip everything else)
@@ -279,7 +313,7 @@ namespace KarstNSim {
 		\param propdensity density property
 		\param propikp IKP property, potentially updated during simulation by the ghost-rock corridors.
 		*/
-		void save_painted_box(std::vector<float>& propdensity, const std::vector<float>& propikp);
+		void save_painted_box(const std::vector<float>& propdensity, const std::vector<float>& propikp);
 
 		/*!
 		\brief Sets all the geostatistical parameters needed for the simulation of equivalent section properties on the nodes of the karstic skeleton
@@ -316,6 +350,29 @@ namespace KarstNSim {
 		*/
 		void set_water_table_weight(const float& water_table_constraint_weight_vadose, const float& water_table_constraint_weight_phreatic);
 
+		/**
+		 * @brief Set the outlet-selection gradient constraint weight.
+		 *
+		 * This parameter is used only when ambiguous inlet/outlet links are resolved
+		 * by the shortest corrected cumulative cost. It penalizes candidate outlets
+		 * with smaller inlet-to-outlet elevation drop.
+		 *
+		 * @param[in] gradient_constraint_weight Non-negative gradient constraint weight.
+		 */
+		void set_gradient_constraint_weight(const float& gradient_constraint_weight);
+
+		/**
+		 * @brief Set the multiplicative cost factor used during ambiguous outlet selection.
+		 *
+		 * Candidate ambiguous paths are preserved when their corrected cumulative cost
+		 * is lower than or equal to the best corrected cumulative cost multiplied by
+		 * this factor. The corrected cost may include the gradient-based selection
+		 * correction.
+		 *
+		 * @param[in] outlet_selection_cost_factor Multiplicative threshold factor. Values below 1 are clamped to 1.
+		 */
+		void set_outlet_selection_cost_factor(const float& outlet_selection_cost_factor);
+
 		/*!
 		\brief Sets the simulation so that it will not consider water table cost constraints
 		*/
@@ -323,6 +380,14 @@ namespace KarstNSim {
 
 
 	private:
+		/*!
+		\brief Updates the internal cost-channel layout used by graph computations.
+
+		\details Physical water-table surfaces define one cost channel each. If at
+		least one spring has no associated water table, one additional vadose-only
+		channel is appended after the physical channels.
+		*/
+		void update_water_table_cost_channels();
 		std::string karstic_network_name; /*!< Name of the karstic network to be generated */
 		std::vector<Vector3> nodes_on_inception_surfaces; /*!< List of nodes on inception surfaces */
 		std::vector<std::vector<Vector3>> nodes_on_wt_surfaces; /*!< List of nodes on water table surfaces */

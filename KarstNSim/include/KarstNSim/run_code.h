@@ -132,6 +132,11 @@ namespace KarstNSim {
 		float fraction_old_karst_perm = 0.5f; //!< Corresponds to Ppoly, the polyphasic cost reduction factor: any edge used by a previous network has its cost reduced by this factor
 		bool sections_simulation_only = false; //!< Flag defining whether only equivalent sections should be simulated, as opposed to all steps of KarstNSim. If set to true, previous networks should be defined
 
+		// Use input nghb graph :
+
+		bool use_input_nghb_graph = false; //!< Flag defining if the user has defined an input nearest neighbor graph for the simulation
+		KarstNSim::InputGraph input_nghb_graph; //!<< InputGraph object representing the input nearest neighbor graph
+
 		// N nearest-neighbor graph parameters :
 
 		int nghb_count = 25; //!< Number of nearest neighbors
@@ -186,9 +191,11 @@ namespace KarstNSim {
 		std::vector<float> fracture_families_tolerance; //!< Angular tolerances for each fracture family.
 		float fracture_constraint_weight = 1.0f; //!< Weight for fracture constraints in the cost function.
 
-		// Water tables (one for each spring) and vadose and phreatic trends (mandatory) :
+		// Water tables and vadose/phreatic trends.
+		// Springs not referenced by any water table surface are treated as overflow/relict
+		// springs and are connected through a direct vadose-only path.
 
-		std::vector<Surface> surf_wat_table; //!< Surfaces representing water tables.
+		std::vector<Surface> surf_wat_table; //!< Water table surfaces associated with one or several springs. Springs without association are handled as no-water-table outlets.
 		float water_table_constraint_weight_vadose = 1.0f; //!< Weight for vadose zone water table constraints.
 		float water_table_constraint_weight_phreatic = 1.0f; //!< Weight for phreatic zone water table constraints.
 
@@ -198,6 +205,9 @@ namespace KarstNSim {
 		float fraction_karst_perm = 0.9f; //!< Cost reduction (cohesion) factor Pred for karsts.
 		bool vadose_cohesion = true; //!< Flag to enable cohesion in vadose zone (if false, cohesion is only applied in phreatic zone).
 		bool multiply_costs = false; //!< Flag to multiply costs instead of summing them.
+		float vertical_distance_stretching_factor = 1.0f; //!< Stretching factor applied to distance computations on the cost graph. The greater, the more penalized vertical edges are.
+		float gradient_constraint_weight = 0.0f; //!< Weight applied to the inlet-outlet elevation-drop penalty during ambiguous outlet selection.
+		float outlet_selection_cost_factor = 1.0f; //!< Multiplicative threshold factor used to preserve ambiguous outlet paths whose corrected cumulative cost remains close to the best corrected cost.
 
 		// Deadend points amplification :
 
@@ -264,9 +274,4 @@ namespace KarstNSim {
 	 */
 	void run_simulation_full(ParamsSource parameters);
 
-	/*!
-	 * @brief Runs a partial simulation focusing only on equivalent section property calculations on an already simulated karst network.
-	 * @param parameters Simulation parameters as defined in ParamsSource.
-	 */
-	void run_simulation_properties(ParamsSource parameters);
 };

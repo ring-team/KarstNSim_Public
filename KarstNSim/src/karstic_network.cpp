@@ -16,7 +16,8 @@ namespace KarstNSim {
 		const std::vector<KeyPoint>& keypts, const std::vector<Surface>& water_tables) :
 		karstic_network_name(karstic_network_name), box(box), params(params), keypts(keypts), water_tables(water_tables) {};
 
-	void KarsticNetwork::set_simulation_parameters(const int& nghb_count, const bool& use_max_nghb_radius, const float& nghb_radius, const float& poisson_radius, const float& gamma, const bool& multiply_costs, const bool& vadose_cohesion) {
+	void KarsticNetwork::set_simulation_parameters(const int& nghb_count, const bool& use_max_nghb_radius, const float& nghb_radius, const float& poisson_radius,
+		const float& gamma, const bool& multiply_costs, const bool& vadose_cohesion, const float& vertical_distance_stretching_factor) {
 
 		params.gamma = gamma;
 		params.graphNeighbourCount = nghb_count;
@@ -27,73 +28,343 @@ namespace KarstNSim {
 		params.multiply_costs = multiply_costs;
 		params.vadose_cohesion = vadose_cohesion;
 		is_simulation_parametrized = true;
+		params.vertical_distance_stretching_factor = std::max(1.0f,vertical_distance_stretching_factor);
 		set_domain_geometry();
 	}
 
-	void KarsticNetwork::set_sinks(const std::vector<Vector3>& sinks, const std::vector<int>& propsinksindex, const std::vector<int>& propsinksorder, bool use_sinks_radius, const std::vector<float>& propsinksradius) {
+	void KarsticNetwork::update_water_table_cost_channels()
+	{
+		const int nb_physical_wt = static_cast<int>(water_tables.size());
 
-		//std::vector<int> propsinksindex = get_gobj_property_karstnetwork(sinks, sinks_index, int(sinks->size()));
-		//std::vector<int> propsinksorder = get_gobj_property_karstnetwork(sinks, sinks_order, int(sinks->size()));
+		params.nb_wt_surfaces = nb_physical_wt;
 
-		int max_order;
-		max_order = *std::max_element(propsinksorder.begin(), propsinksorder.end());
-		int scanning_order = 1;
+		if (params.has_springs_without_wt) {
+			params.no_wt_cost_index = nb_physical_wt;
+			params.nb_wt = nb_physical_wt + 1;
+		}
+		else {
+			params.no_wt_cost_index = -1;
+			params.nb_wt = nb_physical_wt;
+		}
+	}
+
+	void KarsticNetwork::set_sinks(const std::vector<Vector3>& sinks, const std::vector<int>& propsinksindex,
+		const std::vector<int>& propsinksorder, bool use_sinks_radius, const std::vector<float>& propsinksradius) {
+
+		const int n_sinks = static_cast<int>(sinks.size());
+
+		if (propsinksindex.size() != static_cast<size_t>(n_sinks)) {
+			throw std::runtime_error(
+				"[sinks] Invalid property 'sinks_index': expected " + std::to_string(n_sinks) +
+				" values (one per sink), but got " + std::to_string(propsinksindex.size()) + "."
+			);
+		}
+
+		if (propsinksorder.size() != static_cast<size_t>(n_sinks)) {
+			throw std::runtime_error(
+				"[sinks] Invalid property 'sinks_order': expected " + std::to_string(n_sinks) +
+				" values (one per sink), but got " + std::to_string(propsinksorder.size()) + "."
+			);
+		}
+
+		if (use_sinks_radius && propsinksradius.size() != static_cast<size_t>(n_sinks)) {
+			throw std::runtime_error(
+				"[sinks] Invalid property 'sinks_radius': option 'use_sinks_radius' is enabled, so "
+				"expected " + std::to_string(n_sinks) + " values (one per sink), but got " +
+				std::to_string(propsinksradius.size()) + "."
+			);
+		}
+
+		// Validate sink indices: must be exactly a permutation of 1..n, with no duplicate and no hole.
+		std::vector<int> seen_index(n_sinks + 1, 0);
+		for (int i = 0; i < n_sinks; ++i) {
+			const int idx = propsinksindex[i];
+
+			if (idx < 1 || idx > n_sinks) {
+				throw std::runtime_error(
+					"[sinks] Invalid property 'sinks_index': value " + std::to_string(idx) +
+					" found at sink #" + std::to_string(i + 1) +
+					", but valid sink indices must be integers in [1, " + std::to_string(n_sinks) + "]."
+				);
+			}
+
+			if (seen_index[idx] != 0) {
+				throw std::runtime_error(
+					"[sinks] Invalid property 'sinks_index': duplicate value " + std::to_string(idx) +
+					" found for sink #" + std::to_string(i + 1) +
+					" and sink #" + std::to_string(seen_index[idx]) +
+					". Sink indices must define a permutation of 1.." + std::to_string(n_sinks) +
+					" without repetition."
+				);
+			}
+
+			seen_index[idx] = i + 1;
+		}
+
+		for (int idx = 1; idx <= n_sinks; ++idx) {
+			if (seen_index[idx] == 0) {
+				throw std::runtime_error(
+					"[sinks] Invalid property 'sinks_index': missing value " + std::to_string(idx) +
+					". Sink indices must define a complete permutation of 1.." + std::to_string(n_sinks) +
+					" without hole."
+				);
+			}
+		}
+
+		// Validate sink orders: positive group identifiers starting at 1.
+		int max_order = 0;
+		for (int i = 0; i < n_sinks; ++i) {
+			const int order = propsinksorder[i];
+
+			if (order < 1) {
+				throw std::runtime_error(
+					"[sinks] Invalid property 'sinks_order': value " + std::to_string(order) +
+					" found at sink #" + std::to_string(i + 1) +
+					". Sink orders must be group identifiers starting at 1."
+				);
+			}
+
+			if (order > max_order) {
+				max_order = order;
+			}
+		}
+
 		use_sinks_radius_ = use_sinks_radius;
-		// sinks are appended in a specific order to the list :
-		// 1) they are appended in increasing order of importance (priority to bigger sinks)
-		// 2) among sinks of same order, the order is shuffled randomly
 
+		// Sinks are appended in a specific order:
+		// 1) groups are processed in increasing order of 'sinks_order';
+		// 2) within a same group, sinks are shuffled randomly.
+		int scanning_order = 1;
 		while (scanning_order <= max_order) {
 			std::vector<int> propsinks_iter;
 			std::vector<int> propsinks_iter_index;
 			std::vector<int> indexes;
-			for (int i = 0; i < sinks.size(); i++) {
+
+			for (int i = 0; i < n_sinks; i++) {
 				if (propsinksorder[i] == scanning_order) {
 					propsinks_iter.push_back(i);
 					propsinks_iter_index.push_back(propsinksindex[i]);
 				}
 			}
-			for (int i = 0; i < int(propsinks_iter.size()); ++i) {
+
+			for (int i = 0; i < static_cast<int>(propsinks_iter.size()); ++i) {
 				indexes.push_back(i);
 			}
+
 			shuffleContainer(indexes.begin(), indexes.end());
 			reorder(propsinks_iter, indexes);
 			reorder(propsinks_iter_index, indexes);
-			for (int i = 0; i < int(propsinks_iter.size()); i++) {
-				params.sinks_index.push_back(propsinks_iter_index[i]); // insert shuffled vector of indices of sinks of order i
-				this->keypts.emplace_back(sinks.at(propsinks_iter[i]), KeyPointType::Sink);
-				this->pt_sink.push_back(sinks.at(propsinks_iter[i]));
+
+			for (int i = 0; i < static_cast<int>(propsinks_iter.size()); i++) {
+				params.sinks_index.push_back(propsinks_iter_index[i]);
+				this->keypts.emplace_back(sinks[propsinks_iter[i]], KeyPointType::Sink);
+				this->pt_sink.push_back(sinks[propsinks_iter[i]]);
 
 				if (use_sinks_radius_) {
 					propsinksradius_.push_back({ propsinksradius[propsinks_iter[i]], int(keypts.size() - 1) });
 				}
 			}
+
 			scanning_order++;
 		}
 	}
 
-	void KarsticNetwork::set_springs(const std::vector<Vector3>& springs, const std::vector<int>& propspringsindex, const bool& allow_single_outlet_connection, bool use_springs_radius, const std::vector<float>& propspringsradius, const std::vector<int>& propspringswtindex) {
+void KarsticNetwork::set_springs(
+	const std::vector<Vector3>& springs,
+	const std::vector<int>& propspringsindex,
+	const bool& allow_single_outlet_connection,
+	bool use_springs_radius,
+	const std::vector<float>& propspringsradius,
+	const std::vector<int>& propspringswtindex) {
 
-		params.allow_single_outlet = allow_single_outlet_connection;
-		params.nb_springs = int(springs.size());
-		//std::vector<int> propspringsindex = get_gobj_property_karstnetwork(springs, springs_index, params.nb_springs);
+	const int n_springs = static_cast<int>(springs.size());
 
-		// get all z values for the springs
-		use_springs_radius_ = use_springs_radius;
+	params.allow_single_outlet = allow_single_outlet_connection;
+	params.nb_springs = n_springs;
+	use_springs_radius_ = use_springs_radius;
 
-		for (int i = 0; i < springs.size(); i++)
-		{
-			int index_for_i = int(std::find(propspringsindex.begin(), propspringsindex.end(), i + 1) - propspringsindex.begin());
+	if (propspringsindex.size() != static_cast<size_t>(n_springs)) {
+		throw std::runtime_error(
+			"[springs] Invalid property 'springs_index': expected " + std::to_string(n_springs) +
+			" values (one per spring), but got " + std::to_string(propspringsindex.size()) + "."
+		);
+	}
 
-			this->keypts.emplace_back(springs.at(index_for_i), KeyPointType::Spring, propspringswtindex[index_for_i]);
-			params.z_list.push_back({ springs.at(index_for_i).z,  int(keypts.size() - 1) });
-			this->pt_spring.push_back(springs.at(index_for_i));
-			params.propspringswtindex.push_back({ static_cast<float>(propspringswtindex[index_for_i]), int(keypts.size() - 1) });
-			if (use_springs_radius_) {
-				propspringsradius_.push_back({ propspringsradius[index_for_i], int(keypts.size() - 1) });
+	if (propspringswtindex.size() != static_cast<size_t>(n_springs)) {
+		throw std::runtime_error(
+			"[springs] Invalid property 'springs_wt_index': expected " + std::to_string(n_springs) +
+			" values (one per spring), but got " + std::to_string(propspringswtindex.size()) + "."
+		);
+	}
+
+	if (use_springs_radius && propspringsradius.size() != static_cast<size_t>(n_springs)) {
+		throw std::runtime_error(
+			"[springs] Invalid property 'springs_radius': option 'use_springs_radius' is enabled, so "
+			"expected " + std::to_string(n_springs) + " values (one per spring), but got " +
+			std::to_string(propspringsradius.size()) + "."
+		);
+	}
+
+	const int n_wt = static_cast<int>(water_tables.size());
+
+	// Validate spring indices: they must define a complete permutation of 1..n_springs.
+	std::vector<int> seen_index(n_springs + 1, 0);
+	for (int i = 0; i < n_springs; ++i) {
+		const int idx = propspringsindex[i];
+
+		if (idx < 1 || idx > n_springs) {
+			throw std::runtime_error(
+				"[springs] Invalid property 'springs_index': value " + std::to_string(idx) +
+				" found at spring #" + std::to_string(i + 1) +
+				", but valid spring indices must be integers in [1, " + std::to_string(n_springs) + "]."
+			);
+		}
+
+		if (seen_index[idx] != 0) {
+			throw std::runtime_error(
+				"[springs] Invalid property 'springs_index': duplicate value " + std::to_string(idx) +
+				" found for spring #" + std::to_string(i + 1) +
+				" and spring #" + std::to_string(seen_index[idx]) +
+				". Spring indices must define a permutation of 1.." + std::to_string(n_springs) +
+				" without repetition."
+			);
+		}
+
+		seen_index[idx] = i + 1;
+	}
+
+	for (int idx = 1; idx <= n_springs; ++idx) {
+		if (seen_index[idx] == 0) {
+			throw std::runtime_error(
+				"[springs] Invalid property 'springs_index': missing value " + std::to_string(idx) +
+				". Spring indices must define a complete permutation of 1.." + std::to_string(n_springs) +
+				" without hole."
+			);
+		}
+	}
+
+	// Validate water-table index associated with each spring.
+	// A value of 0 is valid and means that the spring has no associated water table.
+	params.has_springs_without_wt = false;
+
+	for (int i = 0; i < n_springs; ++i) {
+		const int wt_idx = propspringswtindex[i];
+
+		if (wt_idx == 0) {
+			params.has_springs_without_wt = true;
+			continue;
+		}
+
+		if (wt_idx < 0 || wt_idx > n_wt) {
+			throw std::runtime_error(
+				"[springs] Invalid property 'springs_wt_index': value " + std::to_string(wt_idx) +
+				" found at spring #" + std::to_string(i + 1) +
+				". Valid values are 0 for no associated water table, or integers in [1, " +
+				std::to_string(n_wt) + "] for springs associated with a water table."
+			);
+		}
+	}
+
+	update_water_table_cost_channels();
+
+	// Append springs in connectivity-matrix order, i.e. index 1 first, then 2, ..., then n.
+	for (int i = 0; i < n_springs; ++i) {
+		const auto it = std::find(propspringsindex.begin(), propspringsindex.end(), i + 1);
+
+		// This should never happen after validation, but keep a defensive check.
+		if (it == propspringsindex.end()) {
+			throw std::runtime_error(
+				"[springs] Internal error while ordering springs: index " + std::to_string(i + 1) +
+				" was validated but could not be found."
+			);
+		}
+
+		const int index_for_i = static_cast<int>(std::distance(propspringsindex.begin(), it));
+
+		this->keypts.emplace_back(
+			springs.at(index_for_i),
+			KeyPointType::Spring,
+			propspringswtindex[index_for_i]
+		);
+
+		params.z_list.push_back({
+			springs.at(index_for_i).z,
+			int(keypts.size() - 1)
+		});
+
+		this->pt_spring.push_back(springs.at(index_for_i));
+
+		params.propspringswtindex.push_back({
+			static_cast<float>(propspringswtindex[index_for_i]),
+			int(keypts.size() - 1)
+		});
+
+		if (use_springs_radius_) {
+			propspringsradius_.push_back({
+				propspringsradius[index_for_i],
+				int(keypts.size() - 1)
+			});
+		}
+	}
+}
+
+	void KarsticNetwork::set_sinks_sections_only(const std::vector<Vector3>& sinks, bool use_sinks_radius, const std::vector<float>& propsinksradius) {
+
+		const int n_sinks = static_cast<int>(sinks.size());
+
+		use_sinks_radius_ = use_sinks_radius;
+
+		if (use_sinks_radius && propsinksradius.size() != static_cast<size_t>(n_sinks)) {
+			throw std::runtime_error(
+				"[sinks] Invalid property 'sinks_radius': option 'use_sinks_radius' is enabled, so "
+				"expected " + std::to_string(n_sinks) + " values (one per sink), but got " +
+				std::to_string(propsinksradius.size()) + "."
+			);
+		}
+
+		for (int i = 0; i < n_sinks; ++i) {
+			this->keypts.emplace_back(sinks[i], KeyPointType::Sink);
+			this->pt_sink.push_back(sinks[i]);
+
+			if (use_sinks_radius_) {
+				propsinksradius_.push_back({ propsinksradius[i], int(keypts.size() - 1) });
 			}
 		}
 	}
+
+void KarsticNetwork::set_springs_sections_only(
+	const std::vector<Vector3>& springs,
+	bool use_springs_radius,
+	const std::vector<float>& propspringsradius) {
+
+	const int n_springs = static_cast<int>(springs.size());
+
+	params.nb_springs = n_springs;
+	params.has_springs_without_wt = (n_springs > 0);
+	use_springs_radius_ = use_springs_radius;
+
+	update_water_table_cost_channels();
+
+	if (use_springs_radius && propspringsradius.size() != static_cast<size_t>(n_springs)) {
+		throw std::runtime_error(
+			"[springs] Invalid property 'springs_radius': option 'use_springs_radius' is enabled, so "
+			"expected " + std::to_string(n_springs) + " values (one per spring), but got " +
+			std::to_string(propspringsradius.size()) + "."
+		);
+	}
+
+	for (int i = 0; i < n_springs; ++i) {
+		this->keypts.emplace_back(springs.at(i), KeyPointType::Spring, 0);
+		params.z_list.push_back({ springs.at(i).z, int(keypts.size() - 1) });
+		this->pt_spring.push_back(springs.at(i));
+		params.propspringswtindex.push_back({ 0.0f, int(keypts.size() - 1) });
+
+		if (use_springs_radius_) {
+			propspringsradius_.push_back({ propspringsradius[i], int(keypts.size() - 1) });
+		}
+	}
+}
+
 
 	void KarsticNetwork::set_waypoints(const std::vector<Vector3>& waypoints,
 		bool use_waypoints_radius,
@@ -158,6 +429,11 @@ namespace KarstNSim {
 		}
 	}
 
+	void KarsticNetwork::set_input_nghb_graph(const InputGraph& input_nghb_graph) {
+		params.use_input_nghb_graph = true;
+		params.input_nghb_graph = input_nghb_graph;
+	}
+
 	void KarsticNetwork::set_deadend_points(int nb_deadend_points, float max_distance_of_deadend_pts) {
 		use_deadend_pts_ = true;
 		nb_deadend_points_ = nb_deadend_points;
@@ -171,8 +447,9 @@ namespace KarstNSim {
 
 	void KarsticNetwork::set_wt_surfaces_sampling(const std::string& network_name, const std::vector<Surface>& surfaces_used_to_densify, const int& refine_surface_sampling) {
 
-		nodes_on_wt_surfaces.resize(surfaces_used_to_densify.size()); // Resize nodes_on_wt_surfaces to match the number of water tables
-		params.nb_wt = surfaces_used_to_densify.size();
+		const int nb_physical_wt = static_cast<int>(surfaces_used_to_densify.size());
+		nodes_on_wt_surfaces.resize(nb_physical_wt);
+		update_water_table_cost_channels();
 
 		for (int i = 0; i < surfaces_used_to_densify.size(); i++) {
 			std::vector<Surface> wt_surface;
@@ -183,20 +460,50 @@ namespace KarstNSim {
 		}
 	}
 
-	void KarsticNetwork::save_painted_box(std::vector<float>& propdensity, const std::vector<float>& propikp) {
+	void KarsticNetwork::save_painted_box(
+		const std::vector<float>& propdensity,
+		const std::vector<float>& propikp)
+	{
 
-		std::vector<std::string> property_names = { "density","karstif_potential" };
-		if (propdensity.empty()) { // if propdensity wasnt provided, we can just fill it with default values (-99999).
-			propdensity.resize(propikp.size(), -99999);
+		const size_t expected_cell_count =
+			static_cast<size_t>(box.get_nu()) *
+			static_cast<size_t>(box.get_nv()) *
+			static_cast<size_t>(box.get_nw());
+
+		if (!propdensity.empty() && propdensity.size() != expected_cell_count) {
+			throw std::runtime_error(
+				"[save_painted_box] Density property size does not match the domain box cell count."
+			);
 		}
-		std::vector<std::vector<float>> properties;
-		for (size_t i = 0; i < propikp.size(); ++i) {
-			properties.push_back({ propdensity.at(i) , propikp.at(i) });
+
+		if (!propikp.empty() && propikp.size() != expected_cell_count) {
+			throw std::runtime_error(
+				"[save_painted_box] IKP property size does not match the domain box cell count."
+			);
 		}
+
+		std::vector<std::string> property_names = { "density", "karstif_potential" };
+		std::vector<std::vector<float>> properties(
+			expected_cell_count,
+			std::vector<float>(2, -99999.0f)
+		);
+
+		for (size_t i = 0; i < expected_cell_count; ++i) {
+			if (!propdensity.empty()) {
+				properties[i][0] = propdensity[i];
+			}
+
+			if (!propikp.empty()) {
+				properties[i][1] = propikp[i];
+			}
+		}
+
 		std::string full_name = karstic_network_name + "_box.txt";
-		std::string full_dir_name = params.directoryname + "/outputs";
+		const std::string full_dir_name = params.directoryname + "/outputs";
 		save_box(full_name, full_dir_name, box, property_names, properties);
 	}
+
+
 
 	void KarsticNetwork::set_topo_surface(const Surface& topo_surface) {
 		this->topo_surface_ = topo_surface;
@@ -208,7 +515,7 @@ namespace KarstNSim {
 	}
 
 	void KarsticNetwork::set_ghost_rocks(const Box& grid, std::vector<float>& ikp, const Line& alteration_lines, const bool& interpolate_lines, const float& ghostrock_max_vertical_size, const bool& use_max_depth_constraint, const float& ghost_rock_weight, Surface* max_depth_horizon, const float& ghostrock_width) {
-
+		(void)interpolate_lines;
 		params.use_ghost_rocks = true;
 		params.length = ghostrock_max_vertical_size;
 		params.width = ghostrock_width;
@@ -415,13 +722,21 @@ namespace KarstNSim {
 
 	void KarsticNetwork::create_sections(KarsticSkeleton& skel) {
 
-		if (geostatparams.is_used) {
-			skel.prepare_graph(); // removes duplicates, and changes format so that each node is connected to all of its neighbors (not the case at base necesarily)
-			skel.update_branch_ID(); // create branch id property on the skeleton nodes (-1 if intersection, branch index >=1 otherwise)
-			skel.compute_distance_matrix(); // compute distance matrix between each pair of nodes in the graph
-			skel.compute_branch_sizes(); // compute the number of nodes in each branch
-			skel.compute_valence(); // compute the valence = number of neighbors of each node
+		//if (geostatparams.is_used) {
+		//	//skel.compute_distance_matrix(); // compute distance matrix between each pair of nodes in the graph
+		//}
+
+		// Compute z_phreatic as the lowest z among all springs
+		float z_phreatic = std::numeric_limits<float>::max();
+		for (const auto& zp : params.z_list) {
+			if (zp.prop < z_phreatic) {
+				z_phreatic = zp.prop;
+			}
 		}
+
+		// Outputs linked to the external drift computation. Unused if no drift is applied.
+		std::vector<float> drift_output(skel.nodes.size(), -99999.f);
+		std::vector<float> weights_output(skel.nodes.size(), -99999.f);
 
 		// Uncomment to print the distance matrix (in case of need to debug!) and to save
 
@@ -484,8 +799,9 @@ namespace KarstNSim {
 			}
 
 			// Simulate property with Frantz's modified SGS algorithm (with 3 variograms) (2021)
-			SGS3(
+			SGS3_with_external_drift(
 				&skel,
+				this->pt_spring,
 				geostatparams.simulated_property,
 				&geostatparams.simulation_distribution,
 				geostatparams.global_vario_range,
@@ -505,89 +821,25 @@ namespace KarstNSim {
 				geostatparams.intrabranch_vario_model,
 				geostatparams.number_max_of_neighborhood_points,
 				geostatparams.nb_points_interbranch,
-				geostatparams.proportion_interbranch);
+				geostatparams.proportion_interbranch,
+				z_phreatic,
+				geostatparams.use_drift_zwt,
+				geostatparams.use_drift_curv,
+				drift_output,
+				weights_output
+			);
+			if (geostatparams.use_drift_zwt) params.use_drift_zwt = true;
+			if (geostatparams.use_drift_curv) params.use_drift_curv = true;
 
 			// assign property to skeleton :
 
 			for (int i = 0; i < geostatparams.simulated_property.size(); i++) {
 				skel.nodes.at(i).eq_radius = geostatparams.simulated_property.at(i);
-			}
-		}
+				if (geostatparams.use_drift_zwt || geostatparams.use_drift_curv) {
 
-		//Finally we paint any node that is within a ghostrock to have the ghost rock width
-
-		if (params.use_ghost_rocks) {
-			paint_karst_sections_with_ghostrocks(skel, params.length, params.width, params.polyline, params.use_max_depth_constraint, params.substratum_surf);
-		}
-	}
-
-	void KarsticNetwork::run_simulation_properties(KarsticSkeleton& skel, const Line& alteration_lines, const bool& use_ghost_rocks, const float& ghostrock_max_vertical_size, const bool& use_max_depth_constraint, const Surface& max_depth_horizon, const float& ghostrock_width) {
-
-		params.use_ghost_rocks = use_ghost_rocks;
-		params.length = ghostrock_max_vertical_size;
-		params.width = ghostrock_width;
-		params.polyline = alteration_lines;
-		params.use_max_depth_constraint = use_max_depth_constraint;
-		params.substratum_surf = max_depth_horizon;
-
-		skel.prepare_graph(); // removes duplicates, and changes format so that each node is connected to all of its neighbors (not the case at base necesarily)
-		skel.update_branch_ID(); // create branch id property on the skeleton nodes (-1 if intersection, branch index >=1 otherwise)
-		skel.compute_distance_matrix(); // compute distance matrix between each pair of nodes in the graph
-		skel.compute_branch_sizes(); // compute the number of nodes in each branch
-		skel.compute_valence(); // compute the valence = number of neighbors of each node
-
-		use_waypoints_radius_ = true;
-
-		if (geostatparams.is_used) {
-
-			if (use_waypoints_radius_) {
-				geostatparams.simulated_property.resize(skel.nodes.size());
-				std::fill(geostatparams.simulated_property.begin(), geostatparams.simulated_property.end(), -99999);
-			}
-
-			// Set conditioning data (inlets and/or outlets and/or waypoints)
-
-
-
-			if (use_waypoints_radius_) {
-				for (int j = 0; j < propwaypointsradius_.size(); j++) {
-					for (int i = 0; i < skel.nodes.size(); i++) {
-						if (skel.nodes[i].p == keypts[propwaypointsradius_[j].index].p) {
-							geostatparams.simulated_property[i] = propwaypointsradius_[j].prop;
-							break;
-						}
-					}
+					skel.nodes.at(i).drift_value = drift_output[i];
+					skel.nodes.at(i).drift_weight = weights_output[i];
 				}
-			}
-
-			// Simulate property with Frantz's modified SGS algorithm (with 3 variograms) (2021)
-			SGS3(
-				&skel,
-				geostatparams.simulated_property,
-				&geostatparams.simulation_distribution,
-				geostatparams.global_vario_range,
-				geostatparams.global_range_of_neighborhood,
-				geostatparams.global_vario_sill,
-				geostatparams.global_vario_nugget,
-				geostatparams.global_vario_model,
-				geostatparams.interbranch_vario_range,
-				geostatparams.interbranch_range_of_neighborhood,
-				geostatparams.interbranch_vario_sill,
-				geostatparams.interbranch_vario_nugget,
-				geostatparams.interbranch_vario_model,
-				geostatparams.intrabranch_vario_range,
-				geostatparams.intrabranch_range_of_neighborhood,
-				geostatparams.intrabranch_vario_sill,
-				geostatparams.intrabranch_vario_nugget,
-				geostatparams.intrabranch_vario_model,
-				geostatparams.number_max_of_neighborhood_points,
-				geostatparams.nb_points_interbranch,
-				geostatparams.proportion_interbranch);
-
-			// assign property to skeleton :
-
-			for (int i = 0; i < geostatparams.simulated_property.size(); i++) {
-				skel.nodes.at(i).eq_radius = geostatparams.simulated_property.at(i);
 			}
 		}
 
@@ -701,8 +953,13 @@ namespace KarstNSim {
 
 			const clock_t time6 = clock();
 			std::cout << "\nSTEP 4 - Simulation of conduit sections: \n\n";
-			skel.detect_intersection_points(karst_paths);
-			skel.update_branch_ID(karst_paths);
+
+			skel.refresh_vadose_flags_from_graph(&graph, params);
+
+			skel.prepare_graph(); // removes duplicates, and changes format so that each node is connected to all of its neighbors (not the case at base necesarily)
+			skel.update_branch_ID(); // create branch id property on the skeleton nodes (-1 if intersection, branch index >=1 otherwise)
+			skel.compute_branch_sizes(); // compute the number of nodes in each branch
+			skel.compute_valence(); // compute the valence = number of neighbors of each node
 
 			create_sections(skel);
 			const clock_t time7 = clock();
@@ -714,7 +971,7 @@ namespace KarstNSim {
 				std::cout << "-> STEP 4 skipped (no section simulation required)\n";
 			}
 			// save network
-			auto res = skel.get_result(params, karstic_network_name);
+			auto res = skel.create_line(params, karstic_network_name);
 			const clock_t time8 = clock();
 
 			std::cout << "\nKarst network saved (" << std::fixed << std::setprecision(3)
@@ -730,13 +987,20 @@ namespace KarstNSim {
 			std::vector<int> springidx(params.PtsOldGraph.size(), 1);
 			KarsticSkeleton skel(params.PtsOldGraph, costs_graph, vadoseflags_graph, springidx);
 
+			// Build a clean graph topology and compute branch labels even in sections-only mode,
+			// so that exported branch IDs are meaningful.
+			skel.prepare_graph();
+			skel.update_branch_ID();
+			skel.compute_branch_sizes();
+			skel.compute_valence();
+
 			create_sections(skel);
 			
 			const clock_t time2 = clock();
 			std::cout << "Conduit sections simulated (" << std::fixed << std::setprecision(3)
 					<< float(time2 - time1) / CLOCKS_PER_SEC << " s)" << std::endl << std::endl;
 
-			return skel.get_result(params, karstic_network_name);
+			return skel.create_line(params, karstic_network_name);
 		}
 		return std::nullopt;
 	}
@@ -770,6 +1034,14 @@ namespace KarstNSim {
 	void KarsticNetwork::set_water_table_weight(const float& water_table_constraint_weight_vadose, const float& water_table_constraint_weight_phreatic) {
 		params.waterTable1 = CostTerm(true, water_table_constraint_weight_vadose); // vadose
 		params.waterTable2 = CostTerm(true, water_table_constraint_weight_phreatic); // phreatic
+	}
+
+	void KarsticNetwork::set_gradient_constraint_weight(const float& gradient_constraint_weight) {
+		params.gradient_constraint_weight = std::max(0.0f, gradient_constraint_weight);
+	}
+
+	void KarsticNetwork::set_outlet_selection_cost_factor(const float& outlet_selection_cost_factor) {
+		params.outlet_selection_cost_factor = std::max(1.0f, outlet_selection_cost_factor);
 	}
 
 	void KarsticNetwork::disable_water_table() {
