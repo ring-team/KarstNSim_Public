@@ -66,18 +66,18 @@ struct GeostatParams {
 	std::vector<float> simulation_distribution; //!< Input distribution used for the simulation.
 	float global_vario_range; //!< Range parameter for the global variogram model.
 	float global_range_of_neighborhood; //!< Range for neighborhood selection in global variogram.
-	float global_vario_sill; //!< Sill of the junction-node variogram in the input-property space.
-	float global_vario_nugget; //!< Nugget of the junction-node variogram in the input-property space.
+	float global_vario_sill; //!< Sill of the junction-node variogram in the Gaussian space.
+	float global_vario_nugget; //!< Nugget of the junction-node variogram in the Gaussian space.
 	std::string global_vario_model; //!< Type of global variogram model (e.g., Spherical, Exponential, Gaussian).
 	float interbranch_vario_range; //!< Range for inter-branch variogram model.
 	float interbranch_range_of_neighborhood; //!< Neighborhood range for inter-branch model.
-	float interbranch_vario_sill; //!< Sill of the inter-branch variogram in the input-property space.
-	float interbranch_vario_nugget; //!< Nugget of the inter-branch variogram in the input-property space.
+	float interbranch_vario_sill; //!< Sill of the inter-branch variogram in the Gaussian space.
+	float interbranch_vario_nugget; //!< Nugget of the inter-branch variogram in the Gaussian space.
 	std::string interbranch_vario_model; //!< Type of inter-branch variogram model.
 	float intrabranch_vario_range; //!< Range for intra-branch variogram model.
 	float intrabranch_range_of_neighborhood; //!< Neighborhood range for intra-branch model.
-	float intrabranch_vario_sill; //!< Sill of the intra-branch variogram in the input-property space.
-	float intrabranch_vario_nugget; //!< Nugget of the intra-branch variogram in the input-property space.
+	float intrabranch_vario_sill; //!< Sill of the intra-branch variogram in the Gaussian space.
+	float intrabranch_vario_nugget; //!< Nugget of the intra-branch variogram in the Gaussian space.
 	std::string intrabranch_vario_model; //!< Type of intra-branch variogram model.
 	int number_max_of_neighborhood_points; //!< Maximum number of points in a neighborhood used for covariance matrix.
 	int nb_points_interbranch; //!< Number of points considered per branch for inter-branch variogram.
