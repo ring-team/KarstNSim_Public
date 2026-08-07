@@ -1,6 +1,33 @@
 # KarstNSimPublic
 
 
+## Version 2.1
+
+08/07/2026
+
+### Modifications
+
+This update adds a new option:
+
+- Added a new parameter `use_user_connectivity_matrix` to explicitly select the connectivity source: if true, the user must provide the connectivity matrix. If false, the matrix is populated entirely with ambiguous (`2`) connections.
+
+Several code improvements:
+
+- Added a stricter instruction file parser that detects errors in the file (parameter range, non-provided mandatory parameter, missing values, unknown tags...).
+- Improved the ASCII input readers: they now detect and fail explicitly when malformed ASCII files are provided.
+- Several fixes. Notably:
+	- Fixed nearest-neighbor graph operations to safely handle empty point clouds.
+	- Fixed cycle amplification robustness.
+	- Fixed dead-end amplification to avoid invalid empty inputs and potentially infinite candidate-generation loops.
+	- Added consistency and validity checks across graph amplification methods.
+- Changed several functionalities of the CB-SGS with external drift algorithm:
+	- Variogram parameters are now explicitly expected to be in Gaussian space, not in the simulated-property space. An internal switch (not accessible to the user) allows to change this behavior if needed. In that case, an empirical normal-score variogram converter is used (should be used with caution).
+	- The matrix singularity detection is now more robust by being scale-aware (instead of checking for an exactly zero pivot in the matrix).
+	- The explicit inversion of the kriging system has been replaced by a direct Cholesky decomposition, reducing computational cost and increasing numerical robustness.
+	- Reworked the MAD-based outlier filtering (during the regression) to work on more robust leave-one-out (LOO) residuals.
+	- Changed redundancy weighting from a single predictor axis to a joint predictor space density using both drift variables (when both are active).
+	- Changed the behavior of outlier removal when only one inlet or outlet datum is provided: in that case the single inlet/outlet is preserved and not removed independently of its value.
+
 ## Version 2.0
 
 07/07/2026.

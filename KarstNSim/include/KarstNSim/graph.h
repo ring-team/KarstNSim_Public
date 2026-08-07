@@ -608,12 +608,37 @@ namespace KarstNSim {
 		inline  Array2D<char>& get_samples_surf_flags() { return samples_surf_flags; };
 
 		/*!
-		\brief Adds a ball cost to the graph based on the specified radius. Used during cycle amplification to perturbate costs and force the new path to be different from the previous one, and hence create a cycle (see 2024 article for more details).
-		\param center The center of the ball.
-		\param ball_radius The radius of the ball.
-		\return A vector of pairs, where each pair consists of a node index and its associated cost.
+		\brief Stores the original value of one graph-edge cost component.
+
+		\details
+		Each backup identifies the source node, the local outgoing-edge slot,
+		the cost channel, and the exact value that must be restored after the
+		temporary cycle-amplification perturbation.
 		*/
-		std::vector<std::pair<int, float>> add_ball_cost(Vector3& center, float ball_radius);
+		struct EdgeWeightBackup {
+			int source_node_index; //!< Source node of the modified directed edge.
+			int edge_slot; //!< Local slot of the modified edge in the adjacency row.
+			int cost_channel; //!< Modified cost channel.
+			float previous_weight; //!< Exact edge weight before perturbation.
+		};
+
+		/*!
+		\brief Temporarily increases graph costs inside a spherical region.
+
+		\details
+		The method is used during cycle amplification to force the newly computed
+		path away from an existing branch. Every modified scalar edge weight is
+		saved with its complete identity so that the graph can subsequently be
+		restored exactly.
+
+		\param center Center of the perturbation sphere.
+		\param ball_radius Radius of the perturbation sphere.
+		\return Complete backups of all modified scalar edge weights.
+		*/
+		std::vector<EdgeWeightBackup> add_ball_cost(
+			const Vector3& center,
+			float ball_radius
+		);
 
 		/*!
 		\brief Adds noise to the sampling points in the graph.

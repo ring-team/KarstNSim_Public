@@ -252,13 +252,56 @@ namespace KarstNSim {
 			);
 		}
 
+		const std::size_t node_count = nodes.size();
+
+		if (params.nb_cycles > 0 && node_count < 2u) {
+			throw std::runtime_error(
+				"[amplification] Cycle amplification requires at least two skeleton nodes."
+			);
+		}
+
+		// Ordered pairs are used because both graph connectivity and costs are directional.
+		const std::size_t ordered_pair_count =
+			node_count >= 2u
+			? node_count * (node_count - 1u)
+			: 0u;
+
+		std::size_t tested_pairs_for_current_cycle = 0u;
+		std::size_t pair_cursor =
+			params.nb_cycles > 0
+			? generateRandomIndex(ordered_pair_count)
+			: 0u;
+
 		while (cycles_created < params.nb_cycles)
 		{
-			int v = int(generateRandomFloat(0, float(nodes.size()))); // Select two random vertices of the main graph
-			int u = int(generateRandomFloat(0, float(nodes.size()))); //Be sure to avoid previous points in the tree order
+			if (tested_pairs_for_current_cycle >= ordered_pair_count) {
+				throw std::runtime_error(
+					"[amplification] Unable to create the requested cycle: every ordered "
+					"node pair was tested, but none satisfied the distance, connectivity, "
+					"and shortest-path requirements."
+				);
+			}
 
-			int int_u_index = nodes[v].index;
-			int int_v_index = nodes[u].index;
+			const std::size_t pair_index = pair_cursor;
+			pair_cursor = (pair_cursor + 1u) % ordered_pair_count;
+			++tested_pairs_for_current_cycle;
+
+			const std::size_t u_index = pair_index / (node_count - 1u);
+			const std::size_t compressed_v_index =
+				pair_index % (node_count - 1u);
+
+			// Restore the skipped diagonal element so that u != v.
+			const std::size_t v_index =
+				compressed_v_index >= u_index
+				? compressed_v_index + 1u
+				: compressed_v_index;
+
+			const int u = static_cast<int>(u_index);
+			const int v = static_cast<int>(v_index);
+
+			// Preserve the original shortest-path orientation.
+			const int int_u_index = nodes[v].index;
+			const int int_v_index = nodes[u].index;
 
 			// Check if edge already exists or u and v are the same vertex
 			if (u != v && !edge_exists(u, v)) {
@@ -273,25 +316,55 @@ namespace KarstNSim {
 					std::pair< std::vector<int>, std::vector<float>> pair;
 
 					if (is_parent(u, v)) {
-						float radius = magnitude(nodes[u].p - nodes[v].p) / 4;
-						Vector3 center = nodes[u].p + (nodes[v].p - nodes[u].p) / 2;
-						std::vector<std::pair<int, float>> reset_values = graph->add_ball_cost(center, radius);
-						pair = graph->shortest_path(int_u_index, int_v_index, idx_specific_wt); // if all the previous tests were ok, then we can compute a path between those two nodes
-						for (auto& sample_pair : reset_values) {
-							for (int i = 0; i < graph->adj[sample_pair.first].size(); i++) {
-								if (graph->adj[sample_pair.first][i].target >= 0) { // avoid empty neighbors (when n<N) 
-									for (int cost_i = 0; cost_i < params.nb_springs; cost_i++) {
-										graph->adj[sample_pair.first][i].weight[cost_i] = sample_pair.second;
-									}
-								}
+						const float radius = magnitude(nodes[u].p - nodes[v].p) / 4.0f;
+						const Vector3 center =
+							nodes[u].p + (nodes[v].p - nodes[u].p) / 2.0f;
+
+						const std::vector<GraphOperations::EdgeWeightBackup> reset_values =
+							graph->add_ball_cost(center, radius);
+
+						const auto restore_ball_costs = [&]() {
+							for (const GraphOperations::EdgeWeightBackup& backup : reset_values) {
+								graph->adj[backup.source_node_index]
+									[backup.edge_slot]
+									.weight[backup.cost_channel] = backup.previous_weight;
 							}
+						};
+
+						try {
+							pair = graph->shortest_path(
+								int_u_index,
+								int_v_index,
+								idx_specific_wt
+							);
 						}
+						catch (...) { // catches all exceptions
+							// The temporary perturbation must also be reverted if the
+							// shortest-path computation raises an exception.
+							restore_ball_costs();
+							throw;
+						}
+
+						restore_ball_costs();
 					}
 					else {
 						pair = graph->shortest_path(int_u_index, int_v_index, idx_specific_wt); // if all the previous tests were ok, then we can compute a path between those two nodes
 					}
 					std::vector<int> bestPath = pair.first;
 					std::vector<float> bestPath_cost = pair.second;
+
+					// An unreachable target is represented by an incomplete path. Such a path
+					// must not be counted as a generated cycle.
+					if (bestPath.size() < 2u) {
+						continue;
+					}
+
+					if (bestPath_cost.size() != bestPath.size()) {
+						throw std::runtime_error(
+							"[amplification] Shortest-path output is inconsistent: the node and "
+							"cost vectors do not have the same size."
+						);
+					}
 
 					bool inter_wt = false;
 					if (nodes[0].vadose.size() == 2) {
@@ -301,7 +374,7 @@ namespace KarstNSim {
 						}
 					}
 
-					for (int i = 0; i < bestPath.size() - 1; i++) {
+					for (std::size_t i = 0; i + 1u < bestPath.size(); ++i) {
 						mean_cycles_length += magnitude(nodes[i].p - nodes[i + 1].p);
 						if (inter_wt) {
 							mean_cycles_length += magnitude(nodes[i].p - nodes[i + 1].p);
@@ -314,6 +387,8 @@ namespace KarstNSim {
 					newPaths_vadose.push_back(std::vector<char>(bestPath.size(), true)); // all paths are vadose paths here
 					springidx.push_back(0);
 					++cycles_created; // and then incerment the number of loops still to be generated
+					tested_pairs_for_current_cycle = 0u;
+					pair_cursor = generateRandomIndex(ordered_pair_count);
 				}
 
 
@@ -411,81 +486,231 @@ namespace KarstNSim {
 		append_paths(graph, newPaths, newPaths_cost, newPaths_vadose, springidx);
 	}
 
-	void KarsticSkeleton::amplify_deadend(GraphOperations* graph, float max_distance_of_deadend_pts, int nb_deadend_points, const GeologicalParameters& params) {
-
-		std::pair<std::vector<Vector3>, std::pair<std::vector<int>, std::vector<int>>> new_deadend_pts =
-			generate_deadend_points(graph, max_distance_of_deadend_pts, nb_deadend_points, params); std::vector<std::vector<int>> newPaths;
-		std::vector<std::vector<float>> newPaths_cost;
-		std::vector<std::vector<char>> newPaths_vadose;
-		std::vector<int> springidx;
-
-		const int idx_specific_wt = select_lowest_spring_cost_channel_1based(params);
-		for (int i = 0; i < nb_deadend_points; i++)
-		{
-			// Check if edge already exists or u and v are the same vertex
-			std::pair<std::vector<int>, std::vector<float>> pair = graph->shortest_path(new_deadend_pts.second.first[i], new_deadend_pts.second.second[i], idx_specific_wt);
-			std::vector<int> bestPath = pair.first;
-			std::vector<float> bestPath_cost = pair.second;
-			newPaths.push_back(std::vector<int>(bestPath.begin(), bestPath.end()));
-			newPaths_cost.push_back(std::vector<float>(bestPath_cost.begin(), bestPath_cost.end()));
-			newPaths_vadose.push_back(std::vector<char>(bestPath.size(), false)); // all paths are phreatic paths here
-			springidx.push_back(0);
-		}
-
-		// Update the internal karstic skeleton struture
-		append_paths(graph, newPaths, newPaths_cost, newPaths_vadose, springidx);
-	}
-
-	std::pair<std::vector<Vector3>, std::pair<std::vector<int>, std::vector<int>>> KarsticSkeleton::generate_deadend_points(
+	void KarsticSkeleton::amplify_deadend(
 		GraphOperations* graph,
 		float max_distance_of_deadend_pts,
 		int nb_deadend_points,
 		const GeologicalParameters& params
 	) {
 
+		if (nb_deadend_points == 0) {
+			return;
+		}
+
+		const auto new_deadend_pts = generate_deadend_points(
+			graph,
+			max_distance_of_deadend_pts,
+			nb_deadend_points,
+			params
+		);
+
+		const std::vector<int>& deadend_indices =
+			new_deadend_pts.second.first;
+		const std::vector<int>& origin_indices =
+			new_deadend_pts.second.second;
+
+		if (deadend_indices.size() !=
+			static_cast<std::size_t>(nb_deadend_points) ||
+			origin_indices.size() !=
+			static_cast<std::size_t>(nb_deadend_points)) {
+			throw std::runtime_error(
+				"[deadend amplification] Dead-end generation returned an "
+				"inconsistent number of point indices."
+			);
+		}
+
+		std::vector<std::vector<int>> newPaths;
+		std::vector<std::vector<float>> newPaths_cost;
+		std::vector<std::vector<char>> newPaths_vadose;
+		std::vector<int> springidx;
+
+		newPaths.reserve(nb_deadend_points);
+		newPaths_cost.reserve(nb_deadend_points);
+		newPaths_vadose.reserve(nb_deadend_points);
+		springidx.reserve(nb_deadend_points);
+
+		const int idx_specific_wt =
+			select_lowest_spring_cost_channel_1based(params);
+
+		for (int i = 0; i < nb_deadend_points; ++i) {
+			const auto pair = graph->shortest_path(
+				deadend_indices[i],
+				origin_indices[i],
+				idx_specific_wt
+			);
+
+			const std::vector<int>& bestPath = pair.first;
+			const std::vector<float>& bestPath_cost = pair.second;
+
+			if (bestPath.size() < 2u) {
+				throw std::runtime_error(
+					"[deadend amplification] No graph path exists between a generated "
+					"dead-end point and its selected skeleton origin."
+				);
+			}
+
+			if (bestPath_cost.size() != bestPath.size()) {
+				throw std::runtime_error(
+					"[deadend amplification] Shortest-path output is inconsistent: "
+					"the node and cost vectors do not have the same size."
+				);
+			}
+
+			newPaths.push_back(bestPath);
+			newPaths_cost.push_back(bestPath_cost);
+			newPaths_vadose.emplace_back(bestPath.size(), false);
+			springidx.push_back(0);
+		}
+
+		append_paths(
+			graph,
+			newPaths,
+			newPaths_cost,
+			newPaths_vadose,
+			springidx
+		);
+	}
+
+	std::pair<std::vector<Vector3>,std::pair<std::vector<int>, std::vector<int>>>
+		KarsticSkeleton::generate_deadend_points(
+			GraphOperations* graph,
+			float max_distance_of_deadend_pts,
+			int nb_deadend_points,
+			const GeologicalParameters& params
+		) {
+		using DeadendResult = std::pair<
+			std::vector<Vector3>,
+			std::pair<std::vector<int>, std::vector<int>>
+		>;
+
+		if (nb_deadend_points <= 0) {
+			return DeadendResult{};
+		}
+
+		if (graph == nullptr) {
+			throw std::runtime_error(
+				"[deadend amplification] Cannot generate dead-end points from a null graph."
+			);
+		}
+
+		if (!std::isfinite(max_distance_of_deadend_pts) ||
+			max_distance_of_deadend_pts <= 0.0f) {
+			throw std::runtime_error(
+				"[deadend amplification] The maximum dead-end distance must be finite and > 0."
+			);
+		}
+
 		std::vector<Vector3> samples_stretched;
 		samples_stretched.reserve(graph->samples.size());
 
-		for (int i = 0; i < graph->samples.size(); i++) {
-			Vector3 p_stretched{
-				graph->samples[i].x,
-				graph->samples[i].y,
-				graph->samples[i].z * params.vertical_distance_stretching_factor
-			};
-			samples_stretched.push_back(p_stretched);
+		for (const Vector3& sample : graph->samples) {
+			samples_stretched.emplace_back(
+				sample.x,
+				sample.y,
+				sample.z * params.vertical_distance_stretching_factor
+			);
 		}
 
 		PointCloud pointcloud(samples_stretched);
 
-		// Compute random points inside the box
-		std::pair<std::vector<Vector3>, std::pair<std::vector<int>, std::vector<int>>> new_pts_and_idx;
-		std::vector<Vector3> new_pts;
-		std::vector<int> new_pts_idx;
-		std::vector<int> closest_pts_idx;
-		float distmax = max_distance_of_deadend_pts * max_distance_of_deadend_pts;
-		int nb_added_pts = 0;
-		while (nb_added_pts < nb_deadend_points) {
-
-			// select a random node of the graph and get its nearest neighbors in the graph to choose a random point among them
-			int random_idx = int(generateRandomInt(0, int(nodes.size()) - 1));
-			Vector3 vec(nodes[random_idx].p.x, nodes[random_idx].p.y, nodes[random_idx].p.z*params.vertical_distance_stretching_factor);
+		struct EligibleOrigin {
+			int graph_node_index;
 			std::vector<Neighbour> candidates;
-			pointcloud.findNearestNeighbors(vec, -1, 10000, distmax, candidates); // find closest (at most) 10000 neighbors within a distance threshold from the random node
-			int random_idx_candidates = int(generateRandomInt(0, int(candidates.size()) - 1));
-			Vector3 p = graph->get_sample(candidates[random_idx_candidates].i); // get random neighbor
-			if (candidates[random_idx_candidates].d > 1e-4) {
-				new_pts.push_back(p);
-				new_pts_idx.push_back(candidates[random_idx_candidates].i);
-				vec.z /= params.vertical_distance_stretching_factor; // undo the stretching in z
-				closest_pts_idx.push_back(graph->NodeIndex(vec));
-				nb_added_pts++;
+		};
+
+		std::vector<EligibleOrigin> eligible_origins;
+		eligible_origins.reserve(nodes.size());
+
+		const float squared_max_distance =
+			max_distance_of_deadend_pts *
+			max_distance_of_deadend_pts;
+
+		// Rejection sampling over skeleton origins is equivalent to sampling
+		// uniformly among origins that actually possess at least one valid candidate.
+		for (const KarsticNode& node : nodes) {
+			const Vector3 stretched_position(
+				node.p.x,
+				node.p.y,
+				node.p.z * params.vertical_distance_stretching_factor
+			);
+
+			std::vector<Neighbour> candidates;
+
+			pointcloud.findNearestNeighbors(
+				stretched_position,
+				-1,
+				10000,
+				squared_max_distance,
+				candidates
+			);
+
+			// Remove the origin itself and any numerically coincident sample.
+			candidates.erase(
+				std::remove_if(
+					candidates.begin(),
+					candidates.end(),
+					[](const Neighbour& candidate) {
+				return candidate.d <= 1e-4f;
+			}
+				),
+				candidates.end()
+			);
+
+			if (!candidates.empty()) {
+				eligible_origins.push_back({
+					node.index,
+					std::move(candidates)
+					});
 			}
 		}
 
-		new_pts_and_idx.first = new_pts;
-		new_pts_and_idx.second.first = new_pts_idx;
-		new_pts_and_idx.second.second = closest_pts_idx;
-		return new_pts_and_idx;
+		if (eligible_origins.empty()) {
+			throw std::runtime_error(
+				"[deadend amplification] No sampling point distinct from the skeleton "
+				"was found within max_distance_of_deadend_pts. Dead-end generation "
+				"cannot proceed with the current graph and distance threshold."
+			);
+		}
+
+		std::vector<Vector3> new_points;
+		std::vector<int> new_point_indices;
+		std::vector<int> closest_skeleton_indices;
+
+		new_points.reserve(nb_deadend_points);
+		new_point_indices.reserve(nb_deadend_points);
+		closest_skeleton_indices.reserve(nb_deadend_points);
+
+		for (int i = 0; i < nb_deadend_points; ++i) {
+			const std::size_t origin_position =
+				generateRandomIndex(eligible_origins.size());
+
+			const EligibleOrigin& origin =
+				eligible_origins[origin_position];
+
+			const std::size_t candidate_position =
+				generateRandomIndex(origin.candidates.size());
+
+			const Neighbour& selected_candidate =
+				origin.candidates[candidate_position];
+
+			new_points.push_back(
+				graph->get_sample(selected_candidate.i)
+			);
+			new_point_indices.push_back(
+				selected_candidate.i
+			);
+			closest_skeleton_indices.push_back(
+				origin.graph_node_index
+			);
+		}
+
+		return {
+			std::move(new_points),
+			{
+				std::move(new_point_indices),
+				std::move(closest_skeleton_indices)
+			}
+		};
 	}
 
 	float KarsticSkeleton::compute_wt_ratio(const GraphOperations& graph, const std::vector<Surface>& water_tables) {
@@ -543,16 +768,28 @@ namespace KarstNSim {
 		intersection_points.clear();
 		intersection_points.resize(nodes.size(), 0); //default flag
 
-		//Refine two way connection
-		for (int i = 0; i < nodes.size(); i++) {
-			for (int j = 0; j < nodes[i].connections.size(); j++) {
+		// Refine two-way connections while preserving the selected directed edge.
+		for (int i = 0; i < static_cast<int>(nodes.size()); ++i) {
+			for (int j = 0;
+				j < static_cast<int>(nodes[i].connections.size());
+				++j) {
 
-				int k = 0;
-				for (auto& el : nodes[nodes[i].connections[j].destindex].connections) {
-					if (el.destindex == i) {
-						nodes[nodes[i].connections[j].destindex].connections.erase(nodes[nodes[i].connections[j].destindex].connections.begin() + k);
+				// Store the destination before modifying its connection vector.
+				const int destination_index =
+					nodes[i].connections[j].destindex;
+
+				auto& reverse_connections =
+					nodes[destination_index].connections;
+
+				for (auto it = reverse_connections.begin();
+					it != reverse_connections.end();) {
+
+					if (it->destindex == i) {
+						it = reverse_connections.erase(it);
 					}
-					k++;
+					else {
+						++it;
+					}
 				}
 			}
 		}
@@ -645,20 +882,31 @@ namespace KarstNSim {
 
 	int KarsticSkeleton::compute_nb_cycles() {
 
-		//Refine two way connection
-		for (int i = 0; i < nodes.size(); i++) {
-			for (int j = 0; j < nodes[i].connections.size(); j++) {
+		// Refine two-way connections while preserving the selected directed edge.
+		for (int i = 0; i < static_cast<int>(nodes.size()); ++i) {
+			for (int j = 0;
+				j < static_cast<int>(nodes[i].connections.size());
+				++j) {
 
-				int k = 0;
-				for (auto& el : nodes[nodes[i].connections[j].destindex].connections) {
-					if (el.destindex == i) {
-						nodes[nodes[i].connections[j].destindex].connections.erase(nodes[nodes[i].connections[j].destindex].connections.begin() + k);
+				// Store the destination before modifying its connection vector.
+				const int destination_index =
+					nodes[i].connections[j].destindex;
+
+				auto& reverse_connections =
+					nodes[destination_index].connections;
+
+				for (auto it = reverse_connections.begin();
+					it != reverse_connections.end();) {
+
+					if (it->destindex == i) {
+						it = reverse_connections.erase(it);
 					}
-					k++;
+					else {
+						++it;
+					}
 				}
 			}
 		}
-
 
 		int nb_segments = 0;
 		int i = 0;
@@ -831,16 +1079,28 @@ namespace KarstNSim {
 			nodes[i].branch_id_ascend.clear();
 		}
 
-		//Refine two way connection
-		for (int i = 0; i < nodes.size(); i++) {
-			for (int j = 0; j < nodes[i].connections.size(); j++) {
+		// Refine two-way connections while preserving the selected directed edge.
+		for (int i = 0; i < static_cast<int>(nodes.size()); ++i) {
+			for (int j = 0;
+				j < static_cast<int>(nodes[i].connections.size());
+				++j) {
 
-				int k = 0;
-				for (auto& el : nodes[nodes[i].connections[j].destindex].connections) {
-					if (el.destindex == i) {
-						nodes[nodes[i].connections[j].destindex].connections.erase(nodes[nodes[i].connections[j].destindex].connections.begin() + k);
+				// Store the destination before modifying its connection vector.
+				const int destination_index =
+					nodes[i].connections[j].destindex;
+
+				auto& reverse_connections =
+					nodes[destination_index].connections;
+
+				for (auto it = reverse_connections.begin();
+					it != reverse_connections.end();) {
+
+					if (it->destindex == i) {
+						it = reverse_connections.erase(it);
 					}
-					k++;
+					else {
+						++it;
+					}
 				}
 			}
 		}

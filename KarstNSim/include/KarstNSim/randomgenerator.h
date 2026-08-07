@@ -21,6 +21,7 @@ If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
 #include <algorithm>
 #include <cmath>
 #include <numeric>
+#include <stdexcept>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846

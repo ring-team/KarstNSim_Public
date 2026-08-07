@@ -575,11 +575,17 @@ namespace KarstNSim {
 	}
 
 	/*!
-	\brief Checks if the surface is empty (no points or triangles).
-	\return True if the surface is empty, false otherwise.
+	\brief Checks whether the surface lacks a usable triangulation.
+
+	\details
+	A surface is unusable when it has no vertex or when it has no valid triangle.
+	The latter case can occur when every input triangle is removed as degenerate
+	during construction.
+
+	\return True if the surface has no usable triangulation, false otherwise.
 	*/
 	inline bool Surface::is_empty() const {
-		return pts_.size() == 0 && trgls_.size() == 0;
+		return pts_.empty() || trgls_.empty();
 	}
 
 	/*!

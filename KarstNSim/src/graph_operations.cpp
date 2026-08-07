@@ -2108,23 +2108,60 @@ namespace KarstNSim {
 		return pathsFinal;
 	}
 
-	std::vector<std::pair<int, float>> GraphOperations::add_ball_cost(Vector3& center, float ball_radius) {   // return modified value to reset them after dijkstra
-		std::size_t index = 0;
-		std::vector<std::pair<int, float>> reset_values;
-		for (Vector3& point : samples) {
-			float distance = std::abs(magnitude(center - point));
-			if (distance < ball_radius) {
-				for (int i = 0; i < adj[index].size(); i++) {
-					if (adj[index][i].target >= 0) { // avoid empty neighbors (when n<N) 
-						for (int cost_i = 0; cost_i < params.nb_wt; cost_i++) {
-							reset_values.push_back(std::make_pair(index, adj[index][i].weight[cost_i]));
-							adj[index][i].weight[cost_i] += (1 - (distance / ball_radius))*2*adj[index][i].weight[cost_i];
-						}
-					}
+	std::vector<GraphOperations::EdgeWeightBackup>
+		GraphOperations::add_ball_cost(
+			const Vector3& center,
+			float ball_radius
+		) {
+		std::vector<EdgeWeightBackup> reset_values;
+
+		if (!std::isfinite(ball_radius) || ball_radius <= 0.0f) {
+			return reset_values;
+		}
+
+		for (int source_index = 0;
+			source_index < static_cast<int>(samples.size());
+			++source_index) {
+
+			const Vector3& point = samples[source_index];
+			const float distance = magnitude(center - point);
+
+			if (distance >= ball_radius) {
+				continue;
+			}
+
+			for (int edge_slot = 0;
+				edge_slot < static_cast<int>(adj[source_index].size());
+				++edge_slot) {
+
+				auto& edge = adj[source_index][edge_slot];
+
+				// Ignore unused adjacency slots.
+				if (edge.target < 0) {
+					continue;
+				}
+
+				// Use the actual number of channels (=wt) stored by this edge
+				for (int cost_channel = 0;
+					cost_channel < static_cast<int>(edge.weight.size());
+					++cost_channel) {
+
+					reset_values.push_back({
+						source_index,
+						edge_slot,
+						cost_channel,
+						edge.weight[cost_channel]
+						});
+
+					const float relative_distance = distance / ball_radius;
+					edge.weight[cost_channel] +=
+						(1.0f - relative_distance) *
+						2.0f *
+						edge.weight[cost_channel];
 				}
 			}
-			index++;
 		}
+
 		return reset_values;
 	}
 

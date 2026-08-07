@@ -257,11 +257,26 @@ namespace KarstNSim {
 		int just_sampling();
 
 		/*!
-		\brief Reads the connectivity matrix file (Rows = sinks, Columns = springs, 0 = no link, 1 = link, 2 = random) and stores info in a vector of vectors
-		\param sinks Pointer to the list of sinks
-		\param springs Pointer to the list of springs
+		\brief Initializes the sink-to-spring connectivity matrix used during skeleton computation.
+
+		\details
+		When `use_user_connectivity_matrix` is true, the method reads
+		`connectivity_matrix.txt` from `simulation_input_dir` and validates its dimensions
+		and values. When it is false, the method creates the matrix directly in memory and
+		fills every entry with 2, meaning that every sink-to-spring assignment is initially
+		ambiguous and will be resolved by the selected outlet-assignment strategy. The
+		automatically generated matrix is not written to disk.
+
+		\param use_user_connectivity_matrix Whether to read the user-provided matrix file.
+		\param simulation_input_dir Directory containing `connectivity_matrix.txt` when file reading is enabled.
+		\param sinks Sink coordinates; their count defines the expected number of matrix rows.
+		\param springs Spring coordinates; their count defines the expected number of matrix columns.
 		*/
-		void read_connectivity_matrix(const std::string& simulation_input_dir, const std::vector<Vector3>& sinks, const std::vector<Vector3>& springs);
+		void initialize_connectivity_matrix(
+			bool use_user_connectivity_matrix,
+			const std::string& simulation_input_dir,
+			const std::vector<Vector3>& sinks,
+			const std::vector<Vector3>& springs);
 
 		/*! \brief Sets noise parameters for the simulation
 		\param use_noise Boolean indicating whether to use noise for the cycle amplification step only

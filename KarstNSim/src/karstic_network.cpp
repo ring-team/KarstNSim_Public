@@ -14,7 +14,8 @@ namespace KarstNSim {
 
 	KarsticNetwork::KarsticNetwork(const std::string& karstic_network_name, const Box& box, GeologicalParameters& params,
 		const std::vector<KeyPoint>& keypts, const std::vector<Surface>& water_tables) :
-		karstic_network_name(karstic_network_name), box(box), params(params), keypts(keypts), water_tables(water_tables) {};
+		karstic_network_name(karstic_network_name), box(box), params(params), keypts(keypts), water_tables(water_tables) {
+	};
 
 	void KarsticNetwork::set_simulation_parameters(const int& nghb_count, const bool& use_max_nghb_radius, const float& nghb_radius, const float& poisson_radius,
 		const float& gamma, const bool& multiply_costs, const bool& vadose_cohesion, const float& vertical_distance_stretching_factor) {
@@ -28,7 +29,7 @@ namespace KarstNSim {
 		params.multiply_costs = multiply_costs;
 		params.vadose_cohesion = vadose_cohesion;
 		is_simulation_parametrized = true;
-		params.vertical_distance_stretching_factor = std::max(1.0f,vertical_distance_stretching_factor);
+		params.vertical_distance_stretching_factor = std::max(1.0f, vertical_distance_stretching_factor);
 		set_domain_geometry();
 	}
 
@@ -134,18 +135,31 @@ namespace KarstNSim {
 		// Sinks are appended in a specific order:
 		// 1) groups are processed in increasing order of 'sinks_order';
 		// 2) within a same group, sinks are shuffled randomly.
+		//
+		// Missing intermediate order values are accepted. For example, if the input
+		// contains order values 1 and 3 but no value 2, the empty group is skipped.
 		int scanning_order = 1;
+
 		while (scanning_order <= max_order) {
 			std::vector<int> propsinks_iter;
 			std::vector<int> propsinks_iter_index;
 			std::vector<int> indexes;
 
-			for (int i = 0; i < n_sinks; i++) {
+			for (int i = 0; i < n_sinks; ++i) {
 				if (propsinksorder[i] == scanning_order) {
 					propsinks_iter.push_back(i);
 					propsinks_iter_index.push_back(propsinksindex[i]);
 				}
 			}
+
+			// An order identifier does not necessarily have to be present in the input.
+			// Skipping empty groups prevents calling reorder() with empty vectors.
+			if (propsinks_iter.empty()) {
+				++scanning_order;
+				continue;
+			}
+
+			indexes.reserve(propsinks_iter.size());
 
 			for (int i = 0; i < static_cast<int>(propsinks_iter.size()); ++i) {
 				indexes.push_back(i);
@@ -155,215 +169,239 @@ namespace KarstNSim {
 			reorder(propsinks_iter, indexes);
 			reorder(propsinks_iter_index, indexes);
 
-			for (int i = 0; i < static_cast<int>(propsinks_iter.size()); i++) {
+			for (int i = 0; i < static_cast<int>(propsinks_iter.size()); ++i) {
+				const int sink_position = propsinks_iter[i];
+
 				params.sinks_index.push_back(propsinks_iter_index[i]);
-				this->keypts.emplace_back(sinks[propsinks_iter[i]], KeyPointType::Sink);
-				this->pt_sink.push_back(sinks[propsinks_iter[i]]);
+				this->keypts.emplace_back(sinks[sink_position], KeyPointType::Sink);
+				this->pt_sink.push_back(sinks[sink_position]);
 
 				if (use_sinks_radius_) {
-					propsinksradius_.push_back({ propsinksradius[propsinks_iter[i]], int(keypts.size() - 1) });
+					propsinksradius_.push_back({
+						propsinksradius[sink_position],
+						static_cast<int>(keypts.size()) - 1
+						});
 				}
 			}
 
-			scanning_order++;
+			++scanning_order;
 		}
 	}
 
-void KarsticNetwork::set_springs(
-	const std::vector<Vector3>& springs,
-	const std::vector<int>& propspringsindex,
-	const bool& allow_single_outlet_connection,
-	bool use_springs_radius,
-	const std::vector<float>& propspringsradius,
-	const std::vector<int>& propspringswtindex) {
+	void KarsticNetwork::set_springs(
+		const std::vector<Vector3>& springs,
+		const std::vector<int>& propspringsindex,
+		const bool& allow_single_outlet_connection,
+		bool use_springs_radius,
+		const std::vector<float>& propspringsradius,
+		const std::vector<int>& propspringswtindex) {
 
-	const int n_springs = static_cast<int>(springs.size());
+		const int n_springs = static_cast<int>(springs.size());
 
-	params.allow_single_outlet = allow_single_outlet_connection;
-	params.nb_springs = n_springs;
-	use_springs_radius_ = use_springs_radius;
+		params.allow_single_outlet = allow_single_outlet_connection;
+		params.nb_springs = n_springs;
+		use_springs_radius_ = use_springs_radius;
 
-	if (propspringsindex.size() != static_cast<size_t>(n_springs)) {
-		throw std::runtime_error(
-			"[springs] Invalid property 'springs_index': expected " + std::to_string(n_springs) +
-			" values (one per spring), but got " + std::to_string(propspringsindex.size()) + "."
-		);
-	}
-
-	if (propspringswtindex.size() != static_cast<size_t>(n_springs)) {
-		throw std::runtime_error(
-			"[springs] Invalid property 'springs_wt_index': expected " + std::to_string(n_springs) +
-			" values (one per spring), but got " + std::to_string(propspringswtindex.size()) + "."
-		);
-	}
-
-	if (use_springs_radius && propspringsradius.size() != static_cast<size_t>(n_springs)) {
-		throw std::runtime_error(
-			"[springs] Invalid property 'springs_radius': option 'use_springs_radius' is enabled, so "
-			"expected " + std::to_string(n_springs) + " values (one per spring), but got " +
-			std::to_string(propspringsradius.size()) + "."
-		);
-	}
-
-	const int n_wt = static_cast<int>(water_tables.size());
-
-	// Validate spring indices: they must define a complete permutation of 1..n_springs.
-	std::vector<int> seen_index(n_springs + 1, 0);
-	for (int i = 0; i < n_springs; ++i) {
-		const int idx = propspringsindex[i];
-
-		if (idx < 1 || idx > n_springs) {
+		if (propspringsindex.size() != static_cast<size_t>(n_springs)) {
 			throw std::runtime_error(
-				"[springs] Invalid property 'springs_index': value " + std::to_string(idx) +
-				" found at spring #" + std::to_string(i + 1) +
-				", but valid spring indices must be integers in [1, " + std::to_string(n_springs) + "]."
+				"[springs] Invalid property 'springs_index': expected " + std::to_string(n_springs) +
+				" values (one per spring), but got " + std::to_string(propspringsindex.size()) + "."
 			);
 		}
 
-		if (seen_index[idx] != 0) {
+		if (propspringswtindex.size() != static_cast<size_t>(n_springs)) {
 			throw std::runtime_error(
-				"[springs] Invalid property 'springs_index': duplicate value " + std::to_string(idx) +
-				" found for spring #" + std::to_string(i + 1) +
-				" and spring #" + std::to_string(seen_index[idx]) +
-				". Spring indices must define a permutation of 1.." + std::to_string(n_springs) +
-				" without repetition."
+				"[springs] Invalid property 'springs_wt_index': expected " + std::to_string(n_springs) +
+				" values (one per spring), but got " + std::to_string(propspringswtindex.size()) + "."
 			);
 		}
 
-		seen_index[idx] = i + 1;
-	}
-
-	for (int idx = 1; idx <= n_springs; ++idx) {
-		if (seen_index[idx] == 0) {
+		if (use_springs_radius && propspringsradius.size() != static_cast<size_t>(n_springs)) {
 			throw std::runtime_error(
-				"[springs] Invalid property 'springs_index': missing value " + std::to_string(idx) +
-				". Spring indices must define a complete permutation of 1.." + std::to_string(n_springs) +
-				" without hole."
-			);
-		}
-	}
-
-	// Validate water-table index associated with each spring.
-	// A value of 0 is valid and means that the spring has no associated water table.
-	params.has_springs_without_wt = false;
-
-	for (int i = 0; i < n_springs; ++i) {
-		const int wt_idx = propspringswtindex[i];
-
-		if (wt_idx == 0) {
-			params.has_springs_without_wt = true;
-			continue;
-		}
-
-		if (wt_idx < 0 || wt_idx > n_wt) {
-			throw std::runtime_error(
-				"[springs] Invalid property 'springs_wt_index': value " + std::to_string(wt_idx) +
-				" found at spring #" + std::to_string(i + 1) +
-				". Valid values are 0 for no associated water table, or integers in [1, " +
-				std::to_string(n_wt) + "] for springs associated with a water table."
-			);
-		}
-	}
-
-	update_water_table_cost_channels();
-
-	// Append springs in connectivity-matrix order, i.e. index 1 first, then 2, ..., then n.
-	for (int i = 0; i < n_springs; ++i) {
-		const auto it = std::find(propspringsindex.begin(), propspringsindex.end(), i + 1);
-
-		// This should never happen after validation, but keep a defensive check.
-		if (it == propspringsindex.end()) {
-			throw std::runtime_error(
-				"[springs] Internal error while ordering springs: index " + std::to_string(i + 1) +
-				" was validated but could not be found."
+				"[springs] Invalid property 'springs_radius': option 'use_springs_radius' is enabled, so "
+				"expected " + std::to_string(n_springs) + " values (one per spring), but got " +
+				std::to_string(propspringsradius.size()) + "."
 			);
 		}
 
-		const int index_for_i = static_cast<int>(std::distance(propspringsindex.begin(), it));
+		const int n_wt = static_cast<int>(water_tables.size());
 
-		this->keypts.emplace_back(
-			springs.at(index_for_i),
-			KeyPointType::Spring,
-			propspringswtindex[index_for_i]
-		);
+		// Validate spring indices: they must define a complete permutation of 1..n_springs.
+		std::vector<int> seen_index(n_springs + 1, 0);
+		for (int i = 0; i < n_springs; ++i) {
+			const int idx = propspringsindex[i];
 
-		params.z_list.push_back({
-			springs.at(index_for_i).z,
-			int(keypts.size() - 1)
-		});
+			if (idx < 1 || idx > n_springs) {
+				throw std::runtime_error(
+					"[springs] Invalid property 'springs_index': value " + std::to_string(idx) +
+					" found at spring #" + std::to_string(i + 1) +
+					", but valid spring indices must be integers in [1, " + std::to_string(n_springs) + "]."
+				);
+			}
 
-		this->pt_spring.push_back(springs.at(index_for_i));
+			if (seen_index[idx] != 0) {
+				throw std::runtime_error(
+					"[springs] Invalid property 'springs_index': duplicate value " + std::to_string(idx) +
+					" found for spring #" + std::to_string(i + 1) +
+					" and spring #" + std::to_string(seen_index[idx]) +
+					". Spring indices must define a permutation of 1.." + std::to_string(n_springs) +
+					" without repetition."
+				);
+			}
 
-		params.propspringswtindex.push_back({
-			static_cast<float>(propspringswtindex[index_for_i]),
-			int(keypts.size() - 1)
-		});
+			seen_index[idx] = i + 1;
+		}
 
-		if (use_springs_radius_) {
-			propspringsradius_.push_back({
-				propspringsradius[index_for_i],
+		for (int idx = 1; idx <= n_springs; ++idx) {
+			if (seen_index[idx] == 0) {
+				throw std::runtime_error(
+					"[springs] Invalid property 'springs_index': missing value " + std::to_string(idx) +
+					". Spring indices must define a complete permutation of 1.." + std::to_string(n_springs) +
+					" without hole."
+				);
+			}
+		}
+
+		// Validate water-table index associated with each spring.
+		// A value of 0 is valid and means that the spring has no associated water table.
+		params.has_springs_without_wt = false;
+
+		for (int i = 0; i < n_springs; ++i) {
+			const int wt_idx = propspringswtindex[i];
+
+			if (wt_idx == 0) {
+				params.has_springs_without_wt = true;
+				continue;
+			}
+
+			if (wt_idx < 0 || wt_idx > n_wt) {
+				throw std::runtime_error(
+					"[springs] Invalid property 'springs_wt_index': value " + std::to_string(wt_idx) +
+					" found at spring #" + std::to_string(i + 1) +
+					". Valid values are 0 for no associated water table, or integers in [1, " +
+					std::to_string(n_wt) + "] for springs associated with a water table."
+				);
+			}
+		}
+
+		update_water_table_cost_channels();
+
+		// Append springs in connectivity-matrix order, i.e. index 1 first, then 2, ..., then n.
+		for (int i = 0; i < n_springs; ++i) {
+			const auto it = std::find(propspringsindex.begin(), propspringsindex.end(), i + 1);
+
+			// This should never happen after validation, but keep a defensive check.
+			if (it == propspringsindex.end()) {
+				throw std::runtime_error(
+					"[springs] Internal error while ordering springs: index " + std::to_string(i + 1) +
+					" was validated but could not be found."
+				);
+			}
+
+			const int index_for_i = static_cast<int>(std::distance(propspringsindex.begin(), it));
+
+			this->keypts.emplace_back(
+				springs.at(index_for_i),
+				KeyPointType::Spring,
+				propspringswtindex[index_for_i]
+			);
+
+			params.z_list.push_back({
+				springs.at(index_for_i).z,
 				int(keypts.size() - 1)
-			});
+				});
+
+			this->pt_spring.push_back(springs.at(index_for_i));
+
+			params.propspringswtindex.push_back({
+				static_cast<float>(propspringswtindex[index_for_i]),
+				int(keypts.size() - 1)
+				});
+
+			if (use_springs_radius_) {
+				propspringsradius_.push_back({
+					propspringsradius[index_for_i],
+					int(keypts.size() - 1)
+					});
+			}
 		}
 	}
-}
 
-	void KarsticNetwork::set_sinks_sections_only(const std::vector<Vector3>& sinks, bool use_sinks_radius, const std::vector<float>& propsinksradius) {
+	void KarsticNetwork::set_sinks_sections_only(
+		const std::vector<Vector3>& sinks,
+		bool use_sinks_radius,
+		const std::vector<float>& propsinksradius) {
 
 		const int n_sinks = static_cast<int>(sinks.size());
 
 		use_sinks_radius_ = use_sinks_radius;
 
-		if (use_sinks_radius && propsinksradius.size() != static_cast<size_t>(n_sinks)) {
+		if (use_sinks_radius_ &&
+			propsinksradius.size() != static_cast<std::size_t>(n_sinks)) {
+
 			throw std::runtime_error(
-				"[sinks] Invalid property 'sinks_radius': option 'use_sinks_radius' is enabled, so "
-				"expected " + std::to_string(n_sinks) + " values (one per sink), but got " +
+				"[sinks/sections-only] Invalid property 'sinks_radius': option "
+				"'use_sinks_radius' is enabled, so expected " +
+				std::to_string(n_sinks) +
+				" values (one per sink), but got " +
 				std::to_string(propsinksradius.size()) + "."
 			);
 		}
+
+		// An empty sink list requires no initialization. This is handled explicitly
+		// to keep sections-only parameter preparation safe and deterministic.
+		if (n_sinks == 0) {
+			return;
+		}
+
+		this->keypts.reserve(this->keypts.size() + sinks.size());
+		this->pt_sink.reserve(this->pt_sink.size() + sinks.size());
 
 		for (int i = 0; i < n_sinks; ++i) {
 			this->keypts.emplace_back(sinks[i], KeyPointType::Sink);
 			this->pt_sink.push_back(sinks[i]);
 
 			if (use_sinks_radius_) {
-				propsinksradius_.push_back({ propsinksradius[i], int(keypts.size() - 1) });
+				propsinksradius_.push_back({
+					propsinksradius[i],
+					static_cast<int>(keypts.size()) - 1
+					});
 			}
 		}
 	}
 
-void KarsticNetwork::set_springs_sections_only(
-	const std::vector<Vector3>& springs,
-	bool use_springs_radius,
-	const std::vector<float>& propspringsradius) {
+	void KarsticNetwork::set_springs_sections_only(
+		const std::vector<Vector3>& springs,
+		bool use_springs_radius,
+		const std::vector<float>& propspringsradius) {
 
-	const int n_springs = static_cast<int>(springs.size());
+		const int n_springs = static_cast<int>(springs.size());
 
-	params.nb_springs = n_springs;
-	params.has_springs_without_wt = (n_springs > 0);
-	use_springs_radius_ = use_springs_radius;
+		params.nb_springs = n_springs;
+		params.has_springs_without_wt = (n_springs > 0);
+		use_springs_radius_ = use_springs_radius;
 
-	update_water_table_cost_channels();
+		update_water_table_cost_channels();
 
-	if (use_springs_radius && propspringsradius.size() != static_cast<size_t>(n_springs)) {
-		throw std::runtime_error(
-			"[springs] Invalid property 'springs_radius': option 'use_springs_radius' is enabled, so "
-			"expected " + std::to_string(n_springs) + " values (one per spring), but got " +
-			std::to_string(propspringsradius.size()) + "."
-		);
-	}
+		if (use_springs_radius && propspringsradius.size() != static_cast<size_t>(n_springs)) {
+			throw std::runtime_error(
+				"[springs] Invalid property 'springs_radius': option 'use_springs_radius' is enabled, so "
+				"expected " + std::to_string(n_springs) + " values (one per spring), but got " +
+				std::to_string(propspringsradius.size()) + "."
+			);
+		}
 
-	for (int i = 0; i < n_springs; ++i) {
-		this->keypts.emplace_back(springs.at(i), KeyPointType::Spring, 0);
-		params.z_list.push_back({ springs.at(i).z, int(keypts.size() - 1) });
-		this->pt_spring.push_back(springs.at(i));
-		params.propspringswtindex.push_back({ 0.0f, int(keypts.size() - 1) });
+		for (int i = 0; i < n_springs; ++i) {
+			this->keypts.emplace_back(springs.at(i), KeyPointType::Spring, 0);
+			params.z_list.push_back({ springs.at(i).z, int(keypts.size() - 1) });
+			this->pt_spring.push_back(springs.at(i));
+			params.propspringswtindex.push_back({ 0.0f, int(keypts.size() - 1) });
 
-		if (use_springs_radius_) {
-			propspringsradius_.push_back({ propspringsradius[i], int(keypts.size() - 1) });
+			if (use_springs_radius_) {
+				propspringsradius_.push_back({ propspringsradius[i], int(keypts.size() - 1) });
+			}
 		}
 	}
-}
 
 
 	void KarsticNetwork::set_waypoints(const std::vector<Vector3>& waypoints,
@@ -628,96 +666,118 @@ void KarsticNetwork::set_springs_sections_only(
 		return 0;
 	}
 
-	void create_connectivity_matrix(const std::string& filename, int nb_springs, int nb_sinks) {
+	void KarsticNetwork::initialize_connectivity_matrix(
+		bool use_user_connectivity_matrix,
+		const std::string& simulation_input_dir,
+		const std::vector<Vector3>& sinks,
+		const std::vector<Vector3>& springs) {
 
-		// by default, creates a connectivity matrix filled with '2'.
-		// it should be used with the shortest distance option enabled.
+		const int nb_sinks = static_cast<int>(sinks.size());
+		const int nb_springs = static_cast<int>(springs.size());
 
-		// Remove the file if it already exists
-		if (std::remove(filename.c_str()) != 0 && errno != ENOENT) {
-			std::cerr << "Error deleting existing file: " << strerror(errno) << std::endl;
-				return;
+		if (nb_sinks <= 0) {
+			throw std::runtime_error(
+				"[connectivity_matrix] Cannot initialize connectivity: no sink was provided."
+			);
 		}
 
-		std::ofstream outfile(filename);
-		if (!outfile.is_open()) {
-				std::cerr << "Error creating file: " << strerror(errno) << std::endl;
+		if (nb_springs <= 0) {
+			throw std::runtime_error(
+				"[connectivity_matrix] Cannot initialize connectivity: no spring was provided."
+			);
+		}
+
+		// The generated mode is intentionally memory-only. It does not create or overwrite
+		// connectivity_matrix.txt. A solved matrix is still exported later only when the
+		// independent create_solved_connectivity_matrix option is explicitly enabled.
+		params.connectivity_matrix.resize(nb_sinks, nb_springs, 2);
+
+		if (!use_user_connectivity_matrix) {
 			return;
 		}
 
-		// Write default values to the file
-		for (int i = 0; i < nb_sinks; ++i) {
-			for (int j = 0; j < nb_springs; ++j) {
-				outfile << "2"; // Default value
-				if (j < nb_springs - 1) {
-					outfile << "\t"; // Separate columns by tabs
+		const std::string connectivity_matrix_path =
+			simulation_input_dir + "/connectivity_matrix.txt";
+
+		std::ifstream input(connectivity_matrix_path);
+
+		if (!input.is_open()) {
+			throw std::runtime_error(
+				"[connectivity_matrix] Required file not found or unreadable: " +
+				connectivity_matrix_path +
+				". Set 'use_user_connectivity_matrix: false' "
+				"to generate an all-2 matrix directly in memory."
+			);
+		}
+
+		std::vector<std::vector<int>> rows;
+		std::string line;
+		int physical_line_number = 0;
+
+		while (std::getline(input, line)) {
+			++physical_line_number;
+
+			const std::size_t first = line.find_first_not_of(" \t\r\n");
+
+			if (first == std::string::npos) {
+				continue;
+			}
+
+			std::istringstream line_stream(line);
+			std::vector<int> row_values;
+			int value = 0;
+
+			while (line_stream >> value) {
+				if (value < 0 || value > 2) {
+					throw std::runtime_error(
+						"[connectivity_matrix] Invalid value " +
+						std::to_string(value) +
+						" at file line " +
+						std::to_string(physical_line_number) +
+						". Allowed values are 0, 1, and 2."
+					);
 				}
+
+				row_values.push_back(value);
 			}
-			if (i < nb_sinks - 1) {
-				outfile << "\n"; // Move to the next line
+
+			if (!line_stream.eof()) {
+				throw std::runtime_error(
+					"[connectivity_matrix] Non-integer token at file line " +
+					std::to_string(physical_line_number) + "."
+				);
 			}
-		}
-		outfile.close();
-	}
 
-	void KarsticNetwork::read_connectivity_matrix(const std::string& simulation_input_dir, const std::vector<Vector3>& sinks, const std::vector<Vector3>& springs) {
+			if (static_cast<int>(row_values.size()) != nb_springs) {
+				throw std::runtime_error(
+					"[connectivity_matrix] Invalid column count at file line " +
+					std::to_string(physical_line_number) +
+					": expected " +
+					std::to_string(nb_springs) +
+					" values (one per spring), but found " +
+					std::to_string(row_values.size()) + "."
+				);
+			}
 
-		const std::string connectivity_matrix_path = simulation_input_dir + "/connectivity_matrix.txt";
-
-		int nb_sinks = static_cast<int>(sinks.size());
-		int nb_springs = static_cast<int>(springs.size());
-
-		// Check if the file exists, if not, create it
-
-		// ***************************
-		//create_connectivity_matrix(connectivity_matrix_path, nb_springs, nb_sinks); // UNCOMMENT TO USE DEFAULT MATRIX (1's EVERYWERE)
-		// ***************************
-
-		std::ifstream myfile(connectivity_matrix_path);
-		if (!myfile.is_open()) {
-			std::cerr << "Error opening file " << connectivity_matrix_path << " after creation: " << strerror(errno) << std::endl;
-			return;
+			rows.push_back(row_values);
 		}
 
-		params.connectivity_matrix.resize(nb_sinks, nb_springs, 1);
+		if (static_cast<int>(rows.size()) != nb_sinks) {
+			throw std::runtime_error(
+				"[connectivity_matrix] Invalid row count in " +
+				connectivity_matrix_path +
+				": expected " +
+				std::to_string(nb_sinks) +
+				" rows (one per sink), but found " +
+				std::to_string(rows.size()) + "."
+			);
+		}
 
 		for (int row = 0; row < nb_sinks; ++row) {
-			std::string line;
-			if (std::getline(myfile, line)) {
-
-				std::istringstream iss(line);
-				for (int col = 0; col < nb_springs; ++col) {
-					std::string value;
-					if (std::getline(iss, value, '\t')) {
-						try {
-							params.connectivity_matrix[row][col] = std::stoi(value);
-						}
-						catch (const std::invalid_argument& e) {
-							std::cerr << "Error converting string to integer: " << e.what() << std::endl;
-						}
-					}
-					else {
-						if (iss.eof()) {
-							std::cerr << "Error reading value at row " << row << " column " << col
-								<< ": End of file reached unexpectedly." << std::endl;
-						}
-						else {
-							std::cerr << "Error reading value at row " << row << " column " << col
-								<< ": " << strerror(errno) << std::endl;
-						}
-					}
-				}
-			}
-			else {
-				if (myfile.eof()) {
-					std::cerr << "Error reading line " << row << ": End of file reached unexpectedly." << std::endl;
-				}
-				else {
-					std::cerr << "Error reading line " << row << ": " << strerror(errno) << std::endl;
-				}
+			for (int col = 0; col < nb_springs; ++col) {
+				params.connectivity_matrix[row][col] = rows[row][col];
 			}
 		}
-		myfile.close();
 	}
 
 	void KarsticNetwork::create_sections(KarsticSkeleton& skel) {
@@ -763,38 +823,122 @@ void KarsticNetwork::set_springs_sections_only(
 				std::fill(geostatparams.simulated_property.begin(), geostatparams.simulated_property.end(), -99999);
 			}
 
-			// Set conditioning data (inlets and/or outlets and/or waypoints)
+			std::vector<ConditioningDataRole> conditioning_roles(
+				skel.nodes.size(), ConditioningDataRole::None);
+
+			auto validate_radius_keypoint_index = [&](
+				const Propidx& radius_property,
+				const char* source_label)
+			{
+				if (radius_property.index < 0 ||
+					radius_property.index >= static_cast<int>(keypts.size())) {
+					throw std::runtime_error(
+						std::string("[sections] Invalid ") + source_label +
+						" radius reference: keypoint index " +
+						std::to_string(radius_property.index) +
+						" is outside the keypoint array.");
+				}
+			};
+
+			auto same_keypoint_position = [](const Vector3& first, const Vector3& second) {
+				return first == second;
+			};
+
+			// Inlets and outlets are distinct hydraulic boundary conditions and
+			// cannot provide two different roles at the same skeleton position.
+			for (int inlet_index = 0;
+				inlet_index < static_cast<int>(keypts.size()); ++inlet_index) {
+				if (keypts[inlet_index].type != KeyPointType::Sink) continue;
+
+				for (int outlet_index = 0;
+					outlet_index < static_cast<int>(keypts.size()); ++outlet_index) {
+					if (keypts[outlet_index].type != KeyPointType::Spring) continue;
+					if (!same_keypoint_position(
+						keypts[inlet_index].p, keypts[outlet_index].p)) continue;
+
+					std::ostringstream message;
+					message << "[sections] Invalid keypoint configuration: inlet keypoint #"
+						<< inlet_index << " and outlet keypoint #" << outlet_index
+						<< " share the same position (" << keypts[inlet_index].p.x
+						<< ", " << keypts[inlet_index].p.y
+						<< ", " << keypts[inlet_index].p.z << "). "
+						<< "A conduit-size simulation cannot assign both inlet and outlet "
+						<< "boundary radii to the same skeleton node.";
+					throw std::runtime_error(message.str());
+				}
+			}
+
+			std::vector<Propidx> filtered_waypoint_radii;
+			filtered_waypoint_radii.reserve(propwaypointsradius_.size());
+			if (use_waypoints_radius_) {
+				for (const Propidx& waypoint_radius : propwaypointsradius_) {
+					validate_radius_keypoint_index(waypoint_radius, "waypoint");
+					const KeyPoint& waypoint = keypts[waypoint_radius.index];
+					if (waypoint.type != KeyPointType::Waypoint) continue;
+
+					bool overlaps_boundary = false;
+					for (const KeyPoint& endpoint : keypts) {
+						if (endpoint.type != KeyPointType::Sink &&
+							endpoint.type != KeyPointType::Spring) continue;
+						if (same_keypoint_position(waypoint.p, endpoint.p)) {
+							overlaps_boundary = true;
+							break;
+						}
+					}
+					if (!overlaps_boundary) filtered_waypoint_radii.push_back(waypoint_radius);
+				}
+			}
+
+			// Set conditioning data and retain their hydraulic role for LOO testing.
+			auto assign_conditioning_radius = [&](
+				const Propidx& radius_property,
+				const char* source_label,
+				const ConditioningDataRole role)
+			{
+				validate_radius_keypoint_index(radius_property, source_label);
+
+				for (int node_index = 0;
+					node_index < static_cast<int>(skel.nodes.size()); ++node_index) {
+					if (!(skel.nodes[node_index].p == keypts[radius_property.index].p)) continue;
+
+					if (role == ConditioningDataRole::Inlet &&
+						conditioning_roles[node_index] == ConditioningDataRole::Outlet) {
+						throw std::runtime_error(
+							"[sections] Invalid conduit-size conditioning: an inlet and an outlet share the same skeleton node.");
+					}
+					if (role == ConditioningDataRole::Outlet &&
+						conditioning_roles[node_index] == ConditioningDataRole::Inlet) {
+						throw std::runtime_error(
+							"[sections] Invalid conduit-size conditioning: an outlet and an inlet share the same skeleton node.");
+					}
+					if (role == ConditioningDataRole::Waypoint &&
+						(conditioning_roles[node_index] == ConditioningDataRole::Inlet ||
+							conditioning_roles[node_index] == ConditioningDataRole::Outlet)) {
+						break;
+					}
+
+					geostatparams.simulated_property[node_index] = radius_property.prop;
+					conditioning_roles[node_index] = role;
+					break;
+				}
+			};
 
 			if (use_sinks_radius_) {
-				for (int j = 0; j < propsinksradius_.size(); j++) {
-					for (int i = 0; i < skel.nodes.size(); i++) {
-						if (skel.nodes[i].p == keypts[propsinksradius_[j].index].p) {
-							geostatparams.simulated_property[i] = propsinksradius_[j].prop;
-							break;
-						}
-					}
+				for (const Propidx& sink_radius : propsinksradius_) {
+					assign_conditioning_radius(
+						sink_radius, "inlet", ConditioningDataRole::Inlet);
 				}
 			}
-
 			if (use_springs_radius_) {
-				for (int j = 0; j < propspringsradius_.size(); j++) {
-					for (int i = 0; i < skel.nodes.size(); i++) {
-						if (skel.nodes[i].p == keypts[propspringsradius_[j].index].p) {
-							geostatparams.simulated_property[i] = propspringsradius_[j].prop;
-							break;
-						}
-					}
+				for (const Propidx& spring_radius : propspringsradius_) {
+					assign_conditioning_radius(
+						spring_radius, "outlet", ConditioningDataRole::Outlet);
 				}
 			}
-
 			if (use_waypoints_radius_) {
-				for (int j = 0; j < propwaypointsradius_.size(); j++) {
-					for (int i = 0; i < skel.nodes.size(); i++) {
-						if (skel.nodes[i].p == keypts[propwaypointsradius_[j].index].p) {
-							geostatparams.simulated_property[i] = propwaypointsradius_[j].prop;
-							break;
-						}
-					}
+				for (const Propidx& waypoint_radius : filtered_waypoint_radii) {
+					assign_conditioning_radius(
+						waypoint_radius, "waypoint", ConditioningDataRole::Waypoint);
 				}
 			}
 
@@ -803,6 +947,7 @@ void KarsticNetwork::set_springs_sections_only(
 				&skel,
 				this->pt_spring,
 				geostatparams.simulated_property,
+				conditioning_roles,
 				&geostatparams.simulation_distribution,
 				geostatparams.global_vario_range,
 				geostatparams.global_range_of_neighborhood,
@@ -851,15 +996,15 @@ void KarsticNetwork::set_springs_sections_only(
 	}
 
 	std::optional<KarstNetworkResult> KarsticNetwork::run_simulation(
-		const bool &sections_simulation_only, const bool &create_nghb_graph,
-		const bool &create_nghb_graph_property,
-		const bool &create_solved_connectivity_matrix,
-		const bool &use_amplification, const bool &use_sampling_points,
-		const float &fraction_karst_perm, const float &fraction_old_karst_perm,
-		const float &max_inception_surface_distance,
-		const std::vector<Vector3> &sampling_points, const bool &create_vset_sampling,
-		const bool &use_density_property, const int &k_pts,
-		const std::vector<float> &propdensity, const std::vector<float> &propikp
+		const bool& sections_simulation_only, const bool& create_nghb_graph,
+		const bool& create_nghb_graph_property,
+		const bool& create_solved_connectivity_matrix,
+		const bool& use_amplification, const bool& use_sampling_points,
+		const float& fraction_karst_perm, const float& fraction_old_karst_perm,
+		const float& max_inception_surface_distance,
+		const std::vector<Vector3>& sampling_points, const bool& create_vset_sampling,
+		const bool& use_density_property, const int& k_pts,
+		const std::vector<float>& propdensity, const std::vector<float>& propikp
 	) {
 		params.scenename = karstic_network_name;
 		const clock_t time1 = clock();
@@ -880,8 +1025,8 @@ void KarsticNetwork::set_springs_sections_only(
 			const clock_t time2 = clock();
 
 			std::cout << "-> STEP 1 completed: Cost graph generated (" << std::fixed
-					<< std::setprecision(3) << float(time2 - time1) / CLOCKS_PER_SEC
-					<< " s)\n";
+				<< std::setprecision(3) << float(time2 - time1) / CLOCKS_PER_SEC
+				<< " s)\n";
 
 			std::cout << "\nSTEP 2 - Simulation of the karst network skeleton: \n\n";
 
@@ -892,25 +1037,25 @@ void KarsticNetwork::set_springs_sections_only(
 			std::vector<int> springidxFinal;
 
 			graph.ComputeKarsticSkeleton(keypts, fraction_karst_perm, karst_paths,
-										karst_paths_costs, karst_paths_vadose_flag,
-										springidxFinal,
-										create_solved_connectivity_matrix);
+				karst_paths_costs, karst_paths_vadose_flag,
+				springidxFinal,
+				create_solved_connectivity_matrix);
 
 			if (karst_paths.empty()) {
 				std::cout << "No path found between inlets and outlets with the "
-							"current parameters."
-							<< std::endl;
+					"current parameters."
+					<< std::endl;
 				return std::nullopt; // no path found
 			}
 
 			// Build karstic skeleton structure
 			KarsticSkeleton skel(&graph, karst_paths, karst_paths_costs,
-								karst_paths_vadose_flag, springidxFinal);
+				karst_paths_vadose_flag, springidxFinal);
 
 			const clock_t time3 = clock();
 
 			std::cout << "-> STEP 2 completed: Skeleton computed (" << std::fixed << std::setprecision(3)
-					<< float(time3 - time2) / CLOCKS_PER_SEC << " s)" << std::endl;
+				<< float(time3 - time2) / CLOCKS_PER_SEC << " s)" << std::endl;
 			std::cout << "\nSTEP 3 - Network amplification (cycles and deadends): \n\n";
 
 			// Network preparation
@@ -925,8 +1070,8 @@ void KarsticNetwork::set_springs_sections_only(
 			const clock_t time5 = clock();
 			if (use_deadend_pts_) {
 				std::cout << "Network amplified with deadend points (" << std::fixed
-							<< std::setprecision(3) << float(time5 - time4) / CLOCKS_PER_SEC
-							<< " s)" << std::endl;
+					<< std::setprecision(3) << float(time5 - time4) / CLOCKS_PER_SEC
+					<< " s)" << std::endl;
 			}
 
 			// Amplification
@@ -939,16 +1084,17 @@ void KarsticNetwork::set_springs_sections_only(
 			const clock_t time5bis = clock();
 			if (use_amplification) {
 
-					std::cout << "Network amplified with cycles (" << std::fixed
+				std::cout << "Network amplified with cycles (" << std::fixed
 					<< std::setprecision(3) << float(time5bis - time5) / CLOCKS_PER_SEC
 					<< " s)" << std::endl;
 			}
-						
+
 			if (!(use_amplification) && !(use_deadend_pts_)) {
 				std::cout << "-> STEP 3 skipped (no amplification)\n";
-			} else {
+			}
+			else {
 				std::cout << "-> STEP 3 completed: Network amplified (" << std::fixed << std::setprecision(3)
-					<< float(time5bis - time3) / CLOCKS_PER_SEC << " s)" << std::endl; 
+					<< float(time5bis - time3) / CLOCKS_PER_SEC << " s)" << std::endl;
 			}
 
 			const clock_t time6 = clock();
@@ -967,7 +1113,8 @@ void KarsticNetwork::set_springs_sections_only(
 				std::cout << "-> STEP 4 completed: Conduit sections generated (" << std::fixed
 					<< std::setprecision(3) << float(time7 - time6) / CLOCKS_PER_SEC
 					<< " s)" << std::endl;
-			} else {
+			}
+			else {
 				std::cout << "-> STEP 4 skipped (no section simulation required)\n";
 			}
 			// save network
@@ -975,13 +1122,14 @@ void KarsticNetwork::set_springs_sections_only(
 			const clock_t time8 = clock();
 
 			std::cout << "\nKarst network saved (" << std::fixed << std::setprecision(3)
-					<< float(time8 - time7) / CLOCKS_PER_SEC << " s)" << std::endl;
+				<< float(time8 - time7) / CLOCKS_PER_SEC << " s)" << std::endl;
 
 			return res;
-		} else if (sections_simulation_only) { // only generate sections
-		
+		}
+		else if (sections_simulation_only) { // only generate sections
+
 			std::cout << "\nSimulation of properties only..." << std::endl;
-		
+
 			std::vector<std::vector<float>> costs_graph(params.PtsOldGraph.size(), std::vector<float>(2, 0.0)); // dummy vector
 			std::vector<std::vector<char>> vadoseflags_graph(params.PtsOldGraph.size(), std::vector<char>(2, false)); // dummy vector
 			std::vector<int> springidx(params.PtsOldGraph.size(), 1);
@@ -995,10 +1143,10 @@ void KarsticNetwork::set_springs_sections_only(
 			skel.compute_valence();
 
 			create_sections(skel);
-			
+
 			const clock_t time2 = clock();
 			std::cout << "Conduit sections simulated (" << std::fixed << std::setprecision(3)
-					<< float(time2 - time1) / CLOCKS_PER_SEC << " s)" << std::endl << std::endl;
+				<< float(time2 - time1) / CLOCKS_PER_SEC << " s)" << std::endl << std::endl;
 
 			return skel.create_line(params, karstic_network_name);
 		}

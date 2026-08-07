@@ -68,13 +68,14 @@ public:
 	/**
 	 * @brief Parses simulation parameters from an input file.
 	 *
-	 * This method reads and parses a structured input file containing parameters for the
-	 * KarstNSim simulation. The file may include parameters such as the domain, seed values,
-	 * physical properties, and constraints. It supports various data types, including boolean
-	 * flags, numerical values, and paths to external files.
+	 * This method performs a syntax and dependency-validation pass before loading any
+	 * external ASCII object. It rejects unknown or duplicated tags, malformed scalar values,
+	 * and missing parameters whose mandatory status depends on the selected workflow. The
+	 * parsed values and loaded objects are then checked for dimensional and physical
+	 * consistency before the populated parameter structure is returned.
 	 *
 	 * @param filename The path to the input file containing simulation parameters.
-	 * @return A ParamsSource object populated with the parsed parameters.
+	 * @return A ParamsSource object populated with validated parameters.
 	 */
 	KarstNSim::ParamsSource parse(const std::string& filename);
 

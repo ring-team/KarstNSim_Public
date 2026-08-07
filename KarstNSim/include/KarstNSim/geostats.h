@@ -22,9 +22,32 @@ This work was performed in the frame of the RING project at Université de Lorra
 #include <queue>
 #include <limits>
 #include <algorithm>
+#include <string>
+#include <vector>
 #include "KarstNSim/graph.h"
 #include "KarstNSim/randomgenerator.h"
 #include "KarstNSim/vec.h"
+#include <cstdint>
+#include <fstream>
+#include <iostream>
+#include <memory>
+#include <numeric>
+#include <sstream>
+#include <stdexcept>
+#include <unordered_set>
+/**
+ * \brief Hydraulic role of a conduit-size conditioning datum.
+ *
+ * The role is used by the leave-one-out external-drift diagnostics to avoid
+ * testing the sole inlet or outlet observation of a hydraulic boundary class.
+ */
+enum class ConditioningDataRole {
+	None,
+	Inlet,
+	Outlet,
+	Waypoint
+};
+
 /*!
 	\struct GeostatParams
 	\brief Struct to group all input parameters for geostatistical simulation of conduit shapes.
@@ -43,18 +66,18 @@ struct GeostatParams {
 	std::vector<float> simulation_distribution; //!< Input distribution used for the simulation.
 	float global_vario_range; //!< Range parameter for the global variogram model.
 	float global_range_of_neighborhood; //!< Range for neighborhood selection in global variogram.
-	float global_vario_sill; //!< Sill parameter for the global variogram model.
-	float global_vario_nugget; //!< Nugget parameter for the global variogram model.
+	float global_vario_sill; //!< Sill of the junction-node variogram in the input-property space.
+	float global_vario_nugget; //!< Nugget of the junction-node variogram in the input-property space.
 	std::string global_vario_model; //!< Type of global variogram model (e.g., Spherical, Exponential, Gaussian).
 	float interbranch_vario_range; //!< Range for inter-branch variogram model.
 	float interbranch_range_of_neighborhood; //!< Neighborhood range for inter-branch model.
-	float interbranch_vario_sill; //!< Sill parameter for inter-branch variogram.
-	float interbranch_vario_nugget; //!< Nugget parameter for inter-branch variogram.
+	float interbranch_vario_sill; //!< Sill of the inter-branch variogram in the input-property space.
+	float interbranch_vario_nugget; //!< Nugget of the inter-branch variogram in the input-property space.
 	std::string interbranch_vario_model; //!< Type of inter-branch variogram model.
 	float intrabranch_vario_range; //!< Range for intra-branch variogram model.
 	float intrabranch_range_of_neighborhood; //!< Neighborhood range for intra-branch model.
-	float intrabranch_vario_sill; //!< Sill parameter for intra-branch variogram.
-	float intrabranch_vario_nugget; //!< Nugget parameter for intra-branch variogram.
+	float intrabranch_vario_sill; //!< Sill of the intra-branch variogram in the input-property space.
+	float intrabranch_vario_nugget; //!< Nugget of the intra-branch variogram in the input-property space.
 	std::string intrabranch_vario_model; //!< Type of intra-branch variogram model.
 	int number_max_of_neighborhood_points; //!< Maximum number of points in a neighborhood used for covariance matrix.
 	int nb_points_interbranch; //!< Number of points considered per branch for inter-branch variogram.
@@ -213,7 +236,8 @@ void save_data(const std::vector<float>& data, const std::string& filename);
 
 \param curve Pointer to the KarsticSkeleton graph.
 \param simulated_property Vector where simulated properties will be stored.
-\param simulation_distribution Pointer to the distribution used for simulation.
+\param simulation_distribution Pointer to the distribution used for simulation,
+expressed in the same property space as the conditioning data.
 \param global_vario_range Range parameter of the global variogram.
 \param global_range_of_neighborhood Range for neighborhood in the global variogram.
 \param global_vario_sill Sill parameter of the global variogram.
@@ -283,17 +307,19 @@ std::vector<float> compute_upstream_curvilinear_length(const KarstNSim::KarsticS
 \brief Computes an external drift field using a robust weighted linear regression.
 
 The drift is modeled as a linear combination of user-specified explanatory variables:
-- vertical distance to water table (z_phreatic - z),
+- vertical distance above the water table (z - z_phreatic, clamped to zero),
 - upstream curvilinear length.
-Outliers in the observed equivalent radius (e.g., due to phantomization) are detected using
-the MAD (Median Absolute Deviation) criterion, and their influence is nullified in the regression.
+Outliers are screened from leave-one-out residuals using the MAD (Median Absolute
+Deviation) criterion. A unique inlet or outlet datum is protected from rejection.
 
 \param curve Pointer to the KarsticSkeleton graph.
+\param springs_xyz Outlet positions used to orient the curvilinear predictor and balance regression classes.
 \param z_phreatic Reference water table elevation.
 \param use_drift_zwt Whether to include the water table trend.
 \param use_drift_curv Whether to include the upstream length trend.
 \param eq_radius_values Observed equivalent radius values at each node.
-\param[out] weights_out Output vector of weights (1 if used, 0 if filtered as outlier).
+\param conditioning_roles Hydraulic role of each conditioning datum.
+\param[out] weights_out Regression weight for retained observations and zero otherwise.
 \return External drift values m(u) for each node.
 */
 std::vector<float> compute_external_drift(
@@ -303,6 +329,7 @@ std::vector<float> compute_external_drift(
 	const bool& use_drift_zwt,
 	const bool& use_drift_curv,
 	const std::vector<float>& eq_radius_values,
+	const std::vector<ConditioningDataRole>& conditioning_roles,
 	std::vector<float>& weights_out);
 
 /**
@@ -313,8 +340,10 @@ from local spatial variability. The drift m(u) is inferred by robust regression 
 to the simulated residuals ε(u). Both the drift and the final weights are returned for diagnostics.
 
 \param curve Pointer to the KarsticSkeleton graph.
+\param springs_xyz Outlet positions used by the external-drift regression.
 \param simulated_property Vector to store the final simulated values (drift + residuals).
-\param simulation_distribution Pointer to the Gaussian-transformed distribution used in SGS.
+\param conditioning_roles Hydraulic role of each conditioning datum.
+\param simulation_distribution Pointer to the input distribution in the simulated-property space.
 \param global_vario_range Range for the global variogram model.
 \param global_range_of_neighborhood Neighborhood search radius for global step.
 \param global_vario_sill Sill for the global variogram model.
@@ -343,6 +372,7 @@ void SGS3_with_external_drift(
 	const KarstNSim::KarsticSkeleton* curve,
 	const std::vector<Vector3>& springs_xyz,
 	std::vector<float>& simulated_property,
+	const std::vector<ConditioningDataRole>& conditioning_roles,
 	const std::vector<float>* simulation_distribution,
 	const float& global_vario_range,
 	const float& global_range_of_neighborhood,
@@ -367,4 +397,3 @@ void SGS3_with_external_drift(
 	const bool& use_drift_curv,
 	std::vector<float>& drift_output,
 	std::vector<float>& weights_output);
-

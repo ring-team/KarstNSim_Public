@@ -224,7 +224,11 @@ namespace KarstNSim {
 				karst.set_outlet_selection_cost_factor(parameters.outlet_selection_cost_factor);
 				karst.set_simulation_parameters(parameters.nghb_count, parameters.use_max_nghb_radius, parameters.nghb_radius, parameters.poisson_radius, parameters.gamma,
 					parameters.multiply_costs, parameters.vadose_cohesion, parameters.vertical_distance_stretching_factor);
-				karst.read_connectivity_matrix(parameters.simulation_input_dir, parameters.sinks, parameters.springs);
+				karst.initialize_connectivity_matrix(
+					parameters.use_user_connectivity_matrix,
+					parameters.simulation_input_dir,
+					parameters.sinks,
+					parameters.springs);
 			}
 
 			if (parameters.simulate_sections) {

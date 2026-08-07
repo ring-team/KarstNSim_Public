@@ -1,7 +1,8 @@
 # KarstNSim — Instruction File Parameter Reference
 
 This document explains every parameter accepted in the KarstNSim instruction file (parsed into `ParamsSource` and then propagated to the simulation).  
-Lines starting with `//`, `%`, `::`, or `#` are treated as comments and ignored by the parser.  
+Lines starting with `//`, `%`, `::`, or `#` are treated as comments and ignored by the parser. 
+Each active declaration must use the exact syntax `parameter_name: value`. Unknown tags, duplicated declarations, missing values, invalid booleans, malformed numerical values, and missing conditionally mandatory parameters raise an explicit exception before external simulation objects are prepared. 
 Unless stated otherwise, distances/lengths are in the same units as your model coordinates (typically meters).
 
 ---
@@ -17,6 +18,12 @@ Unless stated otherwise, distances/lengths are in the same units as your model c
 - **Type**: `path`
 - **What it does**: Root directory containing your `Input_files/` and where `outputs/` will be created.
 - **Practical effect**: Set this to the repository root of the archive.
+
+### `simulation_input_dir: <path>`
+- **Type**: `path` (optional)
+- **What it does**: Overrides the directory used to locate input files that are resolved relative to the instruction file, including `connectivity_matrix.txt`.
+- **Default behavior**: If omitted, KarstNSim uses the directory containing the active instruction file.
+- **Practical effect**: Keep this parameter omitted for self-contained simulation folders; define it only when the instruction file and its auxiliary ASCII inputs are intentionally stored in different directories.
 
 
 ---
@@ -103,19 +110,31 @@ Be aware that if you import an input graph, this graph should include exactly al
 - `use_sinks_radius: <bool>` — **Type**: `bool` (read per-sink radius from properties if true)  
 - `springs: <path>` — **Type**: `path` (point set with mandatory "Index" and "Surfindex" properties)  
 - `use_springs_radius: <bool>` — **Type**: `bool`  
-**Behavior**: Define inlet(s) and outlet(s). Inlets MUST be associated with two properties: Index (1-based), which allows to pair them in the connectivity matrix with springs, and Order (1-based too),
- which controls the order of iteration of sinks (order 1 first, then 2 etc.).
-Sinks of the same order are iterated in a random order within that group.
-Springs must be associated with an Index property (1-based), to pair them with inlets in the connectivity matrix,
- and with a Surfindex property which links each spring to its watertable (watertable file names end with a number ;
- that number is their index, it is 1-based). It is possible to define Surfindex=0 for springs that are perched / not associated with any perennial water body.
- Radii can be optionally read per sink/spring node when the respective `use_*_radius` flag is true.
- These radii will be used as observation data to constrain the conduit size simulation if activated. They do not have another effect.
+**Behavior**: Define inlet(s) and outlet(s).
+Inlets MUST be associated with two or three properties: 
+- First property: Index (1-based), which allows to pair them in the connectivity matrix with springs
+- Second property: Order (1-based too), which controls the order of iteration of sinks (order 1 first, then 2 etc.). Sinks of the same order are iterated in a random order within that group.
+- Third property (optional): Radii (or any other section property) can be optionally read per sink node when the respective `use_*_radius` flag is true. These radii will be used as observation data to constrain the conduit size simulation if activated. They do not have another effect.
+Springs must be associated with two or three properties:
+- First property: Index property (1-based), to pair them with inlets in the connectivity matrix
+- Second property: Surfindex property which links each spring to its watertable (watertable file names end with a number ; that number is their index, it is 1-based). It is possible to define Surfindex=0 for springs that are perched / not associated with any perennial water body.
+- Third property (optional): Radii (or any other section property) can be optionally read per spring node when the respective `use_*_radius` flag is true. These radii will be used as observation data to constrain the conduit size simulation if activated. They do not have another effect.
 
-### Outlet selection for ambiguous links
+Note: in a sections-only simulation, only the radii properties are (optionally) required, but the 3-property format is still accepted.
+
+### Connectivity source and outlet selection for ambiguous links
+
+- `use_user_connectivity_matrix: <bool>` — **Type**: `bool`  
+  **Mandatory status**: Required for a full network simulation; ignored in `sections_simulation_only` mode.  
+  **Behavior**:
+  - `true`: read and strictly validate `connectivity_matrix.txt` from `simulation_input_dir`;
+  - `false`: ignore any matrix file supplied by the user and create a sink-by-spring matrix filled exclusively with `2` values directly in memory.
+  
+  In generated mode, the initial all-`2` matrix is not written to disk. The independent `create_solved_connectivity_matrix` option may still export the matrix after ambiguous associations have been resolved.
+
 - `allow_single_outlet_connection: <bool>` — **Type**: `bool`  
-**Behavior**: When the connectivity matrix indicates uncertainty (value `2`), this toggles between choosing the **closest** spring (in the sense of the shortest cumulative cost path, not the euclidean shortest path) (`true`) or **randomly** selecting one (`false`).  
-**Practical effect**: Set `true` for more deterministic routing to the nearest outlet. This option can also help in delineating probable catchment areas of springs, based on the cost function field.
+**Behavior**: For connectivity entries equal to `2`, this toggles between choosing the **closest** spring in terms of corrected cumulative path cost (`true`) and **randomly** selecting an admissible spring (`false`).  
+**Practical effect**: When `use_user_connectivity_matrix = false`, every entry is `2`; consequently this parameter controls the routing strategy for the entire generated connectivity matrix. Set it to `true` for cost-based, more deterministic routing. This option can also help delineate probable spring catchments from the cost field.
 
 ### Waypoints
 - `use_waypoints: <bool>` — **Type**: `bool` 
@@ -256,6 +275,7 @@ The user can define perched/relict springs without associated water bodies by de
   - `interbranch_vario_range`, `interbranch_range_of_neighborhood`, `interbranch_vario_sill`, `interbranch_vario_nugget`, `interbranch_vario_model`
 - **Intra-branch variogram**:  
   - `intrabranch_vario_range`, `intrabranch_range_of_neighborhood`, `intrabranch_vario_sill`, `intrabranch_vario_nugget`, `intrabranch_vario_model`
+**Important**: Variogram `sill` and `nugget` parameters are expected to be defined in **Gaussian normal-score space**, since SGS is performed after normal-score transformation of the simulated property. Variogram `range` parameters remain curvilinear distances expressed in the model coordinate units.
 - **Neighborhood & mixing**:  
   - `number_max_of_neighborhood_points`, `nb_points_interbranch`, `proportion_interbranch`
   
@@ -329,16 +349,26 @@ The user can define perched/relict springs without associated water bodies by de
 
 ---
 
-## 18) Connectivity matrix (separate file)
+## 18) Connectivity matrix modes
 
-- **File**: typically `Input_files/connectivity_matrix.txt` (or similar).  
-- **Meaning (row = sink i, column = spring j)**:  
-  - `0` → **forbid** connection `i → j`  
-  - `1` → **force** connection `i → j`  
-  - `2` → **let the algorithm decide** among candidates (subject to `allow_single_outlet_connection`)  
-**Notes**:  
-- This parameter is mandatory because it controls which inlets are connected to which outlets. The inlet and outlet index in the matrix (line and column number resp.) are defined by the Index property in the two pointset files.
+The active mode is selected by `use_user_connectivity_matrix`.
 
+### User-matrix mode (`use_user_connectivity_matrix: true`)
+
+- **Required file**: `simulation_input_dir/connectivity_matrix.txt`.
+- **Shape**: rows = sinks, columns = springs.
+- **Allowed integer values**:
+  - `0` → **forbid** connection `i → j`;
+  - `1` → **force** connection `i → j`;
+  - `2` → **leave the association ambiguous** and resolve it according to `allow_single_outlet_connection`.
+
+The row and column identifiers are defined by the one-based `Index` properties of the sink and spring point sets.
+
+### Generated all-ambiguous mode (`use_user_connectivity_matrix: false`)
+
+KarstNSim does not read `connectivity_matrix.txt`, even if such a file is present. It creates an in-memory matrix with dimensions `number_of_sinks × number_of_springs` and initializes every entry to `2`. This initial generated matrix is not saved as an input artifact. Ambiguous links are then resolved by the closest-cost strategy when `allow_single_outlet_connection: true`, or by random admissible selection when it is `false`.
+
+No connectivity matrix is required in `sections_simulation_only` mode because the network topology is read from `previous_networks`.
 
 ---
 
@@ -347,6 +377,7 @@ The user can define perched/relict springs without associated water bodies by de
 - `create_vset_sampling: <bool>` — save the sampling points as a Pointset.  
 - `create_nghb_graph: <bool>` — save the neighbor graph as a polyline object. Warning: Heavy object!
 - `create_nghb_graph_property: <bool>` — add per-segment properties (cost components) to the saved neighbor graph. Warning: Very Heavy object!
+- `create_solved_connectivity_matrix: <bool>` — save the connectivity matrix after all ambiguous (`2`) associations have been resolved. This output option is independent of `use_user_connectivity_matrix`; it can therefore be enabled for both user-matrix and generated all-ambiguous modes.
 - `create_grid: <bool>` — export a voxet with useful scalar properties (e.g., density, IKP). This is useful because ghost-rocks printed onto IKP modify the IKP property during the simulation.
 
 

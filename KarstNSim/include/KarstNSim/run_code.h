@@ -148,22 +148,23 @@ namespace KarstNSim {
 		bool use_ghostrocks = false; //!< Flag to include ghost-rocks to the simulation.
 		Line alteration_lines; //!< Lines defining surface alteration lines for ghost-rock alterations.
 		bool interpolate_lines = false; //!< Flag to enable interpolation between alteration lines (NOT DEVELOPED YET).
-		float ghostrock_max_vertical_size; //!< Maximum vertical size for ghost-rock areas.
+		float ghostrock_max_vertical_size = 0.0f; //!< Maximum vertical size for ghost-rock areas.
 		bool use_max_depth_constraint = false; //!< Flag to apply a max depth constraint to ghost-rock areas.
-		float ghost_rock_weight; //!< Weight for ghost-rock constraints in simulation (will be applied to the IKP cost).
+		float ghost_rock_weight = 0.0f; //!< Weight for ghost-rock constraints in simulation (will be applied to the IKP cost).
 		Surface max_depth_horizon; //!< Surface defining the maximum depth for ghost-rocks.
-		float ghostrock_width; //!< Maximum width of the ghost-rock areas.
+		float ghostrock_width = 0.0f; //!< Maximum width of the ghost-rock areas.
 
 		// Inlets, outlets and waypoints :
 
 		std::vector<Vector3> sinks; //!< List of sinks.
 		std::vector<Vector3> springs; //!< List of springs.
 		bool allow_single_outlet_connection = true; //!< Flag to impose inlets to have a single spring connection. This will necessitate the use of the "closest" spring algorithm.
+		bool use_user_connectivity_matrix = true; //!< Selects whether inlet - outlet connectivity is read from a user file.
 		bool use_waypoints = false; //!< Flag to use waypoints as constraints in simulation.
 		std::vector<Vector3> waypoints; //!< List of waypoints.
-		bool use_springs_radius; //!< Flag to use radii for spring for equivalent section simulation constraints.
-		bool use_sinks_radius; //!< Flag to use radii for sink for equivalent section simulation constraints.
-		bool use_waypoints_radius; //!< Flag to use radii for waypoint for equivalent section simulation constraints.
+		bool use_springs_radius = false; //!< Flag to use radii for spring for equivalent section simulation constraints.
+		bool use_sinks_radius = false; //!< Flag to use radii for sink for equivalent section simulation constraints.
+		bool use_waypoints_radius = false; //!< Flag to use radii for waypoint for equivalent section simulation constraints.
 		float waypoints_weight = 0.1f; //!< Weight for waypoint constraints.
 
 		// No-karst spheres :
@@ -212,15 +213,15 @@ namespace KarstNSim {
 		// Deadend points amplification :
 
 		bool use_deadend_points = false; //!< Flag to include dead-end points in simulation.
-		int nb_deadend_points; //!< Number of dead-end points.
-		float max_distance_of_deadend_pts; //!< Maximum distance for dead-end points.
+		int nb_deadend_points = 0; //!< Number of dead-end points.
+		float max_distance_of_deadend_pts = 0.0f; //!< Maximum distance for dead-end points.
 
 		// Cycle amplification :
 
 		bool use_amplification = true; //!< Flag to use amplification in simulation.
-		float max_distance_amplification; //!< Maximum distance between two random nodes used to create a cycle for amplification.
-		float min_distance_amplification; //!< Minimum distance between two random nodes used to create a cycle for amplification.
-		int nb_cycles; //!< Number of amplification cycles.
+		float max_distance_amplification = 0.0f; //!< Maximum distance between two random nodes used to create a cycle for amplification.
+		float min_distance_amplification = 0.0f; //!< Minimum distance between two random nodes used to create a cycle for amplification.
+		int nb_cycles = 0; //!< Number of amplification cycles.
 
 		//Noise Amplification parameters :
 

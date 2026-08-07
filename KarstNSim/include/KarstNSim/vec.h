@@ -410,20 +410,55 @@ namespace KarstNSim
 		return u.x * v.x + u.y * v.y + u.z * v.z;
 	}
 
-	// reorder vector with given vector of indices
-	inline void reorder(std::vector<int> &vA, std::vector<int> vOrder)
+	/*!
+	\brief Reorders a vector according to a permutation of its indices.
+
+	\param vA Vector whose values must be reordered.
+	\param vOrder Permutation describing the destination of each value.
+	*/
+	inline void reorder(std::vector<int>& vA, std::vector<int> vOrder)
 	{
-		assert(vA.size() == vOrder.size());
-		// for all elements to put in place
-		for (int i = 0; i < vA.size() - 1; ++i)
-		{
-			// while the element i is not yet in place 
-			while (i != vOrder[i])
-			{
-				// swap it with the element at its final place
-				int alt = vOrder[i];
-				std::swap(vA[i], vA[alt]);
-				std::swap(vOrder[i], vOrder[alt]);
+		if (vA.size() != vOrder.size()) {
+			throw std::runtime_error(
+				"[reorder] The value vector and the permutation must have the same size."
+			);
+		}
+
+		if (vA.size() < 2) {
+			return;
+		}
+
+		for (std::size_t i = 0; i + 1 < vA.size(); ++i) {
+			std::size_t permutation_count = 0;
+
+			while (static_cast<int>(i) != vOrder[i]) {
+				const int alternate_index = vOrder[i];
+
+				if (alternate_index < 0 ||
+					static_cast<std::size_t>(alternate_index) >= vA.size()) {
+
+					throw std::runtime_error(
+						"[reorder] Invalid permutation index " +
+						std::to_string(alternate_index) +
+						" at position " +
+						std::to_string(i) + "."
+					);
+				}
+
+				std::swap(vA[i], vA[static_cast<std::size_t>(alternate_index)]);
+				std::swap(
+					vOrder[i],
+					vOrder[static_cast<std::size_t>(alternate_index)]
+				);
+
+				++permutation_count;
+
+				if (permutation_count > vA.size()) {
+					throw std::runtime_error(
+						"[reorder] Invalid permutation: the reordering operation "
+						"does not converge."
+					);
+				}
 			}
 		}
 	}
@@ -1403,30 +1438,51 @@ inline bool PointCloud::kdtree_get_bbox(BBOX& /* bb */) const
 // distmax : max distance from the querryPoint to find neighbors
 // result : resulting neighbors vector
 
-inline void PointCloud::findNearestNeighbors(const Vector3& queryPoint, int querryidx, int N, float distmax, std::vector<Neighbour>& result) const {
+inline void PointCloud::findNearestNeighbors(
+	const Vector3& queryPoint,
+	int querryidx,
+	int N,
+	float distmax,
+	std::vector<Neighbour>& result
+) const {
+	if (N <= 0 || cloud.empty()) {
+		return;
+	}
 
-	// Initialize the results structure
-	std::vector<int> indices(N);
-	std::vector<float> dists(N);
+	// A KNN query cannot return more points than the cloud contains.
+	const std::size_t requested_count = std::min<std::size_t>(
+		static_cast<std::size_t>(N),
+		cloud.size()
+	);
 
-	// Search for the nearest neighbors
-	nanoflann::KNNResultSet<float, int> resultSet(N);
-	resultSet.init(&indices[0], &dists[0]);
-	nanoflann::SearchParameters params;
-	params.sorted = true; // Sort the results based on distance
+	std::vector<int> indices(requested_count);
+	std::vector<float> dists(requested_count);
 
-	//index.buildIndex();
-	index->findNeighbors(resultSet, &queryPoint.x, params);
+	nanoflann::KNNResultSet<float, int> resultSet(requested_count);
+	resultSet.init(indices.data(), dists.data());
 
-	// Process the results
-	for (size_t i = 0; i < indices.size(); ++i) {
-		int index = indices[i];
-		float distance = dists[i];
+	nanoflann::SearchParameters search_parameters;
+	search_parameters.sorted = true;
 
-		// Check if the distance is within the specified range
-		if (distance <= distmax && querryidx != index) {
-			// Add the neighbor to the result vector
-			result.push_back(Neighbour{ index, distance });
+	index->findNeighbors(
+		resultSet,
+		&queryPoint.x,
+		search_parameters
+	);
+
+	// resultSet.size() is the number of entries actually written by nanoflann.
+	const std::size_t returned_count = resultSet.size();
+
+	for (std::size_t i = 0; i < returned_count; ++i) {
+		const int neighbor_index = indices[i];
+		const float squared_distance = dists[i];
+
+		if (squared_distance <= distmax &&
+			neighbor_index != querryidx) {
+			result.push_back({
+				neighbor_index,
+				squared_distance
+				});
 		}
 	}
 }

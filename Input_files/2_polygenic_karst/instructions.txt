@@ -5,15 +5,16 @@
 // Some parameters can switch from mandatory to optional (and vice versa) according to the value of other parameters.
 // You can find more information about the parameters in the doxygen documentation (see the main page).
 // The default parameters provided here give a correct use example.
-// Don't forget to also define the connectivity matrix, defined in a separate file.
+// The connectivity source is selected with use_user_connectivity_matrix. A separate matrix file is required only when this option is true.
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
-// Name of generated outputs and path of the directory where i) outputs directory and ii) inputs directory are located (normally, the root of the archive)
+// Name of generated outputs and path of the main repository
 // (ALWAYS keep at the beginning of the file):
 
 karstic_network_name: polyphasic
 main_repository: ../../..
+//simulation_input_dir:
 
 // General parameters :
 
@@ -54,6 +55,7 @@ springs: Input_files/2_polygenic_karst/example_springs.txt
 use_springs_radius: false
 
 allow_single_outlet_connection: true
+use_user_connectivity_matrix: true
 
 use_waypoints: true
 waypoints: Input_files/2_polygenic_karst/example_waypoints.txt
@@ -135,26 +137,26 @@ noise_weight: 10
 
 simulate_sections: false
 simulation_distribution: Input_files/2_polygenic_karst/eq_radius_initial_distrib.txt
-global_vario_range = 50
-global_range_of_neighborhood = 150
-global_vario_sill = 0.92
-global_vario_nugget = 0.33
-global_vario_model = "Exponential"
-interbranch_vario_range = 30
-interbranch_range_of_neighborhood = 80
-interbranch_vario_sill = 0.92
-interbranch_vario_nugget = 0.34,
-interbranch_vario_model = "Exponential"
-intrabranch_vario_range = 30
-intrabranch_range_of_neighborhood = 45
-intrabranch_vario_sill = 0.55
-intrabranch_vario_nugget = 0.31
-intrabranch_vario_model = "Exponential"
-number_max_of_neighborhood_points = 16
-nb_points_interbranch = 7
-proportion_interbranch = 0.1
-use_drift_zwt = false
-use_drift_curv = false
+global_vario_range: 50
+global_range_of_neighborhood: 150
+global_vario_sill: 0.92
+global_vario_nugget: 0.33
+global_vario_model: "Exponential"
+interbranch_vario_range: 30
+interbranch_range_of_neighborhood: 80
+interbranch_vario_sill: 0.92
+interbranch_vario_nugget: 0.34
+interbranch_vario_model: "Exponential"
+intrabranch_vario_range: 30
+intrabranch_range_of_neighborhood: 45
+intrabranch_vario_sill: 0.55
+intrabranch_vario_nugget: 0.31
+intrabranch_vario_model: "Exponential"
+number_max_of_neighborhood_points: 16
+nb_points_interbranch: 7
+proportion_interbranch: 0.1
+use_drift_zwt: false
+use_drift_curv: false
 
 // Other general cost graph parameters (gamma-graph parameter, cost reduction (cohesion) factor, and option to multiply costs instead of summing them) :
 

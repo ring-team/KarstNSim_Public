@@ -1,10 +1,10 @@
 #pragma once
 
 #include <KarstNSim/basics.h>
-
 #include <sstream>
 #include <string>
 #include <vector>
+#include <iomanip>
 
 namespace KarstNSim {
 
@@ -78,6 +78,7 @@ namespace KarstNSim {
 
                     if (has_drift_properties) {
                         out << "\t"
+                            << std::fixed << std::setprecision(5)
                             << point.external_drift << "\t"
                             << point.kriging_weight;
                     }

@@ -6,12 +6,272 @@ This code is published under the MIT License.
 Author : Augustin Gouy - augustin.gouy@univ-lorraine.fr for new methods + modifications to original methods
 If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
 
-Rewritten entirely (except the variogram_value fonction, written by G. Rongier in 2015) from the pseudo-code algorithm (Algorithm 2) in the paper of Frantz et al., 2021 "Analysis and stochastic simulation of geometrical properties of conduits in karstic networks".
+The base SGS3 algorithm is rewritten (except the variogram_value fonction, written by G. Rongier in 2015) from the pseudo-code algorithm (Algorithm 2) in the paper of Frantz et al., 2021 "Analysis and stochastic simulation of geometrical properties of conduits in karstic networks".
 This work was performed in the frame of the RING project at Université de Lorraine.
 
 ***************************************************************/
 
 #include "KarstNSim/geostats.h"
+
+namespace {
+	// Variogram-parameter convention used by SGS:
+	// false -> sill and nugget are supplied in the simulated-property space and
+	//          are converted internally to the same normal-score space used here.
+	// true  -> sill and nugget are already expressed in normal-score space and
+	//          are used directly
+	constexpr bool K_VARIOGRAM_PARAMETERS_ARE_ALREADY_GAUSSIAN = true;
+
+	// Enables the equivalent-radius upper threshold during external-drift regression:
+	// true  -> observations with an equivalent radius greater than
+	//          K_RADIUS_MAX_FOR_REGRESSION are excluded from the regression.
+	// false -> all valid equivalent-radius observations are used, regardless of radius.
+	constexpr bool K_EXT_DRIFT_ENABLE_RADIUS_CAP = false;
+
+	// Enables robust outlier rejection during external-drift regression:
+	// true  -> observations with excessive MAD-standardized residuals may be rejected,
+	//          followed by a regression refit using the retained observations.
+	// false -> no MAD-based observation trimming or subsequent refit is performed.
+	constexpr bool K_EXT_DRIFT_ENABLE_MAD_TRIMMING = true;
+
+	// Maximum equivalent radius accepted in the external-drift regression when
+	// K_EXT_DRIFT_ENABLE_RADIUS_CAP is true. The value uses the same length unit
+	// as the equivalent-radius conditioning data.
+	constexpr float K_RADIUS_MAX_FOR_REGRESSION = 2.1f;
+
+	// Parameters used for variogram conversion to normal-score space, if
+	// K_VARIOGRAM_PARAMETERS_ARE_ALREADY_GAUSSIAN is false.
+	constexpr int K_TRANS_GAUSSIAN_HERMITE_TERMS = 24;
+	constexpr int K_TRANS_GAUSSIAN_LOOKUP_SIZE = 4097;
+
+	/**
+	 * @brief Approximates the inverse standard-normal cumulative distribution.
+	 *
+	 * The rational approximation is deterministic and sufficiently accurate for
+	 * constructing the empirical anamorphosis at probability midpoints.
+	 */
+	double inverse_standard_normal_cdf(const double probability)
+	{
+		if (!(probability > 0.0 && probability < 1.0)) {
+			throw std::invalid_argument(
+				"Normal-score probabilities must lie strictly between zero and one.");
+		}
+
+		const double a1 = -3.969683028665376e+01;
+		const double a2 = 2.209460984245205e+02;
+		const double a3 = -2.759285104469687e+02;
+		const double a4 = 1.383577518672690e+02;
+		const double a5 = -3.066479806614716e+01;
+		const double a6 = 2.506628277459239e+00;
+		const double b1 = -5.447609879822406e+01;
+		const double b2 = 1.615858368580409e+02;
+		const double b3 = -1.556989798598866e+02;
+		const double b4 = 6.680131188771972e+01;
+		const double b5 = -1.328068155288572e+01;
+		const double c1 = -7.784894002430293e-03;
+		const double c2 = -3.223964580411365e-01;
+		const double c3 = -2.400758277161838e+00;
+		const double c4 = -2.549732539343734e+00;
+		const double c5 = 4.374664141464968e+00;
+		const double c6 = 2.938163982698783e+00;
+		const double d1 = 7.784695709041462e-03;
+		const double d2 = 3.224671290700398e-01;
+		const double d3 = 2.445134137142996e+00;
+		const double d4 = 3.754408661907416e+00;
+		const double lower_tail = 0.02425;
+		const double upper_tail = 1.0 - lower_tail;
+
+		if (probability < lower_tail) {
+			const double q = std::sqrt(-2.0 * std::log(probability));
+			return (((((c1 * q + c2) * q + c3) * q + c4) * q + c5) * q + c6) /
+				((((d1 * q + d2) * q + d3) * q + d4) * q + 1.0);
+		}
+		if (probability > upper_tail) {
+			const double q = std::sqrt(-2.0 * std::log(1.0 - probability));
+			return -(((((c1 * q + c2) * q + c3) * q + c4) * q + c5) * q + c6) /
+				((((d1 * q + d2) * q + d3) * q + d4) * q + 1.0);
+		}
+
+		const double q = probability - 0.5;
+		const double r = q * q;
+		return (((((a1 * r + a2) * r + a3) * r + a4) * r + a5) * r + a6) * q /
+			(((((b1 * r + b2) * r + b3) * r + b4) * r + b5) * r + 1.0);
+	}
+
+	/**
+	 * @brief Converts property-space semivariances to normal-score semivariances.
+	 *
+	 * The empirical anamorphosis is expanded on normalized Hermite polynomials.
+	 * For a Gaussian pair with correlation rho, the expansion gives the
+	 * property-space covariance as a positive power series in rho. Inverting
+	 * that monotone relation yields the normal-score semivariance 1-rho.
+	 */
+	class NormalScoreVariogramConverter {
+	public:
+		explicit NormalScoreVariogramConverter(const std::vector<float>& distribution)
+		{
+			std::vector<double> values;
+			values.reserve(distribution.size());
+			for (const float value : distribution) {
+				if (!std::isfinite(value)) {
+					throw std::invalid_argument(
+						"The simulation distribution contains a non-finite value.");
+				}
+				values.push_back(static_cast<double>(value));
+			}
+			if (values.size() < 2) {
+				throw std::invalid_argument(
+					"At least two finite values are required to convert variograms to normal-score space.");
+			}
+
+			std::sort(values.begin(), values.end());
+			const double count = static_cast<double>(values.size());
+			const double mean = std::accumulate(values.begin(), values.end(), 0.0) / count;
+			property_variance_ = 0.0;
+			for (const double value : values) {
+				const double centered = value - mean;
+				property_variance_ += centered * centered;
+			}
+			property_variance_ /= count;
+			if (!std::isfinite(property_variance_) ||
+				property_variance_ <= std::numeric_limits<double>::epsilon()) {
+				throw std::invalid_argument(
+					"The simulation distribution has zero or non-finite variance.");
+			}
+
+			const int term_count = std::min(
+				K_TRANS_GAUSSIAN_HERMITE_TERMS,
+				std::max(1, static_cast<int>(values.size()) - 1));
+			std::vector<double> coefficients(term_count + 1, 0.0);
+
+			for (size_t sample = 0; sample < values.size(); ++sample) {
+				const double probability =
+					(static_cast<double>(sample) + 0.5) / count;
+				const double gaussian_score = inverse_standard_normal_cdf(probability);
+				const double centered_value = values[sample] - mean;
+
+				double psi_previous = 1.0;
+				double psi_current = gaussian_score;
+				coefficients[1] += centered_value * psi_current / count;
+
+				for (int order = 2; order <= term_count; ++order) {
+					const double psi_next =
+						(gaussian_score * psi_current -
+							std::sqrt(static_cast<double>(order - 1)) * psi_previous) /
+						std::sqrt(static_cast<double>(order));
+					coefficients[order] += centered_value * psi_next / count;
+					psi_previous = psi_current;
+					psi_current = psi_next;
+				}
+			}
+
+			covariance_terms_.assign(term_count + 1, 0.0);
+			double represented_variance = 0.0;
+			for (int order = 1; order <= term_count; ++order) {
+				covariance_terms_[order] = coefficients[order] * coefficients[order];
+				represented_variance += covariance_terms_[order];
+			}
+			if (represented_variance <= std::numeric_limits<double>::epsilon()) {
+				covariance_terms_.assign(2, 0.0);
+				covariance_terms_[1] = property_variance_;
+			}
+			else {
+				const double variance_scale = property_variance_ / represented_variance;
+				for (size_t order = 1; order < covariance_terms_.size(); ++order) {
+					covariance_terms_[order] *= variance_scale;
+				}
+			}
+
+			build_lookup_table();
+		}
+
+		double gaussian_semivariance(const double property_semivariance) const
+		{
+			if (property_semivariance <= 0.0) return 0.0;
+			if (property_semivariance >= property_variance_) return 1.0;
+
+			const double position = property_semivariance / property_variance_ *
+				static_cast<double>(gaussian_semivariance_lookup_.size() - 1);
+			const size_t lower = static_cast<size_t>(position);
+			const size_t upper = std::min(
+				lower + 1, gaussian_semivariance_lookup_.size() - 1);
+			const double fraction = position - static_cast<double>(lower);
+			return gaussian_semivariance_lookup_[lower] * (1.0 - fraction) +
+				gaussian_semivariance_lookup_[upper] * fraction;
+		}
+
+	private:
+		double covariance_for_correlation(const double correlation) const
+		{
+			double covariance = 0.0;
+			for (size_t order = covariance_terms_.size() - 1; order > 0; --order) {
+				covariance = (covariance + covariance_terms_[order]) * correlation;
+			}
+			return covariance;
+		}
+
+		void build_lookup_table()
+		{
+			gaussian_semivariance_lookup_.assign(
+				K_TRANS_GAUSSIAN_LOOKUP_SIZE, 0.0);
+			gaussian_semivariance_lookup_.back() = 1.0;
+
+			for (int index = 1; index < K_TRANS_GAUSSIAN_LOOKUP_SIZE - 1; ++index) {
+				const double target_semivariance = property_variance_ *
+					static_cast<double>(index) /
+					static_cast<double>(K_TRANS_GAUSSIAN_LOOKUP_SIZE - 1);
+				double lower_correlation = 0.0;
+				double upper_correlation = 1.0;
+
+				for (int iteration = 0; iteration < 56; ++iteration) {
+					const double correlation =
+						0.5 * (lower_correlation + upper_correlation);
+					const double candidate_semivariance =
+						property_variance_ - covariance_for_correlation(correlation);
+					if (candidate_semivariance > target_semivariance) {
+						lower_correlation = correlation;
+					}
+					else {
+						upper_correlation = correlation;
+					}
+				}
+
+				gaussian_semivariance_lookup_[index] =
+					1.0 - 0.5 * (lower_correlation + upper_correlation);
+			}
+		}
+
+		double property_variance_ = 0.0;
+		std::vector<double> covariance_terms_;
+		std::vector<double> gaussian_semivariance_lookup_;
+	};
+
+	thread_local const NormalScoreVariogramConverter* active_variogram_converter = nullptr;
+
+	class ScopedVariogramConverter {
+	public:
+		explicit ScopedVariogramConverter(const NormalScoreVariogramConverter* converter)
+			: previous_(active_variogram_converter)
+		{
+			active_variogram_converter = converter;
+		}
+
+		~ScopedVariogramConverter()
+		{
+			active_variogram_converter = previous_;
+		}
+
+		ScopedVariogramConverter(const ScopedVariogramConverter&) = delete;
+		ScopedVariogramConverter& operator=(const ScopedVariogramConverter&) = delete;
+
+	private:
+		const NormalScoreVariogramConverter* previous_;
+	};
+
+	double active_zero_lag_variance(const double supplied_sill)
+	{
+		return active_variogram_converter == nullptr ? supplied_sill : 1.0;
+	}
+}
 
 std::vector<int> find_neighborhood(
 	int current_node_index,
@@ -172,17 +432,51 @@ float variogram_value(
 			vario_value = nugget;
 		}
 	}
+
+	if (vario_value >= 0.0f && active_variogram_converter != nullptr) {
+		vario_value = static_cast<float>(
+			active_variogram_converter->gaussian_semivariance(vario_value));
+	}
 	return vario_value;
 }
 
 // Function to calculate the inverse of a square matrix using Gaussian elimination
 bool invert_matrix(const std::vector<std::vector<float>>& input, std::vector<std::vector<float>>& output) {
+	if (input.empty()) {
+		std::cerr << "Cannot invert an empty matrix." << std::endl;
+		return false;
+	}
+
 	// Check if the input matrix is square
 	int size = int(input.size());
-	if (size != input[0].size()) {
+	if (size != int(input[0].size())) {
 		std::cerr << "Input matrix is not square." << std::endl;
 		return false;
 	}
+	for (const auto& row : input) {
+		if (int(row.size()) != size) {
+			std::cerr << "Input matrix is not square." << std::endl;
+			return false;
+		}
+	}
+
+	float matrix_scale = 0.0f;
+	for (const auto& row : input) {
+		for (float value : row) {
+			if (!std::isfinite(value)) {
+				std::cerr << "Input matrix contains a non-finite value." << std::endl;
+				return false;
+			}
+			matrix_scale = std::max(matrix_scale, std::abs(value));
+		}
+	}
+	if (matrix_scale == 0.0f) {
+		std::cerr << "Matrix is singular: all coefficients are zero." << std::endl;
+		return false;
+	}
+	const float pivot_tolerance =
+		std::numeric_limits<float>::epsilon() *
+		static_cast<float>(std::max(1, size)) * matrix_scale;
 
 	// Initialize the output matrix as the identity matrix
 	output = std::vector<std::vector<float>>(size, std::vector<float>(size, 0.0));
@@ -209,9 +503,12 @@ bool invert_matrix(const std::vector<std::vector<float>>& input, std::vector<std
 			output[i].swap(output[max_row]);
 		}
 
-		// Check if the matrix is singular
-		if (A[i][i] == 0.0) {
-			std::cerr << "Matrix is singular." << std::endl;
+		// Detect numerical singularity using a scale-aware threshold rather than
+		// testing only for an exactly zero pivot.
+		if (!std::isfinite(A[i][i]) || std::abs(A[i][i]) <= pivot_tolerance) {
+			std::cerr << "Matrix is numerically singular at pivot " << i
+				<< " (|pivot|=" << std::abs(A[i][i])
+				<< ", tolerance=" << pivot_tolerance << ")." << std::endl;
 			return false;
 		}
 
@@ -234,6 +531,114 @@ bool invert_matrix(const std::vector<std::vector<float>>& input, std::vector<std
 		}
 	}
 	return true;
+}
+
+namespace {
+	/**
+	 * @brief Solves a symmetric positive-definite linear system by Cholesky decomposition.
+	 *
+	 * The matrix is factorized as A = L L^T, followed by forward and backward
+	 * substitutions. All linear-algebra operations are performed in double
+	 * precision. A scale-aware pivot tolerance is used to detect matrices that
+	 * are singular or numerically non-positive-definite.
+	 *
+	 * @param matrix Symmetric positive-definite coefficient matrix.
+	 * @param rhs Right-hand-side vector.
+	 * @param solution Solution vector, overwritten on success.
+	 * @param failure_reason Concise diagnostic filled on failure.
+	 * @return true when the system was solved successfully; false otherwise.
+	 */
+	bool solve_spd_cholesky(
+		const std::vector<std::vector<double>>& matrix,
+		const std::vector<double>& rhs,
+		std::vector<double>& solution,
+		std::string& failure_reason)
+	{
+		const int size = static_cast<int>(matrix.size());
+		if (size == 0 || static_cast<int>(rhs.size()) != size) {
+			failure_reason = "empty system or incompatible right-hand-side size";
+			return false;
+		}
+
+		double matrix_scale = 0.0;
+		for (const auto& row : matrix) {
+			if (static_cast<int>(row.size()) != size) {
+				failure_reason = "coefficient matrix is not square";
+				return false;
+			}
+			for (double value : row) {
+				if (!std::isfinite(value)) {
+					failure_reason = "coefficient matrix contains a non-finite value";
+					return false;
+				}
+				matrix_scale = std::max(matrix_scale, std::abs(value));
+			}
+		}
+		for (double value : rhs) {
+			if (!std::isfinite(value)) {
+				failure_reason = "right-hand side contains a non-finite value";
+				return false;
+			}
+		}
+		if (matrix_scale == 0.0) {
+			failure_reason = "covariance matrix is identically zero";
+			return false;
+		}
+
+		const double pivot_tolerance =
+			std::numeric_limits<double>::epsilon() *
+			static_cast<double>(std::max(1, size)) * matrix_scale;
+		std::vector<std::vector<double>> lower(
+			size, std::vector<double>(size, 0.0));
+
+		for (int i = 0; i < size; ++i) {
+			for (int j = 0; j <= i; ++j) {
+				double value = matrix[i][j];
+				for (int k = 0; k < j; ++k) {
+					value -= lower[i][k] * lower[j][k];
+				}
+
+				if (i == j) {
+					if (!std::isfinite(value) || value <= pivot_tolerance) {
+						std::ostringstream diagnostic;
+						diagnostic << "Cholesky factorization failed at pivot " << i
+							<< " (value=" << value
+							<< ", tolerance=" << pivot_tolerance << ")";
+						failure_reason = diagnostic.str();
+						return false;
+					}
+					lower[i][j] = std::sqrt(value);
+				}
+				else {
+					lower[i][j] = value / lower[j][j];
+				}
+			}
+		}
+
+		std::vector<double> intermediate(size, 0.0);
+		for (int i = 0; i < size; ++i) {
+			double value = rhs[i];
+			for (int j = 0; j < i; ++j) {
+				value -= lower[i][j] * intermediate[j];
+			}
+			intermediate[i] = value / lower[i][i];
+		}
+
+		solution.assign(size, 0.0);
+		for (int i = size - 1; i >= 0; --i) {
+			double value = intermediate[i];
+			for (int j = i + 1; j < size; ++j) {
+				value -= lower[j][i] * solution[j];
+			}
+			solution[i] = value / lower[i][i];
+			if (!std::isfinite(solution[i])) {
+				failure_reason = "linear solve produced a non-finite kriging weight";
+				return false;
+			}
+		}
+
+		return true;
+	}
 }
 
 // --- Helper: truncated Dijkstra shortest-path distances to a set of targets ---
@@ -295,7 +700,18 @@ std::vector<float> dijkstra_to_targets_truncated(
 	return out;
 }
 
-// --- Kriging that builds a local distance matrix on the fly (no global distance_mat) ---
+/**
+ * @brief Performs simple kriging using graph distances computed on the fly.
+ *
+ * The local covariance system is assembled from shortest-path distances and
+ * solved directly by a Cholesky decomposition in double precision. No global
+ * distance matrix is constructed. The known mean is the empirical mean of the
+ * Gaussian kriging distribution, consistently with the former simple-kriging
+ * implementation.
+ *
+ * When the neighborhood is empty, or when the local system cannot be solved,
+ * the function returns one unconditional draw from the Gaussian distribution.
+ */
 void kriging_in_point_on_the_fly(
 	int current_node_index,
 	const std::vector<int>& neighborhood,          // indices of conditioning nodes
@@ -310,13 +726,23 @@ void kriging_in_point_on_the_fly(
 	float& val_estimation,
 	float range_cap                                  // SAME radius used to build the neighborhood
 ) {
-	// If the neighborhood is empty, sample directly (preserves previous behavior).
+	// If the neighborhood is empty, perform one unconditional empirical draw.
 	if (neighborhood.empty()) {
 		val_estimation = select_random_element(*kriging_distribution);
-		// Provide a nominal variance (sill) so downstream logs don’t see garbage.
-		var_estimation = vario_sill;
+		var_estimation = static_cast<float>(active_zero_lag_variance(vario_sill));
 		return;
 	}
+
+	auto unconditional_fallback = [&](const std::string& reason) {
+		const Vector3& point = curve->nodes.at(current_node_index).p;
+		std::cerr
+			<< "[geostats][simple_kriging] Unconditional fallback at skeleton node "
+			<< current_node_index << " (X=" << point.x
+			<< ", Y=" << point.y << ", Z=" << point.z << "): "
+			<< reason << "." << std::endl;
+		val_estimation = select_random_element(*kriging_distribution);
+		var_estimation = std::numeric_limits<float>::quiet_NaN();
+	};
 
 	const int K = (int)neighborhood.size();
 	// 1) Distances current -> neighbors (shortest path, truncated at range_cap)
@@ -325,73 +751,81 @@ void kriging_in_point_on_the_fly(
 		current_node_index, curve, targets, range_cap
 	);
 
-	// 2) Pairwise neighbor-neighbor distances: run a truncated Dijkstra from each neighbor,
-	//    but only extract distances to the other neighbors (K is small: ≤ ~16).
+	// 2) Pairwise neighbor-neighbor distances. Two nodes that are each at most R
+	//    from the simulated node can be separated by up to 2R through that node.
+	const float pairwise_range_cap =
+		(range_cap <= std::numeric_limits<float>::max() / 2.0f)
+		? 2.0f * range_cap
+		: std::numeric_limits<float>::max();
 	std::vector<std::vector<float>> d_nb_to_nb(K, std::vector<float>(K, 0.f));
 	for (int i = 0; i < K; ++i) {
-		std::vector<float> di = dijkstra_to_targets_truncated(neighborhood[i], curve, targets, range_cap);
+		std::vector<float> di = dijkstra_to_targets_truncated(
+			neighborhood[i], curve, targets, pairwise_range_cap);
 		for (int j = 0; j < K; ++j) d_nb_to_nb[i][j] = di[j];
 	}
 
-	// 3) Build local variogram/covariance system (Kriging with Lagrange multiplier)
-	//    Matrix size = (K+1) x (K+1)
-	const int M = K + 1;
-	std::vector<std::vector<float>> Gamma(M, std::vector<float>(M, 0.f));
-	std::vector<float>            rhs(M, 0.f);
-
-	auto gamma = [&](float h)->float {
-		if (h <= 0.f) return 0.f;
-		return variogram_value(h, vario_sill, vario_nugget, vario_range, vario_model);
+	// 3) Build the simple-kriging covariance system C * lambda = c0.
+	const double zero_lag_variance = active_zero_lag_variance(vario_sill);
+	auto covariance = [&](float distance)->double {
+		if (distance <= 0.0f) return zero_lag_variance;
+		const float semivariance = variogram_value(
+			distance, vario_sill, vario_nugget, vario_range, vario_model);
+		return zero_lag_variance - static_cast<double>(semivariance);
 	};
 
-	// Fill Γ (0..K-1, 0..K-1) with γ(h_ij)
+	std::vector<std::vector<double>> covariance_matrix(
+		K, std::vector<double>(K, 0.0));
+	std::vector<double> covariance_to_target(K, 0.0);
+
 	for (int i = 0; i < K; ++i) {
 		for (int j = 0; j < K; ++j) {
-			float hij = d_nb_to_nb[i][j];
-			// If unreachable within range_cap, set γ ≈ sill (i.e., no correlation).
-			Gamma[i][j] = std::isfinite(hij) ? gamma(hij) : vario_sill;
+			const float distance = d_nb_to_nb[i][j];
+			// An unreachable pair is treated as uncorrelated, consistently with
+			// the previous use of the sill as its semivariance.
+			covariance_matrix[i][j] =
+				std::isfinite(distance) ? covariance(distance) : 0.0;
 		}
+		const float distance_to_target = d_cur_to_nb[i];
+		covariance_to_target[i] =
+			std::isfinite(distance_to_target) ? covariance(distance_to_target) : 0.0;
 	}
-	// Lagrange row/col
-	for (int i = 0; i < K; ++i) {
-		Gamma[i][K] = 1.f;
-		Gamma[K][i] = 1.f;
-	}
-	Gamma[K][K] = 0.f;
 
-	// Right-hand side: γ(h_i0) where 0 is "current node"
-	for (int i = 0; i < K; ++i) {
-		float hi0 = d_cur_to_nb[i];
-		rhs[i] = std::isfinite(hi0) ? gamma(hi0) : vario_sill;
-	}
-	rhs[K] = 1.f;
-
-	// Solve Γ * [λ; μ] = rhs
-	std::vector<std::vector<float>> Gamma_inv;
-	if (!invert_matrix(Gamma, Gamma_inv)) {
-		// Numerical fallback: if inversion fails, sample from distribution
-		var_estimation = vario_sill;
-		val_estimation = select_random_element(*kriging_distribution);
+	// 4) Solve directly; do not form the inverse covariance matrix.
+	std::vector<double> weights;
+	std::string failure_reason;
+	if (!solve_spd_cholesky(
+		covariance_matrix, covariance_to_target, weights, failure_reason)) {
+		unconditional_fallback(failure_reason);
 		return;
 	}
 
-	std::vector<float> w(M, 0.f);
-	for (int i = 0; i < M; ++i) {
-		float acc = 0.f;
-		for (int j = 0; j < M; ++j) acc += Gamma_inv[i][j] * rhs[j];
-		w[i] = acc;
+	// 5) Simple-kriging estimate with known mean m:
+	//    Z*(u0) = m + sum_i lambda_i [Z(ui) - m].
+	const double known_mean = std::accumulate(
+		kriging_distribution->begin(), kriging_distribution->end(), 0.0) /
+		static_cast<double>(kriging_distribution->size());
+	double estimate = known_mean;
+	for (int i = 0; i < K; ++i) {
+		estimate += weights[i] *
+			(static_cast<double>(node_values[neighborhood[i]]) - known_mean);
+	}
+	if (!std::isfinite(estimate)) {
+		unconditional_fallback("kriging estimate is non-finite");
+		return;
 	}
 
-	// Kriging estimate at 0: z* = sum_i λ_i * z_i
-	float estimate = 0.f;
-	for (int i = 0; i < K; ++i) estimate += w[i] * node_values[neighborhood[i]];
-	val_estimation = estimate;
+	// 6) Simple-kriging variance: sigma_K^2 = C(0) - lambda^T c0.
+	double variance = zero_lag_variance;
+	for (int i = 0; i < K; ++i) {
+		variance -= weights[i] * covariance_to_target[i];
+	}
+	if (!std::isfinite(variance)) {
+		unconditional_fallback("kriging variance is non-finite");
+		return;
+	}
 
-	// Kriging variance: σ² = γ(0) - sum_i λ_i * γ(h_i0) - μ  (γ(0) = 0 by definition)
-	float cross = 0.f;
-	for (int i = 0; i < K; ++i) cross += w[i] * rhs[i];
-	float mu = w[K];
-	var_estimation = std::max(0.f, -cross - mu);
+	val_estimation = static_cast<float>(estimate);
+	var_estimation = static_cast<float>(std::max(0.0, variance));
 }
 
 void kriging_in_point(
@@ -439,7 +873,8 @@ void kriging_in_point(
 		}
 
 		float a = vario_range;
-		float C = vario_sill;
+		const float supplied_sill = vario_sill;
+		float C = static_cast<float>(active_zero_lag_variance(vario_sill));
 		float C0 = vario_nugget;
 
 		// Fill matrix of variogram values
@@ -449,7 +884,7 @@ void kriging_in_point(
 				local_mat_vario_values[0][j] = 0.;
 			}
 			else {
-				local_mat_vario_values[0][j] = variogram_value(h, C, C0, a, vario_model);
+				local_mat_vario_values[0][j] = variogram_value(h, supplied_sill, C0, a, vario_model);
 			}
 			local_mat_vario_values[j][0] = local_mat_vario_values[0][j];
 		}
@@ -461,7 +896,7 @@ void kriging_in_point(
 					local_mat_vario_values[i][j] = 0.;
 				}
 				else {
-					local_mat_vario_values[i][j] = variogram_value(h, C, C0, a, vario_model);
+					local_mat_vario_values[i][j] = variogram_value(h, supplied_sill, C0, a, vario_model);
 				}
 				local_mat_vario_values[j][i] = local_mat_vario_values[i][j];
 			}
@@ -496,7 +931,7 @@ void kriging_in_point(
 
 		if (!invert_success) {
 			// Handle inversion failure
-				return;
+			return;
 		}
 
 		for (int i = 0; i < nb_neigh; ++i) {
@@ -1005,17 +1440,18 @@ std::vector<float> compute_upstream_curvilinear_length(
 //     * dcurv: total upstream curvilinear length
 //   Both are normalized to [0,1] on the fitting subset.
 // - Redundancy weights:
-//     * 1D binning along the main active axis (priority: dcurv, else zwt)
-//     * individual weight w_i ∝ 1 / (#points in the bin of i), then renormalized to mean=1
-// - Class-balance weighting (NEW):
+//     * local-density weighting in the joint normalized predictor space when
+//       zwt and dcurv are both active, or along the single active predictor
+// - Class-balance weighting:
 //     * Within the current fitting subset, split total weight mass 50/50
 //       between samples located at spring positions (SPRINGS) and all others (OTHERS).
-//     * Uses exact proximity test with tolerance EPS = 1e-5 on (x,y,z),
+//     * Uses exact proximity test with tolerance EPS = 1e-2 on (x,y,z),
 //       via KarstNSim::magnitude(P - S) <= EPS.
 // - Outlier rejection (hard 0/1):
-//     * compute residuals r_i on the current fit
+//     * compute leave-one-out residuals whenever removal preserves the inlet
+//       and outlet boundary classes and leaves a solvable regression
 //     * robust scale via MAD (sigma = 1.4826 * median(|r_i|))
-//     * reject i if |r_i| / sigma > C_CUTOFF (Tukey-like hard threshold)
+//     * reject testable observations if |r_i| / sigma > C_CUTOFF
 //     * refit on survivors ONLY and RECOMPUTE redundancy + class-balance weights on survivors
 // - Geological sign checks:
 //     * β_zwt < 0 expected (larger radii near water table, zwt decreases)
@@ -1032,6 +1468,7 @@ std::vector<float> compute_external_drift(
 	const bool& use_drift_zwt,
 	const bool& use_drift_curv,
 	const std::vector<float>& eq_radius_values,
+	const std::vector<ConditioningDataRole>& conditioning_roles,
 	std::vector<float>& weights_out)
 {
 
@@ -1054,18 +1491,23 @@ std::vector<float> compute_external_drift(
 		dcurv = compute_upstream_curvilinear_length(curve, springs_xyz);
 	}
 
+	auto conditioning_role_at = [&](const int node_id) -> ConditioningDataRole {
+		if (node_id >= 0 && node_id < static_cast<int>(conditioning_roles.size())) {
+			return conditioning_roles[node_id];
+		}
+		return ConditioningDataRole::None;
+	};
+
 	// ---- 1) Collect observed nodes (non-NDV eq_radius) ------------------------
-
-	const float RADIUS_MAX_FOR_REGRESSION = 2.1f;  // observations with radius > max are excluded (typically ghost-rocks ; to be modified according to need)
-
 	std::vector<int> valid_indices;
 	valid_indices.reserve(N);
 	for (int i = 0; i < N; ++i) {
-		// Keep only finite, non-NDV radii AND enforce radius <= threshold
 		if (i < (int)eq_radius_values.size()) {
 			const float r = eq_radius_values[i];
 			const bool has_data = (std::abs(r - (-99999.0f)) > 1e-12f);
-			if (has_data && r <= RADIUS_MAX_FOR_REGRESSION) {
+			const bool pass_radius_cap =
+				(!K_EXT_DRIFT_ENABLE_RADIUS_CAP || r <= K_RADIUS_MAX_FOR_REGRESSION);
+			if (has_data && pass_radius_cap) {
 				valid_indices.push_back(i);
 			}
 		}
@@ -1075,14 +1517,6 @@ std::vector<float> compute_external_drift(
 	if (n_obs == 0 || (!use_drift_zwt && !use_drift_curv)) {
 		weights_out.assign(N, 0.0f);
 		return drift;
-	}
-
-	// ---- Per-observation listing -------------------------
-	// For each observed datum, report zwt & dcurv used by the regression. 
-	for (int id : valid_indices) {
-		const Vector3& P = curve->nodes[id].p;
-		const float z_val = use_drift_zwt ? zwt[id] : 0.0f;
-		const float d_val = use_drift_curv ? dcurv[id] : 0.0f;
 	}
 
 	// ---- Helpers ---------------------------------------------------------------
@@ -1096,28 +1530,78 @@ std::vector<float> compute_external_drift(
 		return std::make_pair(vmin, vmax);
 	};
 
-	auto redundancy_weights = [&](const std::vector<int>& idxs, const std::vector<float>& axis01) {
+	auto redundancy_weights = [&](const std::vector<int>& idxs,
+		bool use_zwt, bool use_dcurv,
+		const float& zwt_min, const float& zwt_max,
+		const float& dcurv_min, const float& dcurv_max) {
 		const int M = static_cast<int>(idxs.size());
 		std::vector<float> w(M, 1.0f);
-		if (M <= 1) return w;
+		if (M <= 1 || (!use_zwt && !use_dcurv)) return w;
 
-		std::vector<std::pair<float, int>> order; order.reserve(M);
-		for (int k = 0; k < M; ++k) order.emplace_back(axis01[k], k);
-		std::sort(order.begin(), order.end());
+		std::vector<float> z01;
+		std::vector<float> d01;
+		z01.reserve(M);
+		d01.reserve(M);
+
+		if (use_zwt) {
+			const float rng = std::max(1e-12f, zwt_max - zwt_min);
+			for (int id : idxs) z01.push_back((zwt[id] - zwt_min) / rng);
+		}
+		if (use_dcurv) {
+			const float rng = std::max(1e-12f, dcurv_max - dcurv_min);
+			for (int id : idxs) d01.push_back((dcurv[id] - dcurv_min) / rng);
+		}
 
 		const int K = std::max(1, std::min(8, M / 10));
-		for (int t = 0; t < M; ++t) {
-			const int k0 = order[t].second;
-			int kL = std::max(0, t - K), kR = std::min(M - 1, t + K);
-			float acc = 0.0f, norm = 0.0f;
-			for (int s = kL; s <= kR; ++s) {
-				const float d = std::abs(order[s].first - order[t].first);
-				const float ker = std::max(0.0f, 1.0f - d); // triangular kernel
-				acc += ker; norm += 1.0f;
+
+		if (use_zwt && use_dcurv) {
+			const int local_count = std::min(M, 2 * K + 1);
+			for (int k = 0; k < M; ++k) {
+				std::vector<std::pair<float, int>> local_dist;
+				local_dist.reserve(M);
+
+				for (int s = 0; s < M; ++s) {
+					const float dz = z01[s] - z01[k];
+					const float dd = d01[s] - d01[k];
+					local_dist.emplace_back(std::sqrt(dz * dz + dd * dd), s);
+				}
+
+				std::sort(local_dist.begin(), local_dist.end());
+
+				float acc = 0.0f, norm = 0.0f;
+				for (int s = 0; s < local_count; ++s) {
+					const float distance = local_dist[s].first;
+					const float kernel = std::max(0.0f, 1.0f - distance);
+					acc += kernel;
+					norm += 1.0f;
+				}
+				const float density = (norm > 0.0f ? acc / norm : 1.0f);
+				w[k] = 1.0f / (1.0f + density);
 			}
-			const float dens = (norm > 0.0f ? acc / norm : 1.0f);
-			w[k0] = 1.0f / (1.0f + dens);
 		}
+		else {
+			const std::vector<float>& axis01 = use_dcurv ? d01 : z01;
+			std::vector<std::pair<float, int>> order;
+			order.reserve(M);
+			for (int k = 0; k < M; ++k) order.emplace_back(axis01[k], k);
+			std::sort(order.begin(), order.end());
+
+			for (int t = 0; t < M; ++t) {
+				const int k0 = order[t].second;
+				const int kL = std::max(0, t - K);
+				const int kR = std::min(M - 1, t + K);
+				float acc = 0.0f, norm = 0.0f;
+				for (int s = kL; s <= kR; ++s) {
+					const float distance = std::abs(order[s].first - order[t].first);
+					const float kernel = std::max(0.0f, 1.0f - distance);
+					acc += kernel;
+					norm += 1.0f;
+				}
+				const float density = (norm > 0.0f ? acc / norm : 1.0f);
+				w[k0] = 1.0f / (1.0f + density);
+			}
+		}
+
 		float wmin = *std::min_element(w.begin(), w.end());
 		float wmax = *std::max_element(w.begin(), w.end());
 		for (float& wi : w) {
@@ -1138,23 +1622,19 @@ std::vector<float> compute_external_drift(
 		if (use_zwt)   std::tie(zwt_min, zwt_max) = compute_minmax_on(zwt, idxs);
 		if (use_dcurv) std::tie(dcurv_min, dcurv_max) = compute_minmax_on(dcurv, idxs);
 
-		// Axis used for redundancy weighting (priority: dcurv, else zwt), all in [0,1]
-		std::vector<float> axis01; axis01.reserve(idxs.size());
-		if (use_dcurv) {
-			const float rng = std::max(1e-12f, dcurv_max - dcurv_min);
-			for (int id : idxs) axis01.push_back((dcurv[id] - dcurv_min) / rng);
-		}
-		else if (use_zwt) {
-			const float rng = std::max(1e-12f, zwt_max - zwt_min);
-			for (int id : idxs) axis01.push_back((zwt[id] - zwt_min) / rng);
-		}
-		out_weights = redundancy_weights(idxs, axis01); // base redundancy weights
+		out_weights = redundancy_weights(
+			idxs,
+			use_zwt,
+			use_dcurv,
+			zwt_min,
+			zwt_max,
+			dcurv_min,
+			dcurv_max);
 
 		// === Class-balance 50/50 (SPRINGS vs OTHERS), exact proximity (EPS=1e-2) ===
 		const float SPR_EPS = 1e-2f;
 		float Wspr = 0.0f, Woth = 0.0f;
-		size_t Nspr = 0, Noth = 0;
-		std::vector<uint8_t> is_spring(idxs.size(), 0); // <-- FIXED: idxs.size()
+		std::vector<uint8_t> is_spring(idxs.size(), 0);
 		for (size_t k = 0; k < idxs.size(); ++k) {
 			const int id = idxs[k];
 			const Vector3& p = curve->nodes[id].p;
@@ -1162,13 +1642,12 @@ std::vector<float> compute_external_drift(
 			bool sflag = false;
 			for (size_t si = 0; si < springs_xyz.size(); ++si) {
 				const float dist = KarstNSim::magnitude(p - springs_xyz[si]);
-				// Verbose diagnostic: log magnitude for each pair tested
 				if (dist <= SPR_EPS) { sflag = true; break; }
 			}
 
 			is_spring[k] = sflag ? 1u : 0u;
-			if (sflag) { Wspr += out_weights[k]; ++Nspr; }
-			else { Woth += out_weights[k]; ++Noth; }
+			if (sflag) Wspr += out_weights[k];
+			else Woth += out_weights[k];
 		}
 		const float Wtot = Wspr + Woth;
 		if (Wspr > 0.0f && Woth > 0.0f) {
@@ -1212,6 +1691,35 @@ std::vector<float> compute_external_drift(
 		return true;
 	};
 
+	auto predict_with_beta = [&](const int node_id,
+		const std::vector<float>& beta_local,
+		const bool use_zwt_local,
+		const bool use_dcurv_local,
+		const float zwt_min_local,
+		const float zwt_max_local,
+		const float dcurv_min_local,
+		const float dcurv_max_local) -> float
+	{
+		float prediction = beta_local[0];
+		int coefficient_index = 1;
+
+		if (use_zwt_local) {
+			const float normalized_zwt =
+				(zwt[node_id] - zwt_min_local) /
+				std::max(1e-12f, zwt_max_local - zwt_min_local);
+			prediction += beta_local[coefficient_index++] * normalized_zwt;
+		}
+
+		if (use_dcurv_local) {
+			const float normalized_dcurv =
+				(dcurv[node_id] - dcurv_min_local) /
+				std::max(1e-12f, dcurv_max_local - dcurv_min_local);
+			prediction += beta_local[coefficient_index++] * normalized_dcurv;
+		}
+
+		return prediction;
+	};
+
 	// ---- 2) Initial fit --------------------------------------------------------
 	float zwt_min = 0.0f, zwt_max = 1.0f, dcurv_min = 0.0f, dcurv_max = 1.0f;
 	std::vector<float> beta, weights_obs;
@@ -1235,6 +1743,42 @@ std::vector<float> compute_external_drift(
 		if (!(b_dc > 0.0f)) drift_valid_dcurv = false;
 	}
 
+	const bool drift_flags_changed =
+		(drift_valid_zwt != use_drift_zwt || drift_valid_dcurv != use_drift_curv);
+
+	// Refit after a geological-sign rejection so that the retained coefficients
+	// and normalization ranges are estimated with exactly the active predictors.
+	if (drift_flags_changed && (drift_valid_zwt || drift_valid_dcurv)) {
+		std::vector<float> beta_reduced;
+		std::vector<float> weights_reduced;
+		float zwt_min_reduced = zwt_min;
+		float zwt_max_reduced = zwt_max;
+		float dcurv_min_reduced = dcurv_min;
+		float dcurv_max_reduced = dcurv_max;
+
+		if (!fit_on_subset(
+			valid_indices,
+			drift_valid_zwt,
+			drift_valid_dcurv,
+			beta_reduced,
+			weights_reduced,
+			zwt_min_reduced,
+			zwt_max_reduced,
+			dcurv_min_reduced,
+			dcurv_max_reduced))
+		{
+			weights_out.assign(N, 0.0f);
+			return drift;
+		}
+
+		beta = beta_reduced;
+		weights_obs = weights_reduced;
+		zwt_min = zwt_min_reduced;
+		zwt_max = zwt_max_reduced;
+		dcurv_min = dcurv_min_reduced;
+		dcurv_max = dcurv_max_reduced;
+	}
+
 	auto has_nonzero_slope = [&](const std::vector<float>& b, bool vz, bool vd) -> bool {
 		if (vz) { if (std::abs(b[1]) > 1e-6f) return true; }
 		if (vd) { const int i2 = vz ? 2 : 1; if (std::abs(b[i2]) > 1e-6f) return true; }
@@ -1246,40 +1790,144 @@ std::vector<float> compute_external_drift(
 	}
 
 	// ---- 4) Trimming + optional refit (MAD / Tukey) ---------------------------
-	std::vector<float> residuals_cur; residuals_cur.reserve(n_obs);
-	for (int id : valid_indices) {
-		float yhat = beta[0];
-		int bi = 1;
-		if (drift_valid_zwt) { const float z01 = (zwt[id] - zwt_min) / std::max(1e-12f, (zwt_max - zwt_min));   yhat += beta[bi++] * z01; }
-		if (drift_valid_dcurv) { const float d01 = (dcurv[id] - dcurv_min) / std::max(1e-12f, (dcurv_max - dcurv_min)); yhat += beta[bi++] * d01; }
-		residuals_cur.push_back(eq_radius_values[id] - yhat);
-	}
+	if (K_EXT_DRIFT_ENABLE_MAD_TRIMMING) {
+		int n_inlets = 0;
+		int n_outlets = 0;
+		for (const int id : valid_indices) {
+			const ConditioningDataRole role = conditioning_role_at(id);
+			if (role == ConditioningDataRole::Inlet) ++n_inlets;
+			else if (role == ConditioningDataRole::Outlet) ++n_outlets;
+		}
 
-	std::vector<float> absr = residuals_cur;
-	for (float& v : absr) v = std::abs(v);
-	std::nth_element(absr.begin(), absr.begin() + absr.size() / 2, absr.end());
-	const float mad = absr[absr.size() / 2];
-	const float sigma = std::max(1e-6f, 1.4826f * mad);
+		const int n_var_cur =
+			1 + (drift_valid_zwt ? 1 : 0) + (drift_valid_dcurv ? 1 : 0);
+		std::vector<float> residuals_cur;
+		residuals_cur.reserve(n_obs);
+		std::vector<uint8_t> residual_is_testable;
+		residual_is_testable.reserve(n_obs);
 
-	const float C_CUTOFF = 4.685f;
-	std::vector<int> survivors; survivors.reserve(n_obs);
-	for (int k = 0; k < n_obs; ++k) {
-		const float ui = std::abs(residuals_cur[k]) / sigma;
-		if (ui <= C_CUTOFF) survivors.push_back(valid_indices[k]);
-	}
+		for (const int id : valid_indices) {
+			const ConditioningDataRole role = conditioning_role_at(id);
+			bool loo_allowed = true;
+			if (role == ConditioningDataRole::Inlet && n_inlets <= 1) {
+				loo_allowed = false;
+			}
+			if (role == ConditioningDataRole::Outlet && n_outlets <= 1) {
+				loo_allowed = false;
+			}
 
-	const int n_var_cur = 1 + (drift_valid_zwt ? 1 : 0) + (drift_valid_dcurv ? 1 : 0);
-	if ((int)survivors.size() >= n_var_cur + 1 && (int)survivors.size() < n_obs) {
-		std::vector<float> beta2, weights_obs2;
-		float zwt_min2 = zwt_min, zwt_max2 = zwt_max, dcurv_min2 = dcurv_min, dcurv_max2 = dcurv_max;
-		if (fit_on_subset(survivors, drift_valid_zwt, drift_valid_dcurv,
-			beta2, weights_obs2, zwt_min2, zwt_max2, dcurv_min2, dcurv_max2))
-		{
-			beta = beta2;
-			zwt_min = zwt_min2; zwt_max = zwt_max2;
-			dcurv_min = dcurv_min2; dcurv_max = dcurv_max2;
-			weights_obs = weights_obs2;
-			valid_indices = survivors;
+			std::vector<int> loo_indices;
+			loo_indices.reserve(
+				valid_indices.empty() ? 0 : valid_indices.size() - 1);
+			for (const int other_id : valid_indices) {
+				if (other_id != id) loo_indices.push_back(other_id);
+			}
+			if (static_cast<int>(loo_indices.size()) < n_var_cur) {
+				loo_allowed = false;
+			}
+
+			float residual = 0.0f;
+			bool used_loo = false;
+			if (loo_allowed) {
+				std::vector<float> beta_loo;
+				std::vector<float> weights_loo;
+				float zwt_min_loo = zwt_min;
+				float zwt_max_loo = zwt_max;
+				float dcurv_min_loo = dcurv_min;
+				float dcurv_max_loo = dcurv_max;
+
+				if (fit_on_subset(
+					loo_indices,
+					drift_valid_zwt,
+					drift_valid_dcurv,
+					beta_loo,
+					weights_loo,
+					zwt_min_loo,
+					zwt_max_loo,
+					dcurv_min_loo,
+					dcurv_max_loo))
+				{
+					const float prediction_loo = predict_with_beta(
+						id,
+						beta_loo,
+						drift_valid_zwt,
+						drift_valid_dcurv,
+						zwt_min_loo,
+						zwt_max_loo,
+						dcurv_min_loo,
+						dcurv_max_loo);
+					residual = eq_radius_values[id] - prediction_loo;
+					used_loo = true;
+				}
+			}
+
+			if (!used_loo) {
+				const float prediction_full = predict_with_beta(
+					id,
+					beta,
+					drift_valid_zwt,
+					drift_valid_dcurv,
+					zwt_min,
+					zwt_max,
+					dcurv_min,
+					dcurv_max);
+				residual = eq_radius_values[id] - prediction_full;
+			}
+
+			residuals_cur.push_back(residual);
+			residual_is_testable.push_back(used_loo ? 1u : 0u);
+		}
+
+		std::vector<float> absolute_residuals = residuals_cur;
+		for (float& value : absolute_residuals) value = std::abs(value);
+		std::nth_element(
+			absolute_residuals.begin(),
+			absolute_residuals.begin() + absolute_residuals.size() / 2,
+			absolute_residuals.end());
+		const float mad = absolute_residuals[absolute_residuals.size() / 2];
+		const float sigma = std::max(1e-6f, 1.4826f * mad);
+
+		// Two-sided central Gaussian compatibility interval of approximately 80%.
+		const float C_CUTOFF = 1.28f;
+		std::vector<int> survivors;
+		survivors.reserve(n_obs);
+		for (int observation = 0; observation < n_obs; ++observation) {
+			const float standardized_residual =
+				std::abs(residuals_cur[observation]) / sigma;
+			if (!residual_is_testable[observation] ||
+				standardized_residual <= C_CUTOFF) {
+				survivors.push_back(valid_indices[observation]);
+			}
+		}
+
+		if (static_cast<int>(survivors.size()) >= n_var_cur &&
+			static_cast<int>(survivors.size()) < n_obs) {
+			std::vector<float> beta_refit;
+			std::vector<float> weights_refit;
+			float zwt_min_refit = zwt_min;
+			float zwt_max_refit = zwt_max;
+			float dcurv_min_refit = dcurv_min;
+			float dcurv_max_refit = dcurv_max;
+
+			if (fit_on_subset(
+				survivors,
+				drift_valid_zwt,
+				drift_valid_dcurv,
+				beta_refit,
+				weights_refit,
+				zwt_min_refit,
+				zwt_max_refit,
+				dcurv_min_refit,
+				dcurv_max_refit))
+			{
+				beta = beta_refit;
+				weights_obs = weights_refit;
+				zwt_min = zwt_min_refit;
+				zwt_max = zwt_max_refit;
+				dcurv_min = dcurv_min_refit;
+				dcurv_max = dcurv_max_refit;
+				valid_indices = survivors;
+			}
 		}
 	}
 
@@ -1324,6 +1972,20 @@ void SGS3(
 	const int& number_max_of_neighborhood_points,
 	const int& nb_points_interbranch,
 	const float& proportion_interbranch) {
+
+	if (simulation_distribution == nullptr ||
+		simulation_distribution->size() < 2u) {
+		throw std::invalid_argument(
+			"SGS requires a simulation distribution containing at least two values."
+		);
+	}
+
+	std::unique_ptr<NormalScoreVariogramConverter> variogram_converter;
+	if (!K_VARIOGRAM_PARAMETERS_ARE_ALREADY_GAUSSIAN) {
+		variogram_converter = std::make_unique<NormalScoreVariogramConverter>(
+			*simulation_distribution);
+	}
+	ScopedVariogramConverter scoped_variogram_converter(variogram_converter.get());
 
 	// 1) Perform Normal Score Transform of initial distrib AND initial data vector
 	std::vector<float> simulated_prop_gauss;
@@ -1378,9 +2040,22 @@ void SGS3(
 		}
 
 		if (n_outside > 0) {
+			const Vector3& offending_point = curve->nodes.at(first_idx).p;
+
 			throw std::runtime_error(
-				"Sequential Gaussian Simulation aborted: at least one conditioning datum lies outside "
-				"the support of the initial simulation distribution. Please change the initial distribution accordingly."
+				"Sequential Gaussian Simulation aborted: conditioning value " +
+				std::to_string(first_val) +
+				" at skeleton node index " + std::to_string(first_idx) +
+				" (zero-based; X=" + std::to_string(offending_point.x) +
+				", Y=" + std::to_string(offending_point.y) +
+				", Z=" + std::to_string(offending_point.z) +
+				") lies outside the support [" +
+				std::to_string(sim_min) + ", " +
+				std::to_string(sim_max) +
+				"] of the initial simulation distribution. " +
+				"Total number of out-of-support conditioning data: " +
+				std::to_string(n_outside) +
+				". Please extend or change the initial simulation distribution accordingly."
 			);
 		}
 	}
@@ -1427,12 +2102,12 @@ void SGS3(
 				interbranch_range_of_neighborhood
 			);
 
-			if (!neighbors_interbranch.empty()) { // if we had a neighborhood, we simulate value from estimated (kriged) value
+			if (!neighbors_interbranch.empty() && std::isfinite(var_estimation)) { // conditional kriging succeeded
 				var_estimation = (var_estimation < 0.) ? 0. : var_estimation; // due to numerical uncertainties, var estimation can sometimes be slightly negative.
 				float simulated_val = generateNormalRandom(val_estimation, std::sqrt(var_estimation));
 				simulated_prop_gauss.at(nodes_to_simulate.at(i)) = simulated_val;
 			}
-			else { // if the neighborhood was empty, we simply sampled a value from the distribution
+			else { // empty neighborhood or failed solve: use the single unconditional draw
 				simulated_prop_gauss.at(nodes_to_simulate.at(i)) = val_estimation;
 			}
 		}
@@ -1472,12 +2147,12 @@ void SGS3(
 			);
 
 
-			if (!neighbors_intrabranch.empty()) {
+			if (!neighbors_intrabranch.empty() && std::isfinite(var_estimation)) {
 				var_estimation = (var_estimation < 0.) ? 0. : var_estimation;// due to numerical uncertainties, var estimation can sometimes be slightly negative.
 				float simulated_val = generateNormalRandom(val_estimation, std::sqrt(var_estimation));
 				simulated_prop_gauss.at(nodes_to_simulate.at(i)) = simulated_val;
 			}
-			else {
+			else { // empty neighborhood or failed solve: use the single unconditional draw
 				simulated_prop_gauss.at(nodes_to_simulate.at(i)) = val_estimation;
 			}
 		}
@@ -1511,12 +2186,12 @@ void SGS3(
 			global_range_of_neighborhood
 		);
 
-		if (!neighbors_global.empty()) {
+		if (!neighbors_global.empty() && std::isfinite(var_estimation_global)) {
 			var_estimation_global = (var_estimation_global < 0.) ? 0. : var_estimation_global;// due to numerical uncertainties, var estimation can sometimes be slightly negative.
 			float simulated_val_global = generateNormalRandom(val_estimation_global, std::sqrt(var_estimation_global));
 			simulated_prop_gauss.at(nodes_to_simulate_global.at(i)) = simulated_val_global;
 		}
-		else {
+		else { // empty neighborhood or failed solve: use the single unconditional draw
 			simulated_prop_gauss.at(nodes_to_simulate_global.at(i)) = val_estimation_global;
 		}
 	}
@@ -1569,6 +2244,7 @@ void SGS3_with_external_drift(
 	const KarstNSim::KarsticSkeleton* curve,
 	const std::vector<Vector3>& springs_xyz,
 	std::vector<float>& simulated_property,
+	const std::vector<ConditioningDataRole>& conditioning_roles,
 	const std::vector<float>* simulation_distribution,
 	const float& global_vario_range,
 	const float& global_range_of_neighborhood,
@@ -1602,6 +2278,7 @@ void SGS3_with_external_drift(
 		use_drift_zwt,
 		use_drift_curv,
 		simulated_property,
+		conditioning_roles,
 		weights_output
 	);
 	drift_output = drift;
@@ -1609,29 +2286,29 @@ void SGS3_with_external_drift(
 	bool drift_disabled = std::all_of(drift.begin(), drift.end(),
 		[](float v) { return std::abs(v) < 1e-8f; });
 	if (drift_disabled) {
-			SGS3(
-				curve,
-				simulated_property,
-				simulation_distribution,
-				global_vario_range,
-				global_range_of_neighborhood,
-				global_vario_sill,
-				global_vario_nugget,
-				global_vario_model,
-				interbranch_vario_range,
-				interbranch_range_of_neighborhood,
-				interbranch_vario_sill,
-				interbranch_vario_nugget,
-				interbranch_vario_model,
-				intrabranch_vario_range,
-				intrabranch_range_of_neighborhood,
-				intrabranch_vario_sill,
-				intrabranch_vario_nugget,
-				intrabranch_vario_model,
-				number_max_of_neighborhood_points,
-				nb_points_interbranch,
-				proportion_interbranch
-			);
+		SGS3(
+			curve,
+			simulated_property,
+			simulation_distribution,
+			global_vario_range,
+			global_range_of_neighborhood,
+			global_vario_sill,
+			global_vario_nugget,
+			global_vario_model,
+			interbranch_vario_range,
+			interbranch_range_of_neighborhood,
+			interbranch_vario_sill,
+			interbranch_vario_nugget,
+			interbranch_vario_model,
+			intrabranch_vario_range,
+			intrabranch_range_of_neighborhood,
+			intrabranch_vario_sill,
+			intrabranch_vario_nugget,
+			intrabranch_vario_model,
+			number_max_of_neighborhood_points,
+			nb_points_interbranch,
+			proportion_interbranch
+		);
 		return; // no recomposition residual + drift
 	}
 	// === 3) Compute residuals on observed nodes: Re(x) - m(x) ===
@@ -1703,5 +2380,3 @@ void SGS3_with_external_drift(
 		}
 	}
 }
-
-

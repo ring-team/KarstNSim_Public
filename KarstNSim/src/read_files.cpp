@@ -9,178 +9,310 @@ If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
 ***************************************************************/
 
 #include "KarstNSim/read_files.h"
+#include <utility>
 
 namespace KarstNSim {
-	void load_point(const std::string& file_name, const std::string& save_directory, Vector3& u, std::vector<float>& properties)
+	void load_point(
+		const std::string& file_name,
+		const std::string& save_directory,
+		Vector3& u,
+		std::vector<float>& properties)
 	{
-		//(std::vector<Vector3>, std::vector<Triangle>)
+		const std::string full_name = save_directory + "/" + file_name;
+		std::ifstream input(full_name);
+		if (!input.is_open()) {
+			throw std::runtime_error("[load_point] Cannot open file: " + full_name);
+		}
+
 		std::string line;
-		std::string full_name = save_directory + "/" + file_name;
-		std::ifstream in(full_name);
+		if (!std::getline(input, line)) {
+			throw std::runtime_error("[load_point] Empty file: " + full_name);
+		}
 
-		//get property size
+		std::istringstream header_stream(line);
+		std::vector<std::string> header_tokens;
+		std::string token;
+		while (header_stream >> token) {
+			header_tokens.push_back(token);
+		}
+		if (header_tokens.size() < 4u) {
+			throw std::runtime_error(
+				"[load_point] Invalid header in " + full_name +
+				": expected at least Index, X, Y, and Z."
+			);
+		}
+		const std::size_t property_count = header_tokens.size() - 4u;
 
-		std::getline(in, line); // skip first line, which is a header !
-		std::getline(in, line);
-		std::stringstream iss;
-		iss << line;
-		int nb_columns = 0;
-		std::string value;
-		while (iss >> value) nb_columns++;
-		int prop_size = nb_columns - 4;
-		// don't forget to reset to beginning, to not skip first line after header!
-		in.clear();                 // clear fail and eof bits
-		in.seekg(0, std::ios::beg); // back to the start!
-
-		// go through lines
-
-		std::getline(in, line); // skip first line, which is a header !
-		while (std::getline(in, line)) { // get line
-			std::istringstream iss2(line);
-			// initialize all params of each line
-			int idx;
-			float x, y, z;
-			std::vector<float> prop(prop_size, 0.);
-			// and get their values
-			iss2 >> idx >> x >> y >> z;
-			// iterate on property size to get the rest
-			for (int k = 0; k < prop_size; k++) {
-				iss2 >> prop[k];
+		bool point_read = false;
+		std::size_t line_number = 1;
+		while (std::getline(input, line)) {
+			++line_number;
+			if (line.find_first_not_of(" \t\r\n") == std::string::npos) {
+				continue;
 			}
-			u = Vector3(x, y, z);
-			properties = prop;
-		}
-		in.close();
-	}
+			if (point_read) {
+				throw std::runtime_error(
+					"[load_point] More than one data row was found in " + full_name +
+					"; a point file must contain exactly one point."
+				);
+			}
 
-	void load_surface(const std::string& file_name, const std::string& save_directory, Surface& s, std::vector<std::vector<float>>& properties)
-	{
-		std::string line;
-		std::string full_name = save_directory + "/" + file_name;
-		std::ifstream in(full_name);
+			std::istringstream data_stream(line);
+			int index = 0;
+			float x = 0.0f;
+			float y = 0.0f;
+			float z = 0.0f;
+			if (!(data_stream >> index >> x >> y >> z)) {
+				throw std::runtime_error(
+					"[load_point] Invalid point row in " + full_name + " at line " +
+					std::to_string(line_number) + "."
+				);
+			}
 
-		if (!in.is_open()) {
-			std::cerr << "Error opening file: " << full_name << std::endl;
-			std::cerr << "Reason: " << strerror(errno) << std::endl;
-			throw std::runtime_error("File not found: " + full_name);
-		}
-
-		// Skip headers and get the number of columns
-		std::getline(in, line); // skip first line (header)
-		std::getline(in, line); // read the second line for property size calculation
-		std::stringstream iss;
-		iss << line;
-		int nb_columns = 0;
-		std::string value;
-		while (iss >> value) nb_columns++;
-		int prop_size = nb_columns - 5; // Adjust according to actual properties
-
-		in.clear(); // clear eof flag
-		in.seekg(0, std::ios::beg); // back to the start
-
-		// Prepare to read data
-		std::vector<Vector3> nodes;
-		std::vector<Triangle> trgls;
-		std::string tag;
-
-		std::getline(in, line); // Skip the header line
-
-		int line_count = 0;
-		while (std::getline(in, line)) {
-			std::istringstream iss2(line);
-			iss2 >> tag;
-
-			if (tag == "VRTX") { // If we're reading the vertices
-				int idx;
-				float x, y, z;
-				std::vector<float> prop(prop_size, 0.);
-				iss2 >> idx >> x >> y >> z;
-
-				for (int k = 0; k < prop_size; k++) {
-					iss2 >> prop[k];
+			std::vector<float> parsed_properties(property_count, 0.0f);
+			for (std::size_t i = 0; i < property_count; ++i) {
+				if (!(data_stream >> parsed_properties[i])) {
+					throw std::runtime_error(
+						"[load_point] Missing property value in " + full_name +
+						" at line " + std::to_string(line_number) + "."
+					);
 				}
-				Vector3 v(x, y, z);
-				nodes.push_back(v);
-				properties.push_back(prop);
 			}
-			else if (tag == "TRGL") { // When vertices have been read, we now have to read the triangles
-				int idx;
-				int id1, id2, id3;
-				iss2 >> idx >> id1 >> id2 >> id3;
-				Triangle tgl(id1, id2, id3);
-				trgls.push_back(tgl);
+			std::string extra;
+			if (data_stream >> extra) {
+				throw std::runtime_error(
+					"[load_point] Unexpected extra token '" + extra + "' in " +
+					full_name + " at line " + std::to_string(line_number) + "."
+				);
 			}
-			line_count++;
+
+			u = Vector3(x, y, z);
+			properties = std::move(parsed_properties);
+			point_read = true;
 		}
 
-		s = Surface(nodes, trgls);
-		in.close();
+		if (!point_read) {
+			throw std::runtime_error("[load_point] No point row was found in " + full_name + ".");
+		}
 	}
 
-	void load_pointset(const std::string& file_name, const std::string& save_directory, std::vector<Vector3>& pset, std::vector<std::vector<float>>& properties)
+	void load_surface(
+		const std::string& file_name,
+		const std::string& save_directory,
+		Surface& s,
+		std::vector<std::vector<float>>& properties)
 	{
+		const std::string full_name = save_directory + "/" + file_name;
+		std::ifstream input(full_name);
+		if (!input.is_open()) {
+			throw std::runtime_error("[load_surface] Cannot open file: " + full_name);
+		}
+
 		std::string line;
-		std::string full_name = save_directory + "/" + file_name;
-		std::ifstream in(full_name);
-
-		if (!in.is_open()) {
-			std::cerr << "Error opening file: " << full_name << std::endl;
-			std::cerr << "Reason: " << strerror(errno) << std::endl;
-			throw std::runtime_error("File not found: " + full_name);
+		if (!std::getline(input, line)) {
+			throw std::runtime_error("[load_surface] Empty file: " + full_name);
 		}
 
-		// Count total number of lines in the file
-		int total_lines = 0;
-		while (std::getline(in, line)) {
-			total_lines++;
+		std::istringstream header_stream(line);
+		std::vector<std::string> header_tokens;
+		std::string token;
+		while (header_stream >> token) {
+			header_tokens.push_back(token);
 		}
-		in.clear(); // clear eof flag
-		in.seekg(0, std::ios::beg); // back to the start
+		if (header_tokens.size() < 5u) {
+			throw std::runtime_error(
+				"[load_surface] Invalid header in " + full_name +
+				": expected at least Type, Index, X, Y, and Z."
+			);
+		}
+		const std::size_t property_count = header_tokens.size() - 5u;
 
-		// Skip headers and get the number of columns
-		std::getline(in, line); // skip first line (header)
-		std::getline(in, line); // read the second line for property size calculation
-		std::stringstream iss;
-		iss << line;
-		int nb_columns = 0;
-		std::string value;
-		while (iss >> value) nb_columns++;
-		int prop_size = nb_columns - 4; // Adjust according to actual properties
+		std::vector<Vector3> nodes;
+		std::vector<Triangle> triangles;
+		properties.clear();
 
-		// Calculate the number of lines to be processed
-		int data_lines = total_lines - 1; // minus 1 header
-
-		in.clear(); // clear eof flag
-		in.seekg(0, std::ios::beg); // back to the start
-
-		// Resize properties based on the number of data lines
-		properties.resize(data_lines);
-
-		// Prepare to read data
-		std::getline(in, line); // Skip the header line
-
-		int line_count = 0;
-		while (std::getline(in, line) && line_count < data_lines) {
-			std::istringstream iss2(line);
-			// Initialize all params of each line
-			int idx;
-			float x, y, z;
-			std::vector<float> prop(prop_size, 0.);
-			// Get their values
-			iss2 >> idx >> x >> y >> z;
-
-			// Iterate on property size to get the rest
-			for (int k = 0; k < prop_size; k++) {
-				iss2 >> prop[k];
+		std::size_t line_number = 1;
+		while (std::getline(input, line)) {
+			++line_number;
+			if (line.find_first_not_of(" \t\r\n") == std::string::npos) {
+				continue;
 			}
-			Vector3 u(x, y, z);
-			pset.push_back(u);
-			properties[line_count] = prop; // Store the properties in the array
 
-			line_count++;
+			std::istringstream data_stream(line);
+			std::string tag;
+			data_stream >> tag;
+
+			if (tag == "VRTX") {
+				int index = 0;
+				float x = 0.0f;
+				float y = 0.0f;
+				float z = 0.0f;
+				if (!(data_stream >> index >> x >> y >> z)) {
+					throw std::runtime_error(
+						"[load_surface] Invalid VRTX row in " + full_name + " at line " +
+						std::to_string(line_number) + "."
+					);
+				}
+
+				std::vector<float> vertex_properties(property_count, 0.0f);
+				for (std::size_t i = 0; i < property_count; ++i) {
+					if (!(data_stream >> vertex_properties[i])) {
+						throw std::runtime_error(
+							"[load_surface] Missing vertex property in " + full_name +
+							" at line " + std::to_string(line_number) + "."
+						);
+					}
+				}
+				std::string extra;
+				if (data_stream >> extra) {
+					throw std::runtime_error(
+						"[load_surface] Unexpected extra token '" + extra + "' in " +
+						full_name + " at line " + std::to_string(line_number) + "."
+					);
+				}
+
+				nodes.emplace_back(x, y, z);
+				properties.push_back(std::move(vertex_properties));
+			}
+			else if (tag == "TRGL") {
+				int index = 0;
+				int id1 = 0;
+				int id2 = 0;
+				int id3 = 0;
+				if (!(data_stream >> index >> id1 >> id2 >> id3)) {
+					throw std::runtime_error(
+						"[load_surface] Invalid TRGL row in " + full_name + " at line " +
+						std::to_string(line_number) + "."
+					);
+				}
+				std::string extra;
+				if (data_stream >> extra) {
+					throw std::runtime_error(
+						"[load_surface] Unexpected extra token '" + extra + "' in " +
+						full_name + " at line " + std::to_string(line_number) + "."
+					);
+				}
+				triangles.emplace_back(id1, id2, id3);
+			}
+			else {
+				throw std::runtime_error(
+					"[load_surface] Unknown row tag '" + tag + "' in " + full_name +
+					" at line " + std::to_string(line_number) + "."
+				);
+			}
 		}
 
-		in.close();
+		if (nodes.empty()) {
+			throw std::runtime_error("[load_surface] No VRTX row was found in " + full_name + ".");
+		}
+		if (triangles.empty()) {
+			throw std::runtime_error("[load_surface] No TRGL row was found in " + full_name + ".");
+		}
+
+		for (std::size_t i = 0; i < triangles.size(); ++i) {
+			for (int vertex = 0; vertex < 3; ++vertex) {
+				const int node_index = triangles[i].point(vertex);
+				if (node_index < 0 || node_index >= static_cast<int>(nodes.size())) {
+					throw std::runtime_error(
+						"[load_surface] Triangle #" + std::to_string(i + 1) +
+						" in " + full_name + " references invalid node index " +
+						std::to_string(node_index) + "."
+					);
+				}
+			}
+		}
+
+		Surface loaded_surface(nodes, triangles);
+
+		// Surface construction can remove degenerate triangles. A file may therefore
+		// contain TRGL rows while still producing no usable triangle.
+		if (loaded_surface.get_nb_trgls() == 0) {
+			throw std::runtime_error(
+				"[load_surface] All triangles in " + full_name +
+				" are degenerate in map view; the file does not define "
+				"a usable triangulated surface."
+			);
+		}
+
+		s = std::move(loaded_surface);
+	}
+
+	void load_pointset(
+		const std::string& file_name,
+		const std::string& save_directory,
+		std::vector<Vector3>& pset,
+		std::vector<std::vector<float>>& properties)
+	{
+		const std::string full_name = save_directory + "/" + file_name;
+		std::ifstream input(full_name);
+		if (!input.is_open()) {
+			throw std::runtime_error("[load_pointset] Cannot open file: " + full_name);
+		}
+
+		std::string line;
+		if (!std::getline(input, line)) {
+			throw std::runtime_error("[load_pointset] Empty file: " + full_name);
+		}
+
+		std::istringstream header_stream(line);
+		std::vector<std::string> header_tokens;
+		std::string token;
+		while (header_stream >> token) {
+			header_tokens.push_back(token);
+		}
+		if (header_tokens.size() < 4u) {
+			throw std::runtime_error(
+				"[load_pointset] Invalid header in " + full_name +
+				": expected at least Index, X, Y, and Z."
+			);
+		}
+		const std::size_t property_count = header_tokens.size() - 4u;
+
+		pset.clear();
+		properties.clear();
+		std::size_t line_number = 1;
+		while (std::getline(input, line)) {
+			++line_number;
+			if (line.find_first_not_of(" \t\r\n") == std::string::npos) {
+				continue;
+			}
+
+			std::istringstream data_stream(line);
+			int index = 0;
+			float x = 0.0f;
+			float y = 0.0f;
+			float z = 0.0f;
+			if (!(data_stream >> index >> x >> y >> z)) {
+				throw std::runtime_error(
+					"[load_pointset] Invalid point row in " + full_name + " at line " +
+					std::to_string(line_number) + "."
+				);
+			}
+
+			std::vector<float> point_properties(property_count, 0.0f);
+			for (std::size_t i = 0; i < property_count; ++i) {
+				if (!(data_stream >> point_properties[i])) {
+					throw std::runtime_error(
+						"[load_pointset] Missing property value in " + full_name +
+						" at line " + std::to_string(line_number) + "."
+					);
+				}
+			}
+			std::string extra;
+			if (data_stream >> extra) {
+				throw std::runtime_error(
+					"[load_pointset] Unexpected extra token '" + extra + "' in " +
+					full_name + " at line " + std::to_string(line_number) + "."
+				);
+			}
+
+			pset.emplace_back(x, y, z);
+			properties.push_back(std::move(point_properties));
+		}
+
+		if (pset.empty()) {
+			throw std::runtime_error("[load_pointset] No point row was found in " + full_name + ".");
+		}
 	}
 
 
@@ -192,121 +324,112 @@ namespace KarstNSim {
 		std::vector<std::vector<std::vector<float>>>& properties,
 		std::vector<std::string>& property_names)
 	{
+		const std::string full_name = save_directory + "/" + file_name;
+		std::ifstream input(full_name);
+		if (!input.is_open()) {
+			throw std::runtime_error("[load_line] Cannot open file: " + full_name);
+		}
+
 		std::string line;
-		std::string full_name = save_directory + "/" + file_name;
-		std::ifstream in(full_name);
-
-		if (!in.is_open()) {
-			std::cerr << "Error opening file: " << full_name << std::endl;
-			return;
+		if (!std::getline(input, line)) {
+			throw std::runtime_error("[load_line] Empty file: " + full_name);
 		}
 
-		int total_lines = 0;
-		while (std::getline(in, line)) {
-			total_lines++;
-		}
-
-		in.clear();
-		in.seekg(0, std::ios::beg);
-
-		if (total_lines <= 0) {
-			throw std::runtime_error(
-				"[load_line] Invalid line file: the file is empty."
-			);
-		}
-
-		std::getline(in, line);
-
-		std::stringstream header_stream(line);
-		std::string token;
+		std::istringstream header_stream(line);
 		std::vector<std::string> header_tokens;
-
+		std::string token;
 		while (header_stream >> token) {
 			header_tokens.push_back(token);
 		}
-
-		if (header_tokens.size() < 4) {
+		if (header_tokens.size() < 4u) {
 			throw std::runtime_error(
-				"[load_line] Invalid line file header: expected at least Index, X, Y, and Z."
+				"[load_line] Invalid header in " + full_name +
+				": expected at least Index, X, Y, and Z."
 			);
 		}
 
 		property_names.assign(header_tokens.begin() + 4, header_tokens.end());
+		const std::size_t property_count = property_names.size();
 
-		const int prop_size = static_cast<int>(property_names.size());
-		const int data_lines = total_lines - 1;
+		struct EndpointRow {
+			Vector3 point;
+			std::vector<float> properties;
+		};
+		std::vector<EndpointRow> endpoints;
 
-		if (data_lines < 0 || data_lines % 2 != 0) {
-			throw std::runtime_error(
-				"[load_line] Invalid line file: each segment must be represented by two endpoint rows."
-			);
-		}
+		std::size_t line_number = 1;
+		while (std::getline(input, line)) {
+			++line_number;
+			if (line.find_first_not_of(" \t\r\n") == std::string::npos) {
+				continue;
+			}
 
-		properties.clear();
-		properties.resize(data_lines / 2);
-
-		std::vector<Segment> segs;
-		segs.reserve(data_lines / 2);
-
-		Vector3 u1, u2;
-		std::vector<float> prop(prop_size, 0.0f);
-		std::vector<float> prop2(prop_size, 0.0f);
-
-		bool first_endpoint = true;
-		int line_count = 0;
-
-		while (std::getline(in, line) && line_count < data_lines) {
 			std::istringstream data_stream(line);
-
-			int idx;
-			float x, y, z;
-
-			if (!(data_stream >> idx >> x >> y >> z)) {
+			int index = 0;
+			float x = 0.0f;
+			float y = 0.0f;
+			float z = 0.0f;
+			if (!(data_stream >> index >> x >> y >> z)) {
 				throw std::runtime_error(
-					"[load_line] Invalid line file: endpoint row does not contain Index, X, Y, and Z."
+					"[load_line] Invalid endpoint row in " + full_name + " at line " +
+					std::to_string(line_number) + "."
 				);
 			}
 
-			if (first_endpoint) {
-				for (int k = 0; k < prop_size; k++) {
-					if (!(data_stream >> prop[k])) {
-						throw std::runtime_error(
-							"[load_line] Invalid line file: missing property value on first segment endpoint."
-						);
-					}
+			std::vector<float> endpoint_properties(property_count, 0.0f);
+			for (std::size_t i = 0; i < property_count; ++i) {
+				if (!(data_stream >> endpoint_properties[i])) {
+					throw std::runtime_error(
+						"[load_line] Missing property value in " + full_name +
+						" at line " + std::to_string(line_number) + "."
+					);
 				}
-
-				u1 = Vector3(x, y, z);
 			}
-			else {
-				for (int k = 0; k < prop_size; k++) {
-					if (!(data_stream >> prop2[k])) {
-						throw std::runtime_error(
-							"[load_line] Invalid line file: missing property value on second segment endpoint."
-						);
-					}
-				}
-
-				u2 = Vector3(x, y, z);
-
-				std::vector<std::vector<float>> props(prop_size, std::vector<float>(2));
-
-				for (int k = 0; k < prop_size; k++) {
-					props[k] = { prop[k], prop2[k] };
-				}
-
-				properties[line_count / 2] = props;
-				segs.push_back(Segment(u1, u2));
+			std::string extra;
+			if (data_stream >> extra) {
+				throw std::runtime_error(
+					"[load_line] Unexpected extra token '" + extra + "' in " +
+					full_name + " at line " + std::to_string(line_number) + "."
+				);
 			}
 
-			first_endpoint = !first_endpoint;
-			line_count++;
+			endpoints.push_back({ Vector3(x, y, z), std::move(endpoint_properties) });
 		}
 
-		pline = Line(segs);
-		in.close();
-	}
+		if (endpoints.empty()) {
+			throw std::runtime_error("[load_line] No endpoint row was found in " + full_name + ".");
+		}
+		if (endpoints.size() % 2u != 0u) {
+			throw std::runtime_error(
+				"[load_line] Invalid endpoint count in " + full_name +
+				": each segment requires exactly two consecutive endpoint rows."
+			);
+		}
 
+		std::vector<Segment> segments;
+		segments.reserve(endpoints.size() / 2u);
+		properties.clear();
+		properties.resize(endpoints.size() / 2u);
+
+		for (std::size_t segment_index = 0; segment_index < endpoints.size() / 2u;
+			++segment_index) {
+			const EndpointRow& first = endpoints[2u * segment_index];
+			const EndpointRow& second_endpoint = endpoints[2u * segment_index + 1u];
+			segments.emplace_back(first.point, second_endpoint.point);
+
+			std::vector<std::vector<float>> segment_properties(
+				property_count, std::vector<float>(2u, 0.0f));
+			for (std::size_t property_index = 0; property_index < property_count;
+				++property_index) {
+				segment_properties[property_index][0] = first.properties[property_index];
+				segment_properties[property_index][1] =
+					second_endpoint.properties[property_index];
+			}
+			properties[segment_index] = std::move(segment_properties);
+		}
+
+		pline = Line(segments);
+	}
 
 	void load_line(
 		const std::string& file_name,
