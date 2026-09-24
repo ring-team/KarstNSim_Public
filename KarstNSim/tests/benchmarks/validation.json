@@ -31,8 +31,6 @@
   "full_resolution_example": {
     "exports_matched": 4,
     "support_points": 549999,
-    "peak_rss_bytes": 721985536,
-    "budget_mb": 1000,
-    "budget_pass": true
+    "peak_rss_bytes": 721985536
   }
 }

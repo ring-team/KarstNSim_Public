@@ -34,7 +34,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", required=True, type=Path)
     parser.add_argument("--out", required=True, type=Path, help="new output directory; existing directories are refused")
-    parser.add_argument("--budget-mb", type=float, default=1000, help="default: 1000; 0 measures a baseline without enforcing a budget")
+    parser.add_argument("--budget-mb", type=float, default=0, help="optional peak RSS threshold in decimal MB; default: 0 (measurement only)")
     parser.add_argument("--compare", type=Path, help="prior metrics.json whose exports must match")
     args = parser.parse_args()
     binary, work = args.binary.resolve(strict=True), args.out.resolve()

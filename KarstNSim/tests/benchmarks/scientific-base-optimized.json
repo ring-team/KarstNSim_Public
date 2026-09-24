@@ -4,8 +4,6 @@
   "exit_code": 0,
   "wall_seconds": 24.316613500996027,
   "peak_rss_bytes": 721985536,
-  "budget_mb": 1000,
-  "budget_pass": true,
   "exports_match": true,
   "support_points": 549999,
   "exports": {

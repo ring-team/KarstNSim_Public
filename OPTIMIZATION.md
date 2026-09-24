@@ -79,9 +79,9 @@ python3 KarstNSim/tools/benchmark_memory.py \
   --compare KarstNSim/tests/benchmarks/scientific-base-baseline.json
 ```
 
-The benchmark refuses existing output directories, records full-process RSS
-and export hashes, and enforces a 1,000 MB threshold by default. `--budget-mb 0`
-disables that threshold for measuring an unoptimized reference. `--compare`
+The benchmark refuses existing output directories and records full-process RSS
+and export hashes. It measures without a memory threshold by default. An
+optional `--budget-mb` can enforce a limit selected by the researcher. `--compare`
 requires the export names and hashes to match the supplied reference.
 
 CTest covers packed storage, compact sampler membership, directed and surface
@@ -96,6 +96,11 @@ All four CTest entries passed in fresh Release and ASan/UBSan builds of this
 branch. Leak detection was enabled and no sanitizer checks were disabled.
 
 ## Limits
+
+The [additional workload measurements](SCALING.md) cover denser support graphs,
+higher neighbor counts, multiple water tables and combined scientific features.
+They include a direct feature-rich comparison against upstream with identical
+exports and approximately 87% lower peak RSS, plus bounded graph-export tests.
 
 The measured full example has one cost channel and disables amplification,
 section simulation and full neighbor-graph export. Those modes remain available
