@@ -13,6 +13,7 @@ If you use this code, pleace cite : Paris et al., 2021, Computer Graphic Forum.
 ***************************************************************/
 
 #include "KarstNSim/graph.h"
+#include "KarstNSim/compact_sampler_grid.h"
 
 namespace {
 	struct QuantizedPointKey {
@@ -200,14 +201,22 @@ namespace KarstNSim {
 			throw std::runtime_error("Grid size exceeds safe limit for vector allocation. Increase value for r_min.");
 		}
 
-		// VER 1 : unordered map
-		//std::unordered_map<int, std::vector<int>> grid;
-		// VER 2 : unordered multimap
-		//std::multimap<int, int> grid;
-		// VER 3 :  map
-		//std::map<int, std::vector<int>> grid;
-
-		std::vector<std::vector<int>> grid(gridSize);
+		// Store each accepted point once. Queries recover the same covering-cell
+		// candidates as scan_area2 without materializing all replicated lists.
+		CompactSamplerGrid grid(dimx, dimy, dimz);
+		const auto region_of = [r_min](float radius) {
+			const double region = std::ceil(radius * std::sqrt(3) / r_min);
+			if (!std::isfinite(region) || region < 0 ||
+				region >= std::numeric_limits<int>::max()) {
+				throw std::runtime_error("Invalid Poisson sampling radius.");
+			}
+			return static_cast<int>(region);
+		};
+		const auto insert_point = [&](int64_t cell_index, float radius) {
+			const Vector3 cell = unravel3D(cell_index, dimx, dimy);
+			grid.insert(static_cast<int>(cell.x), static_cast<int>(cell.y),
+				static_cast<int>(cell.z), region_of(radius));
+		};
 
 		float r_local;
 		if (use_density_property) {
@@ -218,16 +227,9 @@ namespace KarstNSim {
 			r_local = r_cst;
 		}
 		std::vector<float> r_list({ r_local });
-		std::vector<int64_t> scan_area_local = scan_area2(r_local, r_min, pos_init, dimx, dimy, dimz, dim1, dim2, dim3); // we get the scan area corresponding to the local density r_local
-		for (int64_t x : scan_area_local) {
-			grid[x].push_back(1);
-			//grid.insert({ x, 1 });
-		}
-		//float time_2 = 0.;
-		//float time_3 = 0.;
-		//float time_4 = 0.;
-		//float time_5 = 0.;
-		//float time_6 = 0.;
+		// Recompute for uniform density too, where flattened_index was not needed
+		// while selecting the initial point.
+		insert_point(flatten_indices2(dimx, dimy, dimz, dim1, dim2, dim3, pos_init), r_local);
 		while (!active_list.empty()) { // while we can still add points
 			// find a random index in the active list
 
@@ -282,30 +284,17 @@ namespace KarstNSim {
 				bool crit_dist = true; // this criterion lets us keep track of the distance of the new point to previously generated points
 				//const clock_t time4 = clock();
 
-				//auto range = grid.equal_range(flattened_index);
-				//for (auto it = range.first; it != range.second; ++it) {
-				//	int point_index = it->second;
-				//	Vector3 point_to_check = point_list[point_index - 1];
-				//	float dist = magnitude(point_to_check - k_pt);
-				//	if (dist < 2 * r_k) { // If distance is too small
-				//		crit_dist = false; // Don't add the point
-				//		crit_active++;
-				//		break; // And don't bother checking the other points
-				//	}
-				//}
-				if ((!grid[flattened_index].empty())) {
-					//if (grid.count(flattened_index)) { // first check if there's a key associated in the grid (if it's not the case, why even bother checking anything)
-					std::vector<int> tested_pts = grid[flattened_index];
-					std::vector<int>::iterator iter_pts = tested_pts.begin();
-					for (iter_pts; iter_pts < tested_pts.end(); iter_pts++) { // iterate on the points that should be checked
-						Vector3 point_to_check = point_list[*iter_pts - 1];
-						float dist = magnitude(point_to_check - k_pt);
-						if (dist < r_k) { // If distance is too small
-							crit_dist = false; // Don't add the point
-							crit_active++;
-							break; // And don't bother checking the other points
-						}
-					}
+				const Vector3 cell = unravel3D(flattened_index, dimx, dimy);
+				// An omitted point lies at least (region_of(r_k)+1) whole
+				// cells away along an axis, farther than r_k. Retain the
+				// original strict distance test and consume no random values.
+				const int query_radius = std::min(grid.max_rho(), region_of(r_k) + 1);
+				if (grid.any_covering(static_cast<int>(cell.x), static_cast<int>(cell.y),
+					static_cast<int>(cell.z), query_radius, [&](std::int32_t point_index) {
+						return magnitude(point_list[point_index] - k_pt) < r_k;
+					})) {
+					crit_dist = false;
+					++crit_active;
 				}
 
 				if (crit_dist) {
@@ -336,20 +325,7 @@ namespace KarstNSim {
 						//const clock_t time6 = clock();
 
 						active_list.push_back(int(point_list.size())); // add it as an active point
-						std::vector<int64_t> scan_area_k = scan_area2(r_k, r_min, k_pt, dimx, dimy, dimz, dim1, dim2, dim3); // we get the scan area corresponding to the local density r_k
-						//const clock_t time7 = clock();
-
-						for (int64_t x : scan_area_k) {
-							grid[x].push_back(int(point_list.size()));
-							//grid.insert({ x,int(point_list.size())});
-						}
-						//for (int x : scan_area_k) { // update the grid
-						//	grid[x].push_back(int(point_list.size())); // since we just added the new point, its index corresponds to the size of the point list
-						//}
-						//const clock_t time8 = clock();
-						//time_4 += float(time6 - time5);
-						//time_5 += float(time7 - time6);
-						//time_6 += float(time8 - time7);
+						insert_point(flattened_index, r_k);
 					}
 				}
 				//time_2 += float(time4-time3);
@@ -360,7 +336,6 @@ namespace KarstNSim {
 			}
 		}
 
-		grid.clear(); 	// Get rid of the map memory
 	}
 
 	bool GraphOperations::CheckBelowSurf(const Vector3& pt, const Surface& surface, const PointCloud& centers2D)
@@ -548,6 +523,8 @@ namespace KarstNSim {
 		for (int cost_i = 0; cost_i < params.nb_wt; cost_i++) {
 			for (int i = 0; i < adj.size(); i++) {
 				for (int j = 0; j < adj[i].size(); j++) {
+					// Keep geometry and costs aligned and never dereference samples[-1].
+					if (adj[i][j].target < 0) continue;
 					if (create_nghb_graph_property 	&& adj[i][j].target >= 0) { // avoid empty neighbors (when n<N)
 						if (samples[i].z > samples[adj[i][j].target].z) {
 							list_cost_down[cost_i].push_back(adj[i][j].weight[cost_i]);
@@ -1074,7 +1051,8 @@ namespace KarstNSim {
 		float dmin = std::numeric_limits<float>::infinity();
 		float dmax = 0.;
 
-		adj.resize(samples.size(), N); // note that all elements take default constructor GraphEdge as initial value, which has for target -1
+		ClearShortestPathPreprocessing();
+		adj.reset(samples.size(), N, params.nb_wt); // Unused slots have target -1.
 		float R = 0.; // std::numeric_limits<float>::infinity();
 		float distmax = 1e25f;
 		if (params.graphuse_max_nghb_radius) {
@@ -1085,6 +1063,7 @@ namespace KarstNSim {
 		// We want to use a stretched version of the point cloud for perfect scaling :
 
 		std::vector<Vector3> samples_stretched;
+		samples_stretched.reserve(samples.size());
 		for (int i = 0; i < samples.size(); i++) {
 			// Stretch the points based on scaling factors
 			Vector3 p_stretched{
@@ -1112,8 +1091,9 @@ namespace KarstNSim {
 
 			for (int j = 0; j < n; j++) { // note here that only the n (<=N) first elements of adj[i] will be computed. The others keep default value -1 (meaning not a neighbor)
 				const Vector3 pn = samples[candidates[j].i];
-				const std::pair<std::vector<float>, std::vector<bool>> pair = ComputeEdgeCost(i, p, pn, dmin, dmax, max_dist_surf);
-				SetEdge(i, j, candidates[j].i, pair.first, pair.second);
+				auto edge = adj(i, j);
+				ComputeEdgeCost(i, p, pn, dmin, dmax, max_dist_surf, edge.weight);
+				edge.target = candidates[j].i;
 			}
 			const clock_t time2 = clock();
 			time_neigbhors += float(time1 - time0);
@@ -1271,7 +1251,8 @@ namespace KarstNSim {
 		}
 		max_degree = std::max(1, max_degree);
 
-		adj.resize(samples.size(), max_degree);
+		ClearShortestPathPreprocessing();
+		adj.reset(samples.size(), max_degree, params.nb_wt);
 
 		// For each node, stores the next free adjacency slot
 		std::vector<int> next_slot(samples.size(), 0);
@@ -1292,17 +1273,17 @@ namespace KarstNSim {
 
 			// Direction ia -> ib
 			{
-				const std::pair<std::vector<float>, std::vector<bool>> pair_ab =
-					ComputeEdgeCost(ia, p, pn, dmin, dmax, max_dist_surf);
-				SetEdge(ia, next_slot[ia], ib, pair_ab.first, pair_ab.second);
+				auto edge = adj(ia, next_slot[ia]);
+				ComputeEdgeCost(ia, p, pn, dmin, dmax, max_dist_surf, edge.weight);
+				edge.target = ib;
 				next_slot[ia]++;
 			}
 
 			// Direction ib -> ia
 			{
-				const std::pair<std::vector<float>, std::vector<bool>> pair_ba =
-					ComputeEdgeCost(ib, pn, p, dmin, dmax, max_dist_surf);
-				SetEdge(ib, next_slot[ib], ia, pair_ba.first, pair_ba.second);
+				auto edge = adj(ib, next_slot[ib]);
+				ComputeEdgeCost(ib, pn, p, dmin, dmax, max_dist_surf, edge.weight);
+				edge.target = ia;
 				next_slot[ib]++;
 			}
 		}
@@ -1424,12 +1405,11 @@ namespace KarstNSim {
 		return distance * params.distanceCost.weight;
 	}
 
-	std::pair<std::vector<float>, std::vector<bool>> GraphOperations::ComputeEdgeCost(const int& index, const Vector3& p, const Vector3& pn,
-		float& dmin, float& dmax, const float& dist_max) const
+	void GraphOperations::ComputeEdgeCost(const int& index, const Vector3& p, const Vector3& pn,
+		float& dmin, float& dmax, const float& dist_max, PackedAdjacency::WeightView cost) const
 	{
 		//auto time1 = std::chrono::high_resolution_clock::now();
-		std::vector<float> cost(params.nb_wt, params.multiply_costs ? 1.0 : 1.0);
-		std::vector<bool> frac_flags(params.fractures_orientations.size(), false);
+		std::fill(cost.begin(), cost.end(), 1.0f);
 
 		const Vector3 diff = pn - p;
 		const float dist = graph_anisotropic_distance(
@@ -1478,7 +1458,6 @@ namespace KarstNSim {
 				float tolerance = params.fractures_tolerances[i];
 				if (std::abs(azimut - orientation) < tolerance) {
 					costFrac = 0.;
-					frac_flags[i] = true;
 					break;
 				}
 			}
@@ -1510,7 +1489,6 @@ namespace KarstNSim {
 			cost[cost_i] = KarstNSim::Clamp(cost[cost_i], 0.0, cost[cost_i]); // make sure to keep a positive cost for Dijsktra
 		}
 
-		return std::make_pair(cost, frac_flags);
 	}
 
 	int GraphOperations::NodeIndex(const Vector3& p) const
@@ -2134,7 +2112,7 @@ namespace KarstNSim {
 				edge_slot < static_cast<int>(adj[source_index].size());
 				++edge_slot) {
 
-				auto& edge = adj[source_index][edge_slot];
+				auto edge = adj[source_index][edge_slot];
 
 				// Ignore unused adjacency slots.
 				if (edge.target < 0) {

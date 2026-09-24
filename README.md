@@ -1,6 +1,8 @@
 # KarstNSim_Public
 Public version of KarstNSim, a C++ code for graph-based and geologically-driven simulation of 3D karst networks.
 
+Local optimization branch: see [memory measurements, build instructions, and limits](OPTIMIZATION.md).
+
 * [2024 Publication](https://doi.org/10.1016/j.jhydrol.2024.130878)
 * [2025 Thesis](https://hal.univ-lorraine.fr/tel-05114757v1)
 

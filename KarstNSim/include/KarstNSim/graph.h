@@ -43,6 +43,7 @@ If you use this code, pleace cite : Paris et al., 2021, Computer Graphic Forum.
 #include "KarstNSim/randomgenerator.h"
 #include "KarstNSim/simplex_noise.h"
 #include "KarstNSim/models/results.h"
+#include "KarstNSim/packed_adjacency.h"
 #include <iomanip>
 #include <unordered_set>
 
@@ -205,45 +206,11 @@ namespace KarstNSim {
 
 	/*!
 	\class CostGraph
-	\brief Class representing a nearest neighbor directed cost graph, using an adjacency graph `adj` that consists of a vector of vector of GraphEdge objects.
+	\brief Directed cost graph with packed targets and per-water-table costs.
 		   This class also defines methods for updating and pruning the graph, with Dijkstra's algorithm being a key component.
 	*/
 	class CostGraph
 	{
-	protected:
-		/*!
-		\class GraphEdge
-		\brief Class representing an edge in the graph, characterized by a target node index, edge weight for both vertices, and fracture flags for both vertices.
-		\warning Edges are DIRECTED !! (The cost(s) of a->b may differ from the cost(s) of b->a due to vadose gravity influence (anisotropic))
-
-		*/
-		class GraphEdge
-		{
-		public:
-			int target;			//!< The target node index.
-			std::vector<float> weight;		//!< The costs of the edge, one per water table.
-			std::vector<bool> frac_flag; //!< Flags for indicating whether the edge is part of a fracture's main orientation (UNUSED/DEPRECATED).
-		public:
-			GraphEdge() : target(-1), weight(), frac_flag() {} // Constructeur par défaut
-
-			/*!
-			\brief Constructs a GraphEdge with the specified target node, edge weight, and fracture flags (UNUSED/DEPRECATED).
-			\param t The target node index.
-			\param w A vector containing the edge's weight for both vertices.
-			\param ff A vector indicating the fracture flags for both vertices.
-			*/
-			inline explicit GraphEdge(int t, std::vector<float> w, std::vector<bool> ff) : target(t), weight(w), frac_flag(ff) {}
-
-			/*!
-			\brief Constructs a GraphEdge with the specified target node and edge weight (without fracture flags). (USED VERSION)
-			\param t The target node index.
-			\param w A vector containing the edge's weight for both vertices.
-			*/
-			inline explicit GraphEdge(int t, std::vector<float> w) : target(t), weight(w), frac_flag(std::vector<bool>(0)) {}
-		};
-
-	protected:
-
 	public:
 		/*!
 		\brief Constructs a CostGraph with a specified number of nodes.
@@ -252,22 +219,52 @@ namespace KarstNSim {
 		explicit CostGraph(int n);
 
 		/*!
-		\brief The adjacency graph represented as a vector of vector of GraphEdge objects.
+		\brief Directed adjacency. Views remain valid until the graph is reset.
 		*/
-		Array2D<GraphEdge> adj;
+		PackedAdjacency adj;
 		
 		/*!
 		\brief Reverse adjacency index used by exact bidirectional Dijkstra.
 
 		The reverse index stores references to existing outgoing edges instead of
-		duplicating edge weights. For each reversed arc, reverse_sources_ stores
-		the predecessor node and reverse_edge_slots_ stores the local edge slot in
-		adj[predecessor].
+		duplicating edge weights. Incoming arcs of node v are stored in
+		[reverse_offsets_[v], reverse_offsets_[v + 1]), in ascending forward-edge order.
+		Each arc is the flat forward-edge index source * adj.cols() + slot, kept in
+		reverse_edges32_ when every index of adj fits in uint32_t, otherwise in
+		reverse_edges64_ (reverse_edges_wide_ is true). Only one of the two is filled.
+		The index caches topology only: weight updates do not invalidate it, target
+		changes must.
 		*/
 		mutable bool reverse_adjacency_ready_ = false;
+		mutable bool reverse_edges_wide_ = false;
 		mutable std::vector<std::size_t> reverse_offsets_;
-		mutable std::vector<int> reverse_sources_;
-		mutable std::vector<std::uint16_t> reverse_edge_slots_;
+		mutable std::vector<std::uint32_t> reverse_edges32_;
+		mutable std::vector<std::uint64_t> reverse_edges64_;
+
+		/*!
+		\brief Returns true if every flat edge index of a rows x cols adjacency fits in uint32_t.
+		*/
+		static bool ReverseEdgeIndexFitsUint32(std::size_t rows, std::size_t cols)
+		{
+			if (rows == 0 || cols == 0) {
+				return true;
+			}
+			// Largest index is (rows - 1) * cols + (cols - 1); test it without overflowing.
+			const std::uint64_t limit = std::numeric_limits<std::uint32_t>::max();
+			const std::uint64_t last_slot = std::uint64_t(cols) - 1;
+			if (last_slot > limit) {
+				return false;
+			}
+			return std::uint64_t(rows) - 1 <= (limit - last_slot) / std::uint64_t(cols);
+		}
+
+		/*!
+		\brief Returns the flat forward-edge index of reversed arc `pos`.
+		*/
+		std::size_t ReverseEdgeAt(std::size_t pos) const
+		{
+			return reverse_edges_wide_ ? std::size_t(reverse_edges64_[pos]) : std::size_t(reverse_edges32_[pos]);
+		}
 
 	protected:
 
@@ -456,16 +453,16 @@ namespace KarstNSim {
 		float ComputeEdgeDistanceCost(const Vector3& p, const Vector3& pn, const float& dmin, const float& dmax);
 
 		/*!
-		\brief Computes the cost and fracture flags (fracture flags are not used) for an edge between two nodes.
+		\brief Computes all water-table costs directly into one packed edge.
 		\param index The index of the node.
 		\param p The source point.
 		\param pn The destination point.
 		\param dmin Reference to the minimum distance between two points in the whole graph. Used to normalize distance cost later.
 		\param dmax Reference to the maximum distance between two points in the whole graph. Used to normalize distance cost later.
 		\param dist_max The maximum distance of influence of inception surfaces Dmax.
-		\return A pair consisting of a vector of computed edge costs and a vector of fracture flags (fracture flags are not used later).
+		\param cost Output view with params.nb_wt channels. Fracture penalties are included in these costs.
 		*/
-		std::pair<std::vector<float>, std::vector<bool>> ComputeEdgeCost(const int& index, const Vector3& p, const Vector3& pn, float& dmin, float& dmax, const float&  dist_max) const;
+		void ComputeEdgeCost(const int& index, const Vector3& p, const Vector3& pn, float& dmin, float& dmax, const float& dist_max, PackedAdjacency::WeightView cost) const;
 
 
 		/*!
