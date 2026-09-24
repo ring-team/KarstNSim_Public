@@ -31,6 +31,7 @@ namespace KarstNSim {
 			// we iterate on the triangles of the surface
 			Surface surfk = surface.at(k);
 			for (int j = 0; j < surfk.get_nb_trgls(); j++) {
+				detail::tick(); // one work unit per surface triangle
 				bool allow_refinement = false;
 				std::vector<Vector3> trgl_pts;
 				Triangle trgl = surfk.get_triangle(j);
@@ -69,6 +70,7 @@ namespace KarstNSim {
 						std::vector<std::vector<Vector3>> new_tri;
 						int prev_tri_size = int(prev_tri.size());
 						for (int pt = 0; pt < prev_tri_size; pt++) {
+							detail::tick(); // one work unit per refined sub-triangle
 							Vector3 a = prev_tri[pt][0];
 							Vector3 b = prev_tri[pt][1];
 							Vector3 c = prev_tri[pt][2];
@@ -91,6 +93,7 @@ namespace KarstNSim {
 						}
 
 						prev_tri = new_tri;
+						detail::admit_points(res.size(), "surface sampling refinement");
 					}
 				}
 			}

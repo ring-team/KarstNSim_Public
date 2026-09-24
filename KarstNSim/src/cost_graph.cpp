@@ -213,6 +213,7 @@ namespace KarstNSim {
 
 	void CostGraph::DijkstraComputePathsBidirectional(int outlet_count, int source, int target, std::vector<float>& distance, std::vector<int>& previous) const
 	{
+		detail::JobContext* const job = detail::current_job();
 		constexpr float inf = std::numeric_limits<float>::infinity();
 
 		const int n = int(adj.size());
@@ -267,6 +268,7 @@ namespace KarstNSim {
 			if (top_forward <= top_backward) {
 				const DijkstraQueueNode current = queue_forward.top();
 				queue_forward.pop();
+				if (job) job->tick(); // one work unit per settled queue entry
 
 				const float dist = current.distance;
 				const int u = current.node;
@@ -319,6 +321,7 @@ namespace KarstNSim {
 			else {
 				const DijkstraQueueNode current = queue_backward.top();
 				queue_backward.pop();
+				if (job) job->tick(); // one work unit per settled queue entry
 
 				const float dist = current.distance;
 				const int u = current.node;
@@ -421,6 +424,7 @@ namespace KarstNSim {
 
 	void CostGraph::DijkstraComputePaths(int outlet_count, int source, std::vector<float>& distance, std::vector<int>& previous, int target) const
 	{
+		detail::JobContext* const job = detail::current_job();
 		constexpr float max_weight = std::numeric_limits<float>::infinity();
 		size_t n = adj.size();
 		size_t n2 = adj.cols();
@@ -436,6 +440,7 @@ namespace KarstNSim {
 			float dist = vertex_queue.begin()->first;
 			int u = vertex_queue.begin()->second;
 			vertex_queue.erase(vertex_queue.begin());
+			if (job) job->tick(); // one work unit per settled queue entry
 
 			if (u == target) {
 				//distance[target] = dist; // Ensure target's distance is updated
@@ -472,6 +477,7 @@ namespace KarstNSim {
 		int target,
 		bool& already_reached) const
 	{
+		detail::JobContext* const job = detail::current_job();
 		constexpr float inf = std::numeric_limits<float>::infinity();
 
 		const int n = int(adj.size());
@@ -556,6 +562,7 @@ namespace KarstNSim {
 			if (expand_forward) {
 				const DijkstraQueueNode current = queue_forward.top();
 				queue_forward.pop();
+				if (job) job->tick(); // one work unit per settled queue entry
 
 				const float dist = current.distance;
 				const int u = current.node;
@@ -610,6 +617,7 @@ namespace KarstNSim {
 			else {
 				const DijkstraQueueNode current = queue_backward.top();
 				queue_backward.pop();
+				if (job) job->tick(); // one work unit per settled queue entry
 
 				const float dist = current.distance;
 				const int u = current.node;
@@ -721,6 +729,7 @@ namespace KarstNSim {
 	// This version computes a path between a point and a surface with Dijkstra algorithm.
 	void CostGraph::DijkstraComputePathsSurface(int outlet_count, int source, int& reach, std::vector<float>& distance, std::vector<int>& previous, const  Array2D<char>& samples_surf_flags, int target, bool &already_reached) const
 	{
+		detail::JobContext* const job = detail::current_job();
 		constexpr float max_weight = std::numeric_limits<float>::infinity();
 		size_t n = adj.size();
 		size_t n2 = adj.cols();
@@ -736,6 +745,7 @@ namespace KarstNSim {
 			float dist = vertex_queue.begin()->first;
 			int u = vertex_queue.begin()->second;
 			vertex_queue.erase(vertex_queue.begin());
+			if (job) job->tick(); // one work unit per settled queue entry
 
 			if (samples_surf_flags(u, outlet_count)) {
 				reach = u;

@@ -15,7 +15,7 @@ namespace KarstNSim {
 
 		// Uncomment to save inputs for special use
 		//std::string full_dir_name = parameters.save_repository + "/outputs";
-		//std::cout << "Will save inputs to: " << full_dir_name << std::endl;
+		//KarstNSim::detail::log_out() << "Will save inputs to: " << full_dir_name << std::endl;
 
 		//// save box voxet
 		//Box saved_box = parameters.domain;
@@ -97,32 +97,26 @@ namespace KarstNSim {
 		//full_dir_name = parameters.save_repository + "/outputs";
 		//save_pointset(full_name, full_dir_name, waypoints, property_names_waypoints, properties_waypoints);
 
+		// The legacy runner owns its job state on this stack frame and keeps the historical
+		// console behavior: informational output on std::cout, diagnostics on std::cerr.
+		detail::JobContext job;
+		job.out = &std::cout;
+		job.err = &std::cerr;
+		detail::ScopedJob job_scope(job);
+
 		for (int i = 0; i < parameters.number_of_iterations; i++) {
 
 			const clock_t begin_time = clock();
 
 			// --- Logging: simulation header ---
-			unsigned int used_seed = (parameters.number_of_iterations != 1 && parameters.vary_seed)
-				? static_cast<unsigned int>(parameters.selected_seed + i)
-				: static_cast<unsigned int>(parameters.selected_seed);
+			unsigned int used_seed = detail::iteration_seed(parameters, i);
 
-			std::cout << "========== SIMULATION " << i
+			detail::log_out() << "========== SIMULATION " << i
 				<< " STARTED WITH SEED " << used_seed
 				<< " ==========\n\n";
 
 			// Initialize with selected seed
-
-			if (parameters.number_of_iterations != 1 && parameters.vary_seed) {
-				unsigned int uintValue = static_cast<unsigned int>(parameters.selected_seed + i);
-				std::vector<std::uint32_t> seed = { uintValue };
-				initializeRng(seed);
-			}
-			else {
-				unsigned int uintValue = static_cast<unsigned int>(parameters.selected_seed);
-				std::vector<std::uint32_t> seed = { uintValue };
-				initializeRng(seed);
-			}
-
+			initializeRng(std::vector<std::uint32_t>{ used_seed });
 
 			// Creation of the object that will contain all parameters for the karstic simulation
 			GeologicalParameters params;
@@ -130,9 +124,70 @@ namespace KarstNSim {
 			// Creation of the vector that will contain all points crossed by the karst
 			std::vector<KeyPoint> keypts;
 
-			std::string sim_name_iter = parameters.karstic_network_name + "_" + std::to_string(i + parameters.selected_seed - 1);
+			std::string sim_name_iter = detail::iteration_name(parameters, i);
 
 			KarsticNetwork karst(sim_name_iter, parameters.domain, params, keypts, parameters.surf_wat_table);
+			detail::configure_network(karst, parameters, sim_name_iter, /*in_memory=*/false);
+
+			const clock_t time1 = clock();
+			float init_time = float(time1 - begin_time) / CLOCKS_PER_SEC;
+
+			detail::log_out() << "Parameters were prepared for simulation (" << init_time << " s)" << std::endl;
+
+			auto result = detail::run_network(karst, parameters);
+
+			if (!result.has_value()) {
+				detail::log_out() << "Simulation failed for seed " << used_seed << std::endl;
+				continue;
+			}
+			// save result to file
+			std::string full_name = sim_name_iter + "_karst.txt";
+			std::string full_dir_name = parameters.save_repository + "/outputs";
+			auto res_path = make_unique_filename(full_name, full_dir_name);
+			std::ofstream resfile(res_path);
+			if (resfile.is_open()) {
+				resfile << result->to_string();
+				resfile.close();
+			} else {
+				detail::log_out() << "Failed to save karst network to file." << std::endl;
+			}
+
+			const clock_t time2 = clock();
+			float real_time_needed = float(time2 - begin_time) / CLOCKS_PER_SEC;
+
+			detail::log_out() << "Simulation finished (total computation time: "
+				<< real_time_needed << " s)" << std::endl << std::endl;
+
+			// File writing
+			std::string full_file_name = parameters.save_repository + "/simulation_times.txt";
+			std::ofstream outfile(full_file_name, std::ios::app); // Open file in append mode
+			if (outfile.is_open()) {
+				outfile << parameters.karstic_network_name << ": " << real_time_needed << " s for seed " << parameters.selected_seed << std::endl; // Write the time and seed
+				outfile.close(); // Close the file after writing
+			}
+			else {
+			}
+		}
+	}
+}
+
+
+namespace KarstNSim {
+	namespace detail {
+
+		unsigned int iteration_seed(const ParamsSource& parameters, int iteration) {
+			return (parameters.number_of_iterations != 1 && parameters.vary_seed)
+				? static_cast<unsigned int>(parameters.selected_seed + iteration)
+				: static_cast<unsigned int>(parameters.selected_seed);
+		}
+
+		std::string iteration_name(const ParamsSource& parameters, int iteration) {
+			return parameters.karstic_network_name + "_" + std::to_string(iteration + parameters.selected_seed - 1);
+		}
+
+		void configure_network(KarsticNetwork& karst, ParamsSource& parameters,
+			const std::string& sim_name_iter, bool in_memory) {
+
 			karst.set_save_directory(parameters.save_repository);
 
 			if (!parameters.sections_simulation_only) {
@@ -208,7 +263,7 @@ namespace KarstNSim {
 				if (parameters.use_amplification) {
 					
 					if (parameters.min_distance_amplification > parameters.max_distance_amplification) {
-						std::cout << "[params][error] min_distance_amplification ("
+						log_out() << "[params][error] min_distance_amplification ("
 								  << parameters.min_distance_amplification << ") > max_distance_amplification ("
 								  << parameters.max_distance_amplification << ")." << std::endl;
 						throw std::runtime_error(
@@ -224,11 +279,20 @@ namespace KarstNSim {
 				karst.set_outlet_selection_cost_factor(parameters.outlet_selection_cost_factor);
 				karst.set_simulation_parameters(parameters.nghb_count, parameters.use_max_nghb_radius, parameters.nghb_radius, parameters.poisson_radius, parameters.gamma,
 					parameters.multiply_costs, parameters.vadose_cohesion, parameters.vertical_distance_stretching_factor);
-				karst.initialize_connectivity_matrix(
-					parameters.use_user_connectivity_matrix,
-					parameters.simulation_input_dir,
-					parameters.sinks,
-					parameters.springs);
+				if (in_memory || !parameters.connectivity_matrix.empty()) {
+					karst.initialize_connectivity_matrix(
+						parameters.use_user_connectivity_matrix,
+						parameters.connectivity_matrix,
+						parameters.sinks,
+						parameters.springs);
+				}
+				else {
+					karst.initialize_connectivity_matrix(
+						parameters.use_user_connectivity_matrix,
+						parameters.simulation_input_dir,
+						parameters.sinks,
+						parameters.springs);
+				}
 			}
 
 			if (parameters.simulate_sections) {
@@ -237,48 +301,13 @@ namespace KarstNSim {
 
 			karst.set_noise_parameters(parameters.use_noise, parameters.use_noise_on_all,
 				parameters.noise_frequency, parameters.noise_octaves,
-				parameters.noise_weight, globalRng);
+				parameters.noise_weight, currentJobRng());
+		}
 
-			const clock_t time1 = clock();
-			float init_time = float(time1 - begin_time) / CLOCKS_PER_SEC;
-
-			std::cout << "Parameters were prepared for simulation (" << init_time << " s)" << std::endl;
-
-			auto result = karst.run_simulation(parameters.sections_simulation_only, parameters.create_nghb_graph, parameters.create_nghb_graph_property, parameters.create_solved_connectivity_matrix, parameters.use_amplification,
+		std::optional<KarstNetworkResult> run_network(KarsticNetwork& karst, const ParamsSource& parameters) {
+			return karst.run_simulation(parameters.sections_simulation_only, parameters.create_nghb_graph, parameters.create_nghb_graph_property, parameters.create_solved_connectivity_matrix, parameters.use_amplification,
 				parameters.use_sampling_points, parameters.fraction_karst_perm, parameters.fraction_old_karst_perm, parameters.max_inception_surface_distance, parameters.sampling_points, parameters.create_vset_sampling, parameters.use_density_property,
 				parameters.k_pts, parameters.propdensity, parameters.propikp);
-			
-			if (!result.has_value()) {
-				std::cout << "Simulation failed for seed " << used_seed << std::endl;
-				continue;
-			}
-			// save result to file
-			std::string full_name = sim_name_iter + "_karst.txt";
-			std::string full_dir_name = parameters.save_repository + "/outputs";
-			auto res_path = make_unique_filename(full_name, full_dir_name);
-			std::ofstream resfile(res_path);
-			if (resfile.is_open()) {
-				resfile << result->to_string();
-				resfile.close();
-			} else {
-				std::cout << "Failed to save karst network to file." << std::endl;
-			}
-
-			const clock_t time2 = clock();
-			float real_time_needed = float(time2 - begin_time) / CLOCKS_PER_SEC;
-
-			std::cout << "Simulation finished (total computation time: "
-				<< real_time_needed << " s)" << std::endl << std::endl;
-
-			// File writing
-			std::string full_file_name = parameters.save_repository + "/simulation_times.txt";
-			std::ofstream outfile(full_file_name, std::ios::app); // Open file in append mode
-			if (outfile.is_open()) {
-				outfile << parameters.karstic_network_name << ": " << real_time_needed << " s for seed " << parameters.selected_seed << std::endl; // Write the time and seed
-				outfile.close(); // Close the file after writing
-			}
-			else {
-			}
 		}
 	}
 }

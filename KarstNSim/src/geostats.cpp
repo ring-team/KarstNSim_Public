@@ -328,6 +328,7 @@ std::vector<int> find_neighborhood(
 	while (!pq.empty()) {
 		const auto top = pq.top();
 		pq.pop();
+		KarstNSim::detail::tick(); // one work unit per section-neighbourhood queue entry
 		const float du = top.dist;
 		const int u = top.idx;
 		++popped;
@@ -443,19 +444,19 @@ float variogram_value(
 // Function to calculate the inverse of a square matrix using Gaussian elimination
 bool invert_matrix(const std::vector<std::vector<float>>& input, std::vector<std::vector<float>>& output) {
 	if (input.empty()) {
-		std::cerr << "Cannot invert an empty matrix." << std::endl;
+		KarstNSim::detail::log_err() << "Cannot invert an empty matrix." << std::endl;
 		return false;
 	}
 
 	// Check if the input matrix is square
 	int size = int(input.size());
 	if (size != int(input[0].size())) {
-		std::cerr << "Input matrix is not square." << std::endl;
+		KarstNSim::detail::log_err() << "Input matrix is not square." << std::endl;
 		return false;
 	}
 	for (const auto& row : input) {
 		if (int(row.size()) != size) {
-			std::cerr << "Input matrix is not square." << std::endl;
+			KarstNSim::detail::log_err() << "Input matrix is not square." << std::endl;
 			return false;
 		}
 	}
@@ -464,14 +465,14 @@ bool invert_matrix(const std::vector<std::vector<float>>& input, std::vector<std
 	for (const auto& row : input) {
 		for (float value : row) {
 			if (!std::isfinite(value)) {
-				std::cerr << "Input matrix contains a non-finite value." << std::endl;
+				KarstNSim::detail::log_err() << "Input matrix contains a non-finite value." << std::endl;
 				return false;
 			}
 			matrix_scale = std::max(matrix_scale, std::abs(value));
 		}
 	}
 	if (matrix_scale == 0.0f) {
-		std::cerr << "Matrix is singular: all coefficients are zero." << std::endl;
+		KarstNSim::detail::log_err() << "Matrix is singular: all coefficients are zero." << std::endl;
 		return false;
 	}
 	const float pivot_tolerance =
@@ -506,7 +507,7 @@ bool invert_matrix(const std::vector<std::vector<float>>& input, std::vector<std
 		// Detect numerical singularity using a scale-aware threshold rather than
 		// testing only for an exactly zero pivot.
 		if (!std::isfinite(A[i][i]) || std::abs(A[i][i]) <= pivot_tolerance) {
-			std::cerr << "Matrix is numerically singular at pivot " << i
+			KarstNSim::detail::log_err() << "Matrix is numerically singular at pivot " << i
 				<< " (|pivot|=" << std::abs(A[i][i])
 				<< ", tolerance=" << pivot_tolerance << ")." << std::endl;
 			return false;
@@ -674,6 +675,7 @@ std::vector<float> dijkstra_to_targets_truncated(
 
 	while (!pq.empty()) {
 		auto [du, u] = pq.top(); pq.pop();
+		KarstNSim::detail::tick(); // one work unit per section-distance queue entry
 		if (seen[u]) continue;
 		seen[u] = 1;
 
@@ -735,7 +737,7 @@ void kriging_in_point_on_the_fly(
 
 	auto unconditional_fallback = [&](const std::string& reason) {
 		const Vector3& point = curve->nodes.at(current_node_index).p;
-		std::cerr
+		KarstNSim::detail::log_err()
 			<< "[geostats][simple_kriging] Unconditional fallback at skeleton node "
 			<< current_node_index << " (X=" << point.x
 			<< ", Y=" << point.y << ", Z=" << point.z << "): "
@@ -966,6 +968,7 @@ void kriging_in_point(
 
 
 void save_data(const std::vector<float>& data, const std::string& filename) {
+	KarstNSim::detail::require_filesystem("save_data");
 	std::ofstream file(filename);
 
 	for (const auto& value : data) {
@@ -1117,6 +1120,7 @@ namespace {
 
 		while (!pq.empty()) {
 			auto cur = pq.top(); pq.pop();
+			KarstNSim::detail::tick(); // one work unit per curvilinear-distance queue entry
 			const float dv = cur.d; const int v = cur.v; const int vlabel = cur.src_id;
 			if (dv > dist[v]) continue;
 			if (comp[v] != target_cid) continue;
@@ -1221,6 +1225,7 @@ namespace {
 		const std::vector<int>& label_of,
 		const std::string& out_csv_path)
 	{
+		KarstNSim::detail::require_filesystem("save_basin_edges_csv");
 		std::ofstream ofs(out_csv_path);
 		if (!ofs) {
 			return;
@@ -2081,6 +2086,7 @@ void SGS3(
 		std::vector<int> nodes_to_simulate = select_random_elements(all_branch_nodes, nb_nodes_to_simulate);
 
 		for (int i = 0; i < nodes_to_simulate.size(); i++) {
+			KarstNSim::detail::tick(); // one work unit per simulated section node
 
 			// determine neighborhood (conditional nodes nearby)
 
@@ -2129,6 +2135,7 @@ void SGS3(
 		std::vector<int> nodes_to_simulate = select_random_elements(all_branch_nodes, nb_nodes_to_simulate);
 
 		for (int i = 0; i < nodes_to_simulate.size(); i++) {
+			KarstNSim::detail::tick(); // one work unit per simulated section node
 			std::vector<int> neighbors_intrabranch = find_neighborhood(nodes_to_simulate.at(i), curve, number_max_of_neighborhood_points, intrabranch_range_of_neighborhood, "branch", simulated_prop_gauss);
 
 			float val_estimation;
@@ -2168,6 +2175,7 @@ void SGS3(
 	std::vector<int> nodes_to_simulate_global = select_random_elements(all_intersection_nodes, int(all_intersection_nodes.size())); // we compute ALL intersections, no exceptions
 
 	for (int i = 0; i < nodes_to_simulate_global.size(); i++) {
+		KarstNSim::detail::tick(); // one work unit per simulated section node
 
 		std::vector<int> neighbors_global = find_neighborhood(nodes_to_simulate_global.at(i), curve, number_max_of_neighborhood_points, global_range_of_neighborhood, "base", simulated_prop_gauss);
 

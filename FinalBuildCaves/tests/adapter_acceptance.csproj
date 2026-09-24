@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Acceptance consumer for the MOOCoW CSV adapter. Not part of the native SDK
+    build and never required by SDK consumers. adapter_acceptance.py copies this
+    project and adapter_acceptance.cs into a temporary directory and sets
+    MOOCoWCode to a temporary git-archive copy of MOOCoW's Code folder, so no
+    build output lands in this repository or in the MOOCoW checkout.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>adapter_acceptance</AssemblyName>
+    <RootNamespace>FbsCaves.AdapterAcceptance</RootNamespace>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="$(MOOCoWCode)/src/MOOCoW.Infrastructure/MOOCoW.Infrastructure.csproj" />
+  </ItemGroup>
+  <Target Name="RequireMOOCoWCode" BeforeTargets="Restore;Build;_CheckForInvalidConfigurationAndPlatform">
+    <Error Condition="'$(MOOCoWCode)' == ''" Text="Set -p:MOOCoWCode=&lt;temporary copy of MOOCoW/Code&gt;" />
+  </Target>
+</Project>

@@ -23,6 +23,8 @@ If you use this code, pleace cite : Paris et al., 2021, Computer Graphic Forum.
 #include "basics.h"
 #include "graph.h"
 #include <string>
+#include <array>
+#include <cstdint>
 
 namespace KarstNSim {
 	/*!
@@ -121,32 +123,33 @@ namespace KarstNSim {
 		std::string scenename; //!< Name of the simulation (will appear as a prefix in all output files).
 		std::string directoryname; //!< Directory where simulation data is stored.
 
-		bool use_amplification; //!< Flag to enable amplification step.
-		float max_distance_amplification; //!< Maximum amplification distance to create a cycle.
-		float min_distance_amplification; //!< Minimum amplification distance to create a cycle.
-		int nb_cycles; //!< Number of cycles to simulate during amplification.
-		bool use_noise; //!< Flag to enable noise generation in the simulation.
-		bool use_noise_on_all; //!< Flag to apply noise globally across the entire simulation area.
-		int noise_frequency; //!< Frequency of the noise pattern.
-		int noise_octaves; //!< Number of octaves used in the noise generation.
-		float noise_weight; //!< Weighting factor for noise influence on the simulation.
+		bool use_amplification{}; //!< Flag to enable amplification step.
+		float max_distance_amplification{}; //!< Maximum amplification distance to create a cycle.
+		float min_distance_amplification{}; //!< Minimum amplification distance to create a cycle.
+		int nb_cycles{}; //!< Number of cycles to simulate during amplification.
+		bool use_noise{}; //!< Flag to enable noise generation in the simulation.
+		bool use_noise_on_all{}; //!< Flag to apply noise globally across the entire simulation area.
+		int noise_frequency{}; //!< Frequency of the noise pattern.
+		int noise_octaves{}; //!< Number of octaves used in the noise generation.
+		float noise_weight{}; //!< Weighting factor for noise influence on the simulation.
+		std::array<std::uint8_t, 256> noise_permutation{}; //!< Seeded simplex-noise permutation of this simulation (owned per job, set by KarsticNetwork::set_noise_parameters).
 
-		float graphPoissonRadius; //!< Poisson sphere sampling radius for graph construction.
-		float graphNeighbourRadius; //!< Max radius to consider neighboring points in the graph.
-		float maxsize; //!< Average of the dx and dy sizes of the background grid.
-		float stretch_factor; //!< Stretching factor of the grid, corresponding to the ratio of maxsize on the dz size of the grid. Used for Nghb computations.
-		bool graphuse_max_nghb_radius; //!< Flag to use a maximum neighbor radius constraint graphNeighbourRadius in graph construction.
-		int graphNeighbourCount; //!< Number of neighbors to consider for graph connections.
-		int nb_springs; //!< Number of springs in the simulation.
-		int nb_wt; //!< Number of water tables in the simulation.
+		float graphPoissonRadius{}; //!< Poisson sphere sampling radius for graph construction.
+		float graphNeighbourRadius{}; //!< Max radius to consider neighboring points in the graph.
+		float maxsize{}; //!< Average of the dx and dy sizes of the background grid.
+		float stretch_factor{}; //!< Stretching factor of the grid, corresponding to the ratio of maxsize on the dz size of the grid. Used for Nghb computations.
+		bool graphuse_max_nghb_radius{}; //!< Flag to use a maximum neighbor radius constraint graphNeighbourRadius in graph construction.
+		int graphNeighbourCount{}; //!< Number of neighbors to consider for graph connections.
+		int nb_springs{}; //!< Number of springs in the simulation.
+		int nb_wt{}; //!< Number of water tables in the simulation.
 		int nb_inception_surf = 0; //!< Number of inception surfaces in the simulation.
 		int nb_wt_surfaces = 0; //!< Number of physical water table surfaces provided by the user.
 		bool has_springs_without_wt = false; //!< True if at least one spring is not associated with any water table surface.
 		int no_wt_cost_index = -1; //!< Zero-based internal cost channel used for vadose-only paths toward springs without an associated water table.
 
-		bool multiply_costs; //!< Flag to multiply cost terms during cost function computation instead of adding them.
-		bool allow_single_outlet; //!< Allow a connection to a single outlet for each inlet, not more. This will use the ``closest'' spring algorithm (see Thesis for details)
-		bool vadose_cohesion; //!< Flag to enable vadose zone cohesion in the simulation (cohesion only in phreatic zone if set to false).
+		bool multiply_costs{}; //!< Flag to multiply cost terms during cost function computation instead of adding them.
+		bool allow_single_outlet{}; //!< Allow a connection to a single outlet for each inlet, not more. This will use the ``closest'' spring algorithm (see Thesis for details)
+		bool vadose_cohesion{}; //!< Flag to enable vadose zone cohesion in the simulation (cohesion only in phreatic zone if set to false).
 		float vertical_distance_stretching_factor=1.0f; //!< Stretching factor in the vertical direction used to artificially increase vertical distances and penalize vertical edges
 
 		bool use_input_nghb_graph = false; //!< Flag defining if the user has defined an input nearest neighbor graph for the simulation
@@ -163,16 +166,16 @@ namespace KarstNSim {
 		std::vector<float> fractures_tolerances; //!< Tolerances for fracture orientations.
 		std::vector<float> fractures_max_lengths; //!< Maximum lengths of fractures (CURRENTLY UNUSED).
 
-		float max_dist_loops_vadose; //!< Maximum loop distance in the vadose zone (CURRENTLY UNUSED).
-		float loop_density_vadose; //!< Density of loops in the vadose zone (CURRENTLY UNUSED).
-		float max_dist_loops_phreatic; //!< Maximum loop distance in the phreatic zone (CURRENTLY UNUSED).
-		float loop_density_phreatic; //!< Density of loops in the phreatic zone (CURRENTLY UNUSED).
+		float max_dist_loops_vadose{}; //!< Maximum loop distance in the vadose zone (CURRENTLY UNUSED).
+		float loop_density_vadose{}; //!< Density of loops in the vadose zone (CURRENTLY UNUSED).
+		float max_dist_loops_phreatic{}; //!< Maximum loop distance in the phreatic zone (CURRENTLY UNUSED).
+		float loop_density_phreatic{}; //!< Density of loops in the phreatic zone (CURRENTLY UNUSED).
 
 		bool use_ghost_rocks = false; //!< Flag to enable ghost rocks in the simulation.
-		float length; //!< Length of the ghost-rock corridor.
-		float width; //!< Width of the ghost-rock corridor.
+		float length{}; //!< Length of the ghost-rock corridor.
+		float width{}; //!< Width of the ghost-rock corridor.
 		Line polyline; //!< Polyline representing the surface alteration lines.
-		bool use_max_depth_constraint; //!< Flag to enforce a maximum depth constraint in substratum_surf for ghost-rocks corridors.
+		bool use_max_depth_constraint{}; //!< Flag to enforce a maximum depth constraint in substratum_surf for ghost-rocks corridors.
 		Surface substratum_surf; //!< Surface representing the substratum for ghost-rocks corridors.
 
 		CostTerm distanceCost; //!< Cost term for Euclidean distance.
@@ -182,16 +185,16 @@ namespace KarstNSim {
 		CostTerm waterTable2; //!< Cost term associated with the phreatic zone (in the 2024 article and the thesis, waterTable1 and waterTable2 are grouped together as a single cost. In practice, users can define them separately if needed).
 		CostTerm karstificationCost; //!< Cost term for Intrinsic Karstification Potential (factors permeability, porosity, solubility of rocks as well as presence of ghost-rock weathering).
 
-		float gamma; //!< factor used to apply rules of gamma-graph in a simulated network. See publication of Paris et al. (2021) for more details. It was not used in the 2024 article and the thesis. Values should in principle be between 0 and 2, 0 excluded and 2 included.
+		float gamma{}; //!< factor used to apply rules of gamma-graph in a simulated network. See publication of Paris et al. (2021) for more details. It was not used in the 2024 article and the thesis. Values should in principle be between 0 and 2, 0 excluded and 2 included.
 
 		std::vector<Sphere> spheres; //!< Collection of no_karst_spheres.
 
 		struct Propidx {
-			float prop;
-			int index; // index in KeyPts vector
+			float prop{};
+			int index{}; // index in KeyPts vector
 		};
 
-		float waypoints_weight; //!< Weighting factor for waypoint contributions in the simulation.
+		float waypoints_weight{}; //!< Weighting factor for waypoint contributions in the simulation.
 		std::vector<Propidx> waypointsimpactradius; //!< List of impact radii of each waypoint.
 		std::vector<Propidx> z_list; //!< List of Z-coordinates of each spring.
 		std::vector<Propidx> propspringswtindex; //!< One-based water table index associated with each spring keypoint. A value of 0 marks a spring without an associated water table.

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <KarstNSim/basics.h>
+#include <cstdint>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -19,6 +20,11 @@ namespace KarstNSim {
         float vadose_flag = -99999.0f; //!< Legacy first exported vadose flag, kept for backward compatibility.
         float external_drift = -99999.0f; //!< External drift value at the point.
         float kriging_weight = -99999.0f; //!< Kriging weight associated with the point.
+
+        //! Index of this point's node in the native karst skeleton (KarsticSkeleton::nodes) that produced the
+        //! result. Two points with the same node_id are the same skeleton node; use it, not coordinates, to
+        //! rebuild topology. UINT32_MAX means unknown. Not part of the legacy text serialization.
+        std::uint32_t node_id = UINT32_MAX;
     };
 
     struct ResultSegment {
@@ -31,6 +37,12 @@ namespace KarstNSim {
 
         std::vector<std::string> vadose_property_names; //!< Names of exported vadose flag properties.
         bool has_drift_properties = false; //!< Whether external drift and kriging weight must be written.
+
+        //! Solved inlet/outlet matrix with the same content and layout as the legacy
+        //! `<name>_connectivity_matrix.txt` export: rows and columns are laid out exactly like the input
+        //! connectivity matrix (one row per sink, one column per spring). Filled only when
+        //! ParamsSource::create_solved_connectivity_matrix is true. Not part of the legacy text serialization.
+        std::vector<std::vector<int>> solved_connectivity_matrix;
 
         /*!
         \brief Convert the result to a string representation for ASCII export.

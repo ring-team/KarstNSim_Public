@@ -278,15 +278,33 @@ namespace KarstNSim {
 			const std::vector<Vector3>& sinks,
 			const std::vector<Vector3>& springs);
 
+		/*!
+		\brief Initializes the inlet/outlet connectivity matrix without any file access.
+
+		When `use_user_connectivity_matrix` is true, `user_connectivity_matrix` must contain
+		one row per sink and one column per spring, in the same layout as
+		`connectivity_matrix.txt`, with values 0, 1 or 2. When it is false, the matrix must be
+		empty and every entry is set to 2 (ambiguous, resolved by outlet selection).
+		\param use_user_connectivity_matrix Whether the supplied matrix is used.
+		\param user_connectivity_matrix Row-major sink x spring matrix.
+		\param sinks Sink coordinates.
+		\param springs Spring coordinates.
+		*/
+		void initialize_connectivity_matrix(
+			bool use_user_connectivity_matrix,
+			const std::vector<std::vector<int>>& user_connectivity_matrix,
+			const std::vector<Vector3>& sinks,
+			const std::vector<Vector3>& springs);
+
 		/*! \brief Sets noise parameters for the simulation
 		\param use_noise Boolean indicating whether to use noise for the cycle amplification step only
 		\param use_noise_on_all Boolean indicating whether to apply noise for the whole simulation
 		\param frequency Frequency of the noise
 		\param octaves Number of octaves for noise generation
 		\param noise_weight Weight of the noise
-		\param globalRng Random number generator for noise application
+		\param rng Copy of the job random number generator used to seed the noise permutation (the job generator is not advanced)
 		*/
-		void set_noise_parameters(const bool use_noise, const bool use_noise_on_all, const int frequency, const int octaves, const float noise_weight, std::mt19937 globalRng);
+		void set_noise_parameters(const bool use_noise, const bool use_noise_on_all, const int frequency, const int octaves, const float noise_weight, std::mt19937 rng);
 
 		/*! \brief Creates sections of the karstic skeleton using the 1D-curvilinear branchwise SGS algorithm.
 		\param skel Reference to the KarsticSkeleton object
@@ -403,6 +421,11 @@ namespace KarstNSim {
 		channel is appended after the physical channels.
 		*/
 		void update_water_table_cost_channels();
+
+		/*!
+		\brief Validates sink/spring counts and sets every connectivity entry to 2.
+		*/
+		void reset_connectivity_matrix(const std::vector<Vector3>& sinks, const std::vector<Vector3>& springs);
 		std::string karstic_network_name; /*!< Name of the karstic network to be generated */
 		std::vector<Vector3> nodes_on_inception_surfaces; /*!< List of nodes on inception surfaces */
 		std::vector<std::vector<Vector3>> nodes_on_wt_surfaces; /*!< List of nodes on water table surfaces */

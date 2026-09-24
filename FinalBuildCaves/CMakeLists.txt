@@ -1,0 +1,120 @@
+cmake_minimum_required(VERSION 3.16)
+project(FinalBuildCaves VERSION 1.0.0 LANGUAGES C CXX)
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
+include(CTest)
+option(FBS_CAVES_BUILD_TESTS "Build cave SDK tests" ${BUILD_TESTING})
+option(FBS_CAVES_BUILD_TOOLS "Build the standalone generation command" ON)
+option(FBS_CAVES_SANITIZERS "Instrument the SDK and backend with ASan/UBSan" OFF)
+if(NOT DEFINED KARSTNSIM_SOURCE_DIR)
+  if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../KarstNSim/CMakeLists.txt")
+    set(KARSTNSIM_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../KarstNSim")
+  else()
+    set(KARSTNSIM_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/karstnsim/KarstNSim")
+  endif()
+endif()
+if(FBS_CAVES_SANITIZERS)
+  set(KARSTNSIM_SANITIZERS ON CACHE BOOL "Instrument backend" FORCE)
+endif()
+if(NOT TARGET karstnsim_core)
+  add_subdirectory("${KARSTNSIM_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/karst")
+endif()
+set_target_properties(karstnsim_core PROPERTIES POSITION_INDEPENDENT_CODE ON EXPORT_NAME karst
+  VERSION 1.0.0 SOVERSION 1 WINDOWS_EXPORT_ALL_SYMBOLS ON)
+target_include_directories(karstnsim_core PUBLIC
+  $<BUILD_INTERFACE:${KARSTNSIM_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+if(NOT TARGET fbs::karst)
+  add_library(fbs::karst ALIAS karstnsim_core)
+endif()
+
+add_library(fbs_caves
+  src/transport.cpp src/c_api.cpp src/moocow_csv.cpp
+  src/region_ids.cpp src/region_geometry.cpp src/region_seams.cpp src/region_generate.cpp
+  src/region_validate.cpp src/region_stitch.cpp src/karst_adapter.cpp)
+add_library(fbs::caves ALIAS fbs_caves)
+target_compile_features(fbs_caves PUBLIC cxx_std_17)
+target_include_directories(fbs_caves PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+  PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/vendor")
+target_link_libraries(fbs_caves PRIVATE karstnsim_core)
+set_target_properties(fbs_caves PROPERTIES EXPORT_NAME caves VERSION ${PROJECT_VERSION}
+  SOVERSION 1 POSITION_INDEPENDENT_CODE ON CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN YES)
+if(APPLE)
+  set(_caves_library_origin "@loader_path")
+elseif(UNIX)
+  set(_caves_library_origin "$ORIGIN")
+endif()
+if(DEFINED _caves_library_origin)
+  set_target_properties(fbs_caves karstnsim_core PROPERTIES INSTALL_RPATH "${_caves_library_origin}")
+endif()
+if(BUILD_SHARED_LIBS)
+  target_compile_definitions(fbs_caves PUBLIC FBS_CAVES_SHARED PRIVATE FBS_CAVES_BUILD)
+endif()
+function(caves_warnings target)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic)
+    if(FBS_CAVES_SANITIZERS)
+      target_compile_options(${target} PUBLIC $<BUILD_INTERFACE:-fsanitize=address,undefined>
+        $<BUILD_INTERFACE:-fno-sanitize-recover=all> $<BUILD_INTERFACE:-fno-omit-frame-pointer>)
+      target_link_options(${target} PUBLIC $<BUILD_INTERFACE:-fsanitize=address,undefined>)
+    endif()
+  endif()
+endfunction()
+caves_warnings(fbs_caves)
+if(FBS_CAVES_BUILD_TOOLS)
+  add_executable(fbs-caves tools/main.cpp)
+  target_link_libraries(fbs-caves PRIVATE fbs::caves)
+  target_include_directories(fbs-caves PRIVATE vendor)
+  if(DEFINED _caves_library_origin)
+    file(RELATIVE_PATH _caves_bin_to_lib "/${CMAKE_INSTALL_BINDIR}" "/${CMAKE_INSTALL_LIBDIR}")
+    set_target_properties(fbs-caves PROPERTIES INSTALL_RPATH "${_caves_library_origin}/${_caves_bin_to_lib}")
+  endif()
+  caves_warnings(fbs-caves)
+  install(TARGETS fbs-caves RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+  add_executable(caves_profile tools/profile_regions.cpp)
+  target_link_libraries(caves_profile PRIVATE fbs::caves)
+  caves_warnings(caves_profile)
+endif()
+if(FBS_CAVES_BUILD_TESTS)
+  find_package(Threads REQUIRED)
+  foreach(test transport c_api region adapter)
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/${test}_tests.cpp")
+      add_executable(caves_${test}_test "tests/${test}_tests.cpp")
+      target_link_libraries(caves_${test}_test PRIVATE fbs::caves Threads::Threads)
+      target_include_directories(caves_${test}_test PRIVATE vendor)
+      caves_warnings(caves_${test}_test)
+      add_test(NAME caves_${test} COMMAND caves_${test}_test)
+      set_tests_properties(caves_${test} PROPERTIES TIMEOUT 180)
+    endif()
+  endforeach()
+  if(FBS_CAVES_BUILD_TOOLS)
+    find_package(Python3 COMPONENTS Interpreter QUIET)
+    if(Python3_Interpreter_FOUND)
+      add_test(NAME caves_cli COMMAND "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/cli_tests.py" $<TARGET_FILE:fbs-caves>)
+      set_tests_properties(caves_cli PROPERTIES TIMEOUT 180)
+    endif()
+  endif()
+endif()
+
+install(TARGETS fbs_caves karstnsim_core EXPORT FinalBuildCavesTargets
+  ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+install(DIRECTORY "${KARSTNSIM_SOURCE_DIR}/include/" DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+install(FILES LICENSE vendor/nlohmann/LICENSE.MIT
+  DESTINATION ${CMAKE_INSTALL_DATADIR}/licenses/FinalBuildCaves)
+install(FILES "${KARSTNSIM_SOURCE_DIR}/../LICENSE"
+  DESTINATION ${CMAKE_INSTALL_DATADIR}/licenses/FinalBuildCaves RENAME KarstNSim-LICENSE)
+install(DIRECTORY docs/ DESTINATION ${CMAKE_INSTALL_DATADIR}/doc/FinalBuildCaves)
+install(EXPORT FinalBuildCavesTargets NAMESPACE fbs:: DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/FinalBuildCaves)
+configure_package_config_file(cmake/FinalBuildCavesConfig.cmake.in
+  "${CMAKE_CURRENT_BINARY_DIR}/FinalBuildCavesConfig.cmake"
+  INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/FinalBuildCaves)
+write_basic_package_version_file("${CMAKE_CURRENT_BINARY_DIR}/FinalBuildCavesConfigVersion.cmake"
+  VERSION ${PROJECT_VERSION} COMPATIBILITY SameMajorVersion)
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/FinalBuildCavesConfig.cmake"
+  "${CMAKE_CURRENT_BINARY_DIR}/FinalBuildCavesConfigVersion.cmake"
+  DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/FinalBuildCaves)

@@ -41,3 +41,8 @@ KarstNSim/build/*
 python_project/*
 batch_runs/*
 simulation_times.txt
+# Standalone cave SDK generated build artifacts
+FinalBuildCaves/build/
+FinalBuildCaves/stage/
+FinalBuildCaves/examples/dotnet/bin/
+FinalBuildCaves/examples/dotnet/obj/

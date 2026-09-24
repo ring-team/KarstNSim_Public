@@ -81,6 +81,7 @@ namespace KarstNSim {
 
 			for (int j = path_size - 1; j >= 0; j--)
 			{
+				detail::tick(1 + nodes.size() / 256); // one work unit per point plus one per 256 scanned nodes
 				Vector3 node = pts_graph(i, j);
 				std::vector<float> nodeCost(nb_springs, 0.);
 				nodeCost[springidx[i]] = 0.; // DEFAULT VALUE BECAUSE NOT COMPUTED BEFORE costs_graph[i][j];
@@ -101,6 +102,7 @@ namespace KarstNSim {
 		}
 		for (int i = 0; i < nodes.size(); i++)	// Edges
 		{
+			detail::tick(1 + pts_graph.size() / 128); // one work unit per node plus one per 256 scanned points
 			Vector3 node = nodes[i].p;
 			std::vector<int> edges;
 			for (int j = 0; j < pts_graph.size(); j++)
@@ -282,6 +284,7 @@ namespace KarstNSim {
 				);
 			}
 
+			detail::tick(); // one work unit per tested amplification pair
 			const std::size_t pair_index = pair_cursor;
 			pair_cursor = (pair_cursor + 1u) % ordered_pair_count;
 			++tested_pairs_for_current_cycle;
@@ -628,6 +631,7 @@ namespace KarstNSim {
 		// Rejection sampling over skeleton origins is equivalent to sampling
 		// uniformly among origins that actually possess at least one valid candidate.
 		for (const KarsticNode& node : nodes) {
+			detail::tick(); // one work unit per dead-end origin search
 			const Vector3 stretched_position(
 				node.p.x,
 				node.p.y,
@@ -797,6 +801,7 @@ namespace KarstNSim {
 		while (!stack.empty()) {
 			int current_index = stack.back();
 			stack.pop_back();
+			detail::tick(); // one work unit per visited skeleton node
 
 			KarsticNode& current_node = nodes[current_index];
 			if (intersection_points[current_index] == 0) {	// is usfull (rarely)
@@ -944,11 +949,17 @@ namespace KarstNSim {
 
 		int nb_springs = *std::max_element(springidx.begin(), springidx.end()) + 1;
 
+		std::size_t path_points = 0;
+		for (const std::vector<int>& path : paths) {
+			path_points += path.size();
+		}
+
 		for (int i = 0; i < paths.size(); i++)	// Nodes
 		{
 			int path_size = int(paths[i].size()); // path size
 			for (int j = path_size - 1; j >= 0; j--)
 			{
+				detail::tick(1 + nodes.size() / 256); // one work unit per path point plus one per 256 scanned nodes
 				int node_idx = paths[i][j];
 				std::vector<float> nodeCost(nb_springs, 0.);
 				nodeCost[springidx[i]] = costs[i][j];
@@ -970,6 +981,7 @@ namespace KarstNSim {
 		}
 		for (int i = 0; i < nodes.size(); i++)	// Edges
 		{
+			detail::tick(1 + path_points / 256); // one work unit per node plus one per 256 scanned path points
 			int nodeIndex = nodes[i].index;
 			std::vector<int> edges;
 			for (int j = 0; j < paths.size(); j++)
@@ -1162,11 +1174,12 @@ namespace KarstNSim {
 
 	void KarsticSkeleton::save(const std::string& file, const std::string& save_directory) const
 	{
+		detail::require_filesystem("KarsticSkeleton::save");
 		std::ofstream out;
 		out.open(save_directory + "/outputs/" + file + "_nodes.dat");
 		if (out.is_open() == false)
 		{
-			std::cout << "Cannot save skeleton to file (nodes): " << file << std::endl;
+			KarstNSim::detail::log_out() << "Cannot save skeleton to file (nodes): " << file << std::endl;
 			return;
 		}
 		std::map<int, int> nodeIndexMapping;
@@ -1183,7 +1196,7 @@ namespace KarstNSim {
 		out.open(save_directory + "/outputs/" + file + "_links.dat");
 		if (out.is_open() == false)
 		{
-			std::cout << "Cannot save skeleton to file (links): " << file << std::endl;
+			KarstNSim::detail::log_out() << "Cannot save skeleton to file (links): " << file << std::endl;
 			return;
 		}
 		for (int i = 0; i < nodes.size(); i++)
@@ -1208,6 +1221,7 @@ namespace KarstNSim {
 			const KarsticNode& node = nodes[i];
 			for (const KarsticConnection& connection : node.connections) {
 				int destindex = connection.destindex;
+				detail::tick(1 + unique_segments.size() / 256); // one work unit per connection plus one per 256 scanned segments
 				if (i < destindex) { // Avoid duplicate segments and self-loops
 					const KarsticNode& destNode = nodes[destindex];
 					// Check if the segment is unique
@@ -1352,6 +1366,10 @@ namespace KarstNSim {
 
 				start.p = nodes[i].p;
 				end.p = nodes[dest].p;
+
+				// Native skeleton identity: the index of the node in this skeleton.
+				start.node_id = static_cast<std::uint32_t>(i);
+				end.node_id = static_cast<std::uint32_t>(dest);
 
 				start.cost = start_cost;
 				end.cost = end_cost;

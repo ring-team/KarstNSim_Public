@@ -1,0 +1,17 @@
+{
+  "project": "JSON for Modern C++",
+  "version": "3.11.3",
+  "license": "MIT",
+  "files": {
+    "json.hpp": {
+      "source": "https://raw.githubusercontent.com/nlohmann/json/v3.11.3/single_include/nlohmann/json.hpp",
+      "sha256": "9bea4c8066ef4a1c206b2be5a36302f8926f7fdc6087af5d20b417d0cf103ea6",
+      "bytes": 919975
+    },
+    "LICENSE.MIT": {
+      "source": "https://raw.githubusercontent.com/nlohmann/json/v3.11.3/LICENSE.MIT",
+      "sha256": "86b998c792894ccb911a1cb7994f7a9652894e7a094c0b5e45be2f553f45cf14",
+      "bytes": 1076
+    }
+  }
+}

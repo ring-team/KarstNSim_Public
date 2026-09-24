@@ -414,7 +414,7 @@ namespace KarstNSim {
 
 		// Mandatory: impact radius size must match
 		if (static_cast<int>(propwaypointsimpactradius.size()) != n_pts) {
-			std::cout << "[waypoints][error] impact_radius size mismatch: points=" << n_pts
+			KarstNSim::detail::log_out() << "[waypoints][error] impact_radius size mismatch: points=" << n_pts
 				<< " impact_radius=" << propwaypointsimpactradius.size() << std::endl;
 			throw std::runtime_error("Missing/invalid 'impact_radius' for waypoints: size mismatch.");
 		}
@@ -423,7 +423,7 @@ namespace KarstNSim {
 		use_waypoints_radius_ = use_waypoints_radius
 			&& (static_cast<int>(propwaypointsradius.size()) == n_pts);
 		if (use_waypoints_radius && !use_waypoints_radius_) {
-			std::cout << "[waypoints][warn] per-waypoint 'radius' ignored (size mismatch)." << std::endl;
+			KarstNSim::detail::log_out() << "[waypoints][warn] per-waypoint 'radius' ignored (size mismatch)." << std::endl;
 		}
 
 		params.waypoints_weight = waypoints_weight;
@@ -588,7 +588,7 @@ namespace KarstNSim {
 	{
 		// --- Defensive checks to prevent crashes and undefined behavior ---
 		if (sphere_centers.empty()) {
-			std::cout << "WARNING: no 'no-karst' spheres provided; skipping spheres setup." << std::endl;
+			KarstNSim::detail::log_out() << "WARNING: no 'no-karst' spheres provided; skipping spheres setup." << std::endl;
 			return;
 		}
 
@@ -600,7 +600,7 @@ namespace KarstNSim {
 		const bool per_sphere_radius = (sphere_radius.size() == sphere_centers.size());
 
 		if (!one_radius_for_all && !per_sphere_radius) {
-			std::cout << "WARNING: sphere_radius size (" << sphere_radius.size()
+			KarstNSim::detail::log_out() << "WARNING: sphere_radius size (" << sphere_radius.size()
 				<< ") does not match 1 or number of centers (" << sphere_centers.size()
 				<< "). Using the first radius for all spheres as fallback." << std::endl;
 		}
@@ -621,7 +621,7 @@ namespace KarstNSim {
 			}
 
 			if (r <= 0.0f || !std::isfinite(r)) {
-				std::cout << "WARNING: invalid sphere radius at index " << i
+				KarstNSim::detail::log_out() << "WARNING: invalid sphere radius at index " << i
 					<< " (r=" << r << "); skipping this sphere." << std::endl;
 				continue;
 			}
@@ -666,9 +666,7 @@ namespace KarstNSim {
 		return 0;
 	}
 
-	void KarsticNetwork::initialize_connectivity_matrix(
-		bool use_user_connectivity_matrix,
-		const std::string& simulation_input_dir,
+	void KarsticNetwork::reset_connectivity_matrix(
 		const std::vector<Vector3>& sinks,
 		const std::vector<Vector3>& springs) {
 
@@ -691,14 +689,81 @@ namespace KarstNSim {
 		// connectivity_matrix.txt. A solved matrix is still exported later only when the
 		// independent create_solved_connectivity_matrix option is explicitly enabled.
 		params.connectivity_matrix.resize(nb_sinks, nb_springs, 2);
+	}
+
+	void KarsticNetwork::initialize_connectivity_matrix(
+		bool use_user_connectivity_matrix,
+		const std::vector<std::vector<int>>& user_connectivity_matrix,
+		const std::vector<Vector3>& sinks,
+		const std::vector<Vector3>& springs) {
+
+		reset_connectivity_matrix(sinks, springs);
+
+		if (!use_user_connectivity_matrix) {
+			if (!user_connectivity_matrix.empty()) {
+				throw std::runtime_error(
+					"[connectivity_matrix] A connectivity matrix was supplied, but "
+					"use_user_connectivity_matrix is false. Enable it to use the matrix, "
+					"or leave the matrix empty to generate an all-2 matrix."
+				);
+			}
+			return;
+		}
+
+		const int nb_sinks = static_cast<int>(sinks.size());
+		const int nb_springs = static_cast<int>(springs.size());
+
+		if (static_cast<int>(user_connectivity_matrix.size()) != nb_sinks) {
+			throw std::runtime_error(
+				"[connectivity_matrix] Invalid in-memory row count: expected " +
+				std::to_string(nb_sinks) + " rows (one per sink), but found " +
+				std::to_string(user_connectivity_matrix.size()) + "."
+			);
+		}
+
+		for (int row = 0; row < nb_sinks; ++row) {
+			const std::vector<int>& values = user_connectivity_matrix[row];
+			if (static_cast<int>(values.size()) != nb_springs) {
+				throw std::runtime_error(
+					"[connectivity_matrix] Invalid in-memory column count at row " +
+					std::to_string(row) + ": expected " + std::to_string(nb_springs) +
+					" values (one per spring), but found " +
+					std::to_string(values.size()) + "."
+				);
+			}
+			for (int col = 0; col < nb_springs; ++col) {
+				if (values[col] < 0 || values[col] > 2) {
+					throw std::runtime_error(
+						"[connectivity_matrix] Invalid in-memory value " +
+						std::to_string(values[col]) + " at row " + std::to_string(row) +
+						", column " + std::to_string(col) +
+						". Allowed values are 0, 1, and 2."
+					);
+				}
+				params.connectivity_matrix[row][col] = values[col];
+			}
+		}
+	}
+
+	void KarsticNetwork::initialize_connectivity_matrix(
+		bool use_user_connectivity_matrix,
+		const std::string& simulation_input_dir,
+		const std::vector<Vector3>& sinks,
+		const std::vector<Vector3>& springs) {
+
+		reset_connectivity_matrix(sinks, springs);
 
 		if (!use_user_connectivity_matrix) {
 			return;
 		}
 
+		const int nb_sinks = static_cast<int>(sinks.size());
+		const int nb_springs = static_cast<int>(springs.size());
+
 		const std::string connectivity_matrix_path =
 			simulation_input_dir + "/connectivity_matrix.txt";
 
+		detail::require_filesystem("connectivity_matrix.txt");
 		std::ifstream input(connectivity_matrix_path);
 
 		if (!input.is_open()) {
@@ -1013,8 +1078,9 @@ namespace KarstNSim {
 
 			// Compute 3D cost graph
 
-			std::cout << "\nSTEP 1 - Generation of cost graph:\n\n";
+			KarstNSim::detail::log_out() << "\nSTEP 1 - Generation of cost graph:\n\n";
 
+			detail::checkpoint();
 			GraphOperations graph;
 			graph.InitializeCostGraph(
 				create_nghb_graph, create_nghb_graph_property, keypts, params,
@@ -1024,11 +1090,11 @@ namespace KarstNSim {
 				fraction_old_karst_perm, propdensity, propikp, topo_surface_);
 			const clock_t time2 = clock();
 
-			std::cout << "-> STEP 1 completed: Cost graph generated (" << std::fixed
+			KarstNSim::detail::log_out() << "-> STEP 1 completed: Cost graph generated (" << std::fixed
 				<< std::setprecision(3) << float(time2 - time1) / CLOCKS_PER_SEC
 				<< " s)\n";
 
-			std::cout << "\nSTEP 2 - Simulation of the karst network skeleton: \n\n";
+			KarstNSim::detail::log_out() << "\nSTEP 2 - Simulation of the karst network skeleton: \n\n";
 
 			// Compute karstic skeleton
 			std::vector<std::vector<int>> karst_paths;
@@ -1036,13 +1102,14 @@ namespace KarstNSim {
 			std::vector<std::vector<char>> karst_paths_vadose_flag;
 			std::vector<int> springidxFinal;
 
+			detail::checkpoint();
 			graph.ComputeKarsticSkeleton(keypts, fraction_karst_perm, karst_paths,
 				karst_paths_costs, karst_paths_vadose_flag,
 				springidxFinal,
 				create_solved_connectivity_matrix);
 
 			if (karst_paths.empty()) {
-				std::cout << "No path found between inlets and outlets with the "
+				KarstNSim::detail::log_out() << "No path found between inlets and outlets with the "
 					"current parameters."
 					<< std::endl;
 				return std::nullopt; // no path found
@@ -1054,9 +1121,11 @@ namespace KarstNSim {
 
 			const clock_t time3 = clock();
 
-			std::cout << "-> STEP 2 completed: Skeleton computed (" << std::fixed << std::setprecision(3)
+			KarstNSim::detail::log_out() << "-> STEP 2 completed: Skeleton computed (" << std::fixed << std::setprecision(3)
 				<< float(time3 - time2) / CLOCKS_PER_SEC << " s)" << std::endl;
-			std::cout << "\nSTEP 3 - Network amplification (cycles and deadends): \n\n";
+			KarstNSim::detail::log_out() << "\nSTEP 3 - Network amplification (cycles and deadends): \n\n";
+
+			detail::checkpoint();
 
 			// Network preparation
 			skel.detect_intersection_points(karst_paths);
@@ -1069,7 +1138,7 @@ namespace KarstNSim {
 			}
 			const clock_t time5 = clock();
 			if (use_deadend_pts_) {
-				std::cout << "Network amplified with deadend points (" << std::fixed
+				KarstNSim::detail::log_out() << "Network amplified with deadend points (" << std::fixed
 					<< std::setprecision(3) << float(time5 - time4) / CLOCKS_PER_SEC
 					<< " s)" << std::endl;
 			}
@@ -1084,22 +1153,23 @@ namespace KarstNSim {
 			const clock_t time5bis = clock();
 			if (use_amplification) {
 
-				std::cout << "Network amplified with cycles (" << std::fixed
+				KarstNSim::detail::log_out() << "Network amplified with cycles (" << std::fixed
 					<< std::setprecision(3) << float(time5bis - time5) / CLOCKS_PER_SEC
 					<< " s)" << std::endl;
 			}
 
 			if (!(use_amplification) && !(use_deadend_pts_)) {
-				std::cout << "-> STEP 3 skipped (no amplification)\n";
+				KarstNSim::detail::log_out() << "-> STEP 3 skipped (no amplification)\n";
 			}
 			else {
-				std::cout << "-> STEP 3 completed: Network amplified (" << std::fixed << std::setprecision(3)
+				KarstNSim::detail::log_out() << "-> STEP 3 completed: Network amplified (" << std::fixed << std::setprecision(3)
 					<< float(time5bis - time3) / CLOCKS_PER_SEC << " s)" << std::endl;
 			}
 
 			const clock_t time6 = clock();
-			std::cout << "\nSTEP 4 - Simulation of conduit sections: \n\n";
+			KarstNSim::detail::log_out() << "\nSTEP 4 - Simulation of conduit sections: \n\n";
 
+			detail::checkpoint();
 			skel.refresh_vadose_flags_from_graph(&graph, params);
 
 			skel.prepare_graph(); // removes duplicates, and changes format so that each node is connected to all of its neighbors (not the case at base necesarily)
@@ -1108,27 +1178,37 @@ namespace KarstNSim {
 			skel.compute_valence(); // compute the valence = number of neighbors of each node
 
 			create_sections(skel);
+			detail::checkpoint();
 			const clock_t time7 = clock();
 			if (geostatparams.is_used) {
-				std::cout << "-> STEP 4 completed: Conduit sections generated (" << std::fixed
+				KarstNSim::detail::log_out() << "-> STEP 4 completed: Conduit sections generated (" << std::fixed
 					<< std::setprecision(3) << float(time7 - time6) / CLOCKS_PER_SEC
 					<< " s)" << std::endl;
 			}
 			else {
-				std::cout << "-> STEP 4 skipped (no section simulation required)\n";
+				KarstNSim::detail::log_out() << "-> STEP 4 skipped (no section simulation required)\n";
 			}
 			// save network
 			auto res = skel.create_line(params, karstic_network_name);
+			if (create_solved_connectivity_matrix) {
+				const Array2D<int>& solved = graph.solved_connectivity_matrix;
+				res.solved_connectivity_matrix.assign(solved.size(), std::vector<int>(solved.cols(), 0));
+				for (std::size_t row = 0; row < solved.size(); ++row) {
+					for (std::size_t col = 0; col < solved.cols(); ++col) {
+						res.solved_connectivity_matrix[row][col] = solved(row, col);
+					}
+				}
+			}
 			const clock_t time8 = clock();
 
-			std::cout << "\nKarst network saved (" << std::fixed << std::setprecision(3)
+			KarstNSim::detail::log_out() << "\nKarst network saved (" << std::fixed << std::setprecision(3)
 				<< float(time8 - time7) / CLOCKS_PER_SEC << " s)" << std::endl;
 
 			return res;
 		}
 		else if (sections_simulation_only) { // only generate sections
 
-			std::cout << "\nSimulation of properties only..." << std::endl;
+			KarstNSim::detail::log_out() << "\nSimulation of properties only..." << std::endl;
 
 			std::vector<std::vector<float>> costs_graph(params.PtsOldGraph.size(), std::vector<float>(2, 0.0)); // dummy vector
 			std::vector<std::vector<char>> vadoseflags_graph(params.PtsOldGraph.size(), std::vector<char>(2, false)); // dummy vector
@@ -1145,7 +1225,7 @@ namespace KarstNSim {
 			create_sections(skel);
 
 			const clock_t time2 = clock();
-			std::cout << "Conduit sections simulated (" << std::fixed << std::setprecision(3)
+			KarstNSim::detail::log_out() << "Conduit sections simulated (" << std::fixed << std::setprecision(3)
 				<< float(time2 - time1) / CLOCKS_PER_SEC << " s)" << std::endl << std::endl;
 
 			return skel.create_line(params, karstic_network_name);
@@ -1197,10 +1277,11 @@ namespace KarstNSim {
 		params.waterTable2 = CostTerm(false, 0.0);
 	}
 
-	void KarsticNetwork::set_noise_parameters(const bool use_noise, const bool use_noise_on_all, const int frequency, const int octaves, const float noise_weight, std::mt19937 globalRng) {
+	void KarsticNetwork::set_noise_parameters(const bool use_noise, const bool use_noise_on_all, const int frequency, const int octaves, const float noise_weight, std::mt19937 rng) {
 		if (use_noise) {
 			SimplexNoise Perlin = SimplexNoise(float(frequency), 1.0f, 2.0f, 0.5f);
-			Perlin.initialize_permutation_table(globalRng);
+			Perlin.initialize_permutation_table(rng);
+			params.noise_permutation = Perlin.permutation();
 			params.noise_frequency = frequency;
 			params.noise_octaves = octaves;
 			params.noise_weight = noise_weight;

@@ -19,9 +19,10 @@ namespace KarstNSim {
 	}
 
 	void create_directory(const std::string& directory) {
+		detail::require_filesystem("create_directory");
 		std::error_code ec;
 		if (!std::filesystem::create_directories(directory, ec) && ec) {
-			std::cerr << "Error creating directory: " << directory << " (" << ec.message() << ")" << std::endl;
+			KarstNSim::detail::log_err() << "Error creating directory: " << directory << " (" << ec.message() << ")" << std::endl;
 		}
 	}
 
@@ -33,6 +34,7 @@ namespace KarstNSim {
 
 	// Generate a unique filename by appending (0), (1), etc. if needed
 	std::filesystem::path make_unique_filename(const std::string& base_filename, const std::string& save_directory) {
+		detail::require_filesystem("make_unique_filename");
 		std::filesystem::path dirPath(save_directory);
 		std::filesystem::path filePath(base_filename);
 		std::filesystem::path fullPath = dirPath / filePath;
@@ -57,6 +59,7 @@ namespace KarstNSim {
 
 	// Save the point data to a unique file
 	void save_point(const std::string& file_name, const std::string& save_directory, Vector3 u, std::vector<std::string> property_names, std::vector<float> properties) {
+		detail::require_filesystem("save_point");
 
 		ensure_directory_exists(save_directory);
 
@@ -64,7 +67,7 @@ namespace KarstNSim {
 		std::filesystem::path filePath = make_unique_filename(file_name, save_directory);
 		std::ofstream out(filePath);
 		if (!out.is_open()) {
-			std::cout << "Cannot save skeleton to file (nodes): " << filePath.filename() << std::endl;
+			KarstNSim::detail::log_out() << "Cannot save skeleton to file (nodes): " << filePath.filename() << std::endl;
 			return;
 		}
 
@@ -89,6 +92,7 @@ namespace KarstNSim {
 
 	void save_surface(const std::string& file_name, const std::string& save_directory, Surface s, std::vector<std::string> property_names, std::vector<std::vector<float>> properties)
 	{
+		detail::require_filesystem("save_surface");
 
 		ensure_directory_exists(save_directory);
 
@@ -101,7 +105,7 @@ namespace KarstNSim {
 		std::ofstream out(filePath);
 		if (!out.is_open())
 		{
-			std::cout << "Cannot save skeleton to file (nodes): " << filePath.filename() << std::endl;
+			KarstNSim::detail::log_out() << "Cannot save skeleton to file (nodes): " << filePath.filename() << std::endl;
 			return;
 		}
 
@@ -136,6 +140,7 @@ namespace KarstNSim {
 
 	void save_pointset(const std::string& file_name, const std::string& save_directory, std::vector<Vector3> pset, std::vector<std::string> property_names, std::vector<std::vector<float>> properties)
 	{
+		detail::require_filesystem("save_pointset");
 
 		ensure_directory_exists(save_directory);
 
@@ -146,7 +151,7 @@ namespace KarstNSim {
 		std::ofstream out(filePath);
 		if (!out.is_open())
 		{
-			std::cout << "Cannot save skeleton to file (nodes): " << filePath.filename() << std::endl;
+			KarstNSim::detail::log_out() << "Cannot save skeleton to file (nodes): " << filePath.filename() << std::endl;
 			return;
 		}
 		out << "Index	X	Y	Z";
@@ -174,6 +179,7 @@ namespace KarstNSim {
 
 	void save_line(const std::string& file_name, const std::string& save_directory, Line pline, std::vector<std::string> property_names, std::vector<std::vector<std::vector<float>>> properties)
 	{
+		detail::require_filesystem("save_line");
 
 		ensure_directory_exists(save_directory);
 
@@ -185,7 +191,7 @@ namespace KarstNSim {
 		std::ofstream out(filePath);
 		if (!out.is_open())
 		{
-			std::cout << "Cannot save skeleton to file (nodes): " << filePath.filename() << std::endl;
+			KarstNSim::detail::log_out() << "Cannot save skeleton to file (nodes): " << filePath.filename() << std::endl;
 			return;
 		}
 
@@ -225,6 +231,7 @@ namespace KarstNSim {
 	}
 
 	void save_connectivity_matrix(const std::string& file_name, const std::string& save_directory, Array2D<int> matrix) {
+		detail::require_filesystem("save_connectivity_matrix");
 
 		ensure_directory_exists(save_directory);
 
@@ -234,7 +241,7 @@ namespace KarstNSim {
 		std::ofstream out(filePath);
 		if (!out.is_open())
 		{
-			std::cout << "Cannot save connectivity matrix " << filePath.filename() << std::endl;
+			KarstNSim::detail::log_out() << "Cannot save connectivity matrix " << filePath.filename() << std::endl;
 			return;
 		}
 
@@ -256,6 +263,7 @@ namespace KarstNSim {
 
 	void save_box(const std::string& file_name, const std::string& save_directory, Box box, std::vector<std::string> property_names, std::vector<std::vector<float>> properties)
 	{
+		detail::require_filesystem("save_box");
 
 		ensure_directory_exists(save_directory);
 
@@ -265,7 +273,7 @@ namespace KarstNSim {
 		std::ofstream out(filePath);
 		if (!out.is_open())
 		{
-			std::cout << "Cannot save skeleton to file (nodes): " << filePath.filename() << std::endl;
+			KarstNSim::detail::log_out() << "Cannot save skeleton to file (nodes): " << filePath.filename() << std::endl;
 			return;
 		}
 		int nb_prop = int(property_names.size());

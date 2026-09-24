@@ -3,6 +3,11 @@ Public version of KarstNSim, a C++ code for graph-based and geologically-driven 
 
 Local optimization branch: see [memory measurements, build instructions, and limits](OPTIMIZATION.md).
 
+This branch also provides [FinalBuildCaves](FinalBuildCaves/README.md): an independent
+C++17 regional cave SDK with C/C++ APIs, a .NET example, deterministic shared
+boundaries, authored constraints, and export into MOOCoW's existing CSV format.
+It does not change MOOCoW's database or implement its editor/rendering layer.
+
 * [2024 Publication](https://doi.org/10.1016/j.jhydrol.2024.130878)
 * [2025 Thesis](https://hal.univ-lorraine.fr/tel-05114757v1)
 
@@ -40,12 +45,14 @@ Please find the link to the changelog [here](Changelog.md).
 
 * [CMake](https://cmake.org/download/) 3.8 to 3.28 (select the Windows x64 Installer). During installation, check the option "add CMake to the system PATH".
 * [Visual Studio 2017](https://my.visualstudio.com/Downloads?q=visual%20studio%202017&wt.mc_id=o~msft~vscom~older-downloads) or newer (for Windows).
-* C++14 or newer (can be installed from Visual Studio).
+* C++17 or newer for this local branch (can be installed from Visual Studio).
 * (Optional) [Doxygen 1.9.6](https://www.doxygen.nl/download.html) or newer for generating documentation.
 
 ## Compatibility
 
-KarstNSim is designed to operate on Windows 10. While it hasn't been directly tested on Linux, there is an indication of compatibility based on a successful CMake test build.
+Upstream targets Windows 10. This local branch is tested on Linux with GCC 13.3,
+including scientific export parity and the standalone SDK. The modified branch
+has not been verified on Windows or macOS.
 
 ## Installation
 

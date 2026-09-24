@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "world_seed": 42,
+  "key": [0, 0, 0],
+  "size": [512, 512, 128],
+  "face_mask": 15,
+  "chamber_count": 8,
+  "loop_count": 1,
+  "style_id": 1
+}

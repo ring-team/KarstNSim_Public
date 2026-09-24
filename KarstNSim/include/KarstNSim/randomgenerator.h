@@ -27,13 +27,19 @@ If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
 #define M_PI 3.14159265358979323846
 #endif
 
-// Declare the random number generator and seed globally
-extern std::mt19937 globalRng;
-extern std::vector<std::uint32_t> globalSeed;
+// The random number generator is owned by the active KarstNSim job (see job_context.h).
+// There is no process-wide generator: every helper below draws from the RNG of the
+// innermost job running on the calling thread, and throws std::logic_error outside a job.
 
 /**
- * @brief Initializes the random number generator with a given seed.
- * @param seed Vector of integers used as the seed.
+ * @brief Returns the random number generator of the job running on this thread.
+ * @return Reference to the job-owned generator.
+ */
+std::mt19937& currentJobRng();
+
+/**
+ * @brief Reseeds the random number generator of the job running on this thread.
+ * @param seed Vector of integers used as the seed (only the first element is used).
  */
 void initializeRng(const std::vector<std::uint32_t>& seed);
 
@@ -81,14 +87,14 @@ char generateRandomChar();
 std::size_t generateRandomIndex(std::size_t containerSize);
 
 /**
- * @brief Shuffles a container using the global random number generator.
+ * @brief Shuffles a container using the job random number generator.
  * @tparam ForwardIt Iterator type for the container.
  * @param first Iterator to the beginning of the container.
  * @param last Iterator to the end of the container.
  */
 template <typename ForwardIt>
 void shuffleContainer(ForwardIt first, ForwardIt last) {
-	std::shuffle(first, last, globalRng);
+	std::shuffle(first, last, currentJobRng());
 }
 
 /**

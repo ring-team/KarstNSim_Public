@@ -778,7 +778,8 @@ namespace {
 		}
 	}
 
-	void validate_parameter_values(const KarstNSim::ParamsSource& params) {
+	// Checks of the names and directories used only by the file-based workflow.
+	void validate_parameter_paths(const KarstNSim::ParamsSource& params) {
 		if (params.karstic_network_name.empty()) {
 			throw std::runtime_error("[parameters] 'karstic_network_name' cannot be empty.");
 		}
@@ -788,6 +789,10 @@ namespace {
 		if (params.simulation_input_dir.empty()) {
 			throw std::runtime_error("[parameters] 'simulation_input_dir' cannot be empty.");
 		}
+	}
+
+	// Dimensional and physical consistency checks shared by the file and in-memory workflows.
+	void validate_simulation_values(const KarstNSim::ParamsSource& params) {
 		if (params.selected_seed < 0) {
 			throw std::runtime_error("[parameters] 'selected_seed' must be >= 0.");
 		}
@@ -1332,6 +1337,10 @@ namespace {
 			}
 		}
 	}
+}
+
+void KarstNSim::validate_simulation_parameters(const KarstNSim::ParamsSource& params) {
+	validate_simulation_values(params);
 }
 
 ParseInputs::ParseInputs() {
@@ -2218,6 +2227,7 @@ KarstNSim::ParamsSource ParseInputs::parse(const std::string& filename) {
 		}
 	}
 	inputFile.close();
-	validate_parameter_values(params);
+	validate_parameter_paths(params);
+	validate_simulation_values(params);
 	return params;
 }

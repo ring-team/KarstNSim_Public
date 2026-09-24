@@ -73,3 +73,12 @@ Durable measurements and reports live in the private Studio folder `Research/Kar
 No scientific features or CLI parameters were removed. The measured 1 GB result is for the original base configuration, which has one cost channel and disables amplification, section simulation, and full neighbor-graph export. Those features remain available and are exercised in smaller regression cases. Arbitrary higher-resolution inputs, many water tables, large graph exports, ghost rocks and external SGS drift are not covered by this memory guarantee. A bounded regional scheduler, persistent world representation, mesh generation and FinalBuildSystems integration remain separate work.
 
 This is a local optimization branch, not an upstream release or a completed game-world streaming system. The upstream MIT license and scientific attribution remain in place.
+
+## Standalone library follow-up
+
+The subsequent [FinalBuildCaves SDK](FinalBuildCaves/README.md) adds in-memory,
+independent native jobs and regional logical geometry with canonical shared
+boundaries. The scientific CLI and its full parameter model remain available.
+Its validation and measurements are recorded separately from the original
+optimization measurements above. Application scheduling, storage policy,
+rendered wall meshes and navigation integration remain application work.

@@ -30,6 +30,7 @@ If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
 #include <iomanip>
 #include <filesystem>
 #include <sstream>
+#include "KarstNSim/job_context.h"
 
 namespace KarstNSim {
 

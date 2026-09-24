@@ -44,6 +44,7 @@ If you use this code, pleace cite : Paris et al., 2021, Computer Graphic Forum.
 #include "KarstNSim/simplex_noise.h"
 #include "KarstNSim/models/results.h"
 #include "KarstNSim/packed_adjacency.h"
+#include "KarstNSim/job_context.h"
 #include <iomanip>
 #include <unordered_set>
 
@@ -429,6 +430,7 @@ namespace KarstNSim {
 	public:
 
 		std::vector<Vector3> samples;	//!< The graph nodes (sampling points). Many other attributes and parameters use indices of points in this list to identify them.
+		Array2D<int> solved_connectivity_matrix; //!< Sink x spring matrix with ambiguous (2) entries resolved; filled by ComputeKarsticSkeleton only when the solved matrix is requested.
 
 		/*!
 		\brief Default constructor for GraphOperations.

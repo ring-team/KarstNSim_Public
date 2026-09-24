@@ -26,6 +26,7 @@
 
 #include "KarstNSim/simplex_noise.h"
 #include "KarstNSim/randomgenerator.h"
+#include "KarstNSim/job_context.h"
 
 
 #include <cstdint>  // int32_t/uint8_t
@@ -90,43 +91,34 @@ static const uint8_t perm[256] = {
 	138, 236, 205, 93, 222, 114, 67, 29, 24, 72, 243, 141, 128, 195, 78, 66, 215, 61, 156, 180
 };
 
-static uint8_t perm_seeded[256];
+const SimplexNoise::Permutation& SimplexNoise::reference_permutation() {
+	static const Permutation table = [] {
+		Permutation copy{};
+		std::copy(std::begin(perm), std::end(perm), copy.begin());
+		return copy;
+	}();
+	return table;
+}
 
 /**
- * @brief Initialize the permutation table with the given seed of the current iteration
+ * @brief Initialize this instance's permutation table with the given seed of the current iteration
  *
- * @param globalRng
+ * @param rng Copy of the job generator; the caller's generator is not advanced.
  */
-void SimplexNoise::initialize_permutation_table(std::mt19937 globalRng) {
+void SimplexNoise::initialize_permutation_table(std::mt19937 rng) {
 	std::vector<uint8_t> perm_copy(std::begin(perm), std::end(perm));
 	// Shuffle the permutation table
-	std::shuffle(std::begin(perm_copy), std::end(perm_copy), globalRng);
-	// Copy the shuffled values back into perm_seeded
+	std::shuffle(std::begin(perm_copy), std::end(perm_copy), rng);
+	// Copy the shuffled values back into this instance's table
 	for (size_t i = 0; i < perm_copy.size(); ++i) {
-		perm_seeded[i] = perm_copy[i];
+		mPerm[i] = perm_copy[i];
 	}
 }
 
 int SimplexNoise::print_perm() {
 
-	std::cout << std::endl;
+	KarstNSim::detail::log_out() << std::endl;
 	return 0;
-}
-
-/**
- * Helper function to hash an integer using the above permutation table
- *
- *  This inline function costs around 1ns, and is called N+1 times for a noise of N dimension.
- *
- *  Using a real hash function would be better to improve the "repeatability of 256" of the above permutation table,
- * but fast integer Hash functions uses more time and have bad random properties.
- *
- * @param[in] i Integer value to hash
- *
- * @return 8-bits hashed value
- */
-static inline uint8_t hash(int32_t i) {
-	return perm_seeded[static_cast<uint8_t>(i)];
 }
 
 /* NOTE Gradient table to test if lookup-table are more efficient than calculs
@@ -201,7 +193,7 @@ static float grad(int32_t hash, float x, float y, float z) {
  *
  * @return Noise value in the range[-1; 1], value of 0 on all integer coordinates.
  */
-float SimplexNoise::noise(float x) {
+float SimplexNoise::noise(float x) const {
 	float n0, n1;   // Noise contributions from the two "corners"
 
 	// No need to skew the input space in 1D
@@ -240,7 +232,7 @@ float SimplexNoise::noise(float x) {
  *
  * @return Noise value in the range[-1; 1], value of 0 on all integer coordinates.
  */
-float SimplexNoise::noise(float x, float y) {
+float SimplexNoise::noise(float x, float y) const {
 	float n0, n1, n2;   // Noise contributions from the three corners
 
 	// Skewing/Unskewing factors for 2D
@@ -332,7 +324,7 @@ float SimplexNoise::noise(float x, float y) {
  *
  * @return Noise value in the range[-1; 1], value of 0 on all integer coordinates.
  */
-float SimplexNoise::noise(float x, float y, float z) {
+float SimplexNoise::noise(float x, float y, float z) const {
 	float n0, n1, n2, n3; // Noise contributions from the four corners
 
 	// Skewing/Unskewing factors for 3D

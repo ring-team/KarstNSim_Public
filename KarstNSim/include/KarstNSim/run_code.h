@@ -91,6 +91,8 @@ If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
 #include <algorithm>
 #include <random>
 #include "KarstNSim/randomgenerator.h"
+#include "KarstNSim/job_context.h"
+#include <optional>
 #include <stdexcept>
 
 namespace KarstNSim {
@@ -159,7 +161,8 @@ namespace KarstNSim {
 		std::vector<Vector3> sinks; //!< List of sinks.
 		std::vector<Vector3> springs; //!< List of springs.
 		bool allow_single_outlet_connection = true; //!< Flag to impose inlets to have a single spring connection. This will necessitate the use of the "closest" spring algorithm.
-		bool use_user_connectivity_matrix = true; //!< Selects whether inlet - outlet connectivity is read from a user file.
+		bool use_user_connectivity_matrix = true; //!< Selects whether a user inlet - outlet connectivity matrix is used (otherwise an all-2 matrix is generated in memory).
+		std::vector<std::vector<int>> connectivity_matrix; //!< Optional in-memory user connectivity matrix (one row per sink, one column per spring, values 0/1/2, same layout as connectivity_matrix.txt). Required by run_simulation_memory when use_user_connectivity_matrix is true. When empty, the legacy runner reads simulation_input_dir/connectivity_matrix.txt.
 		bool use_waypoints = false; //!< Flag to use waypoints as constraints in simulation.
 		std::vector<Vector3> waypoints; //!< List of waypoints.
 		bool use_springs_radius = false; //!< Flag to use radii for spring for equivalent section simulation constraints.
@@ -271,8 +274,43 @@ namespace KarstNSim {
 
 	/*!
 	 * @brief Runs the full KarstNSim simulation with the given parameters.
+	 *
+	 * Legacy file-based runner used by the karstnsim executable: logs to std::cout/std::cerr,
+	 * reads connectivity_matrix.txt when needed and writes every requested export under
+	 * save_repository/outputs. See library.h for the in-memory API.
 	 * @param parameters Simulation parameters as defined in ParamsSource.
 	 */
 	void run_simulation_full(ParamsSource parameters);
+
+	/*!
+	 * @brief Checks dimensional and physical consistency of simulation parameters.
+	 *
+	 * These are the value checks applied by ParseInputs::parse(), without the checks on
+	 * names and directories that only the file-based workflow needs.
+	 * @throws std::runtime_error describing the first invalid parameter.
+	 */
+	void validate_simulation_parameters(const ParamsSource& parameters);
+
+	namespace detail {
+		/*! \brief Seed used by iteration `iteration` (selected_seed, plus the iteration index when vary_seed applies). */
+		unsigned int iteration_seed(const ParamsSource& parameters, int iteration);
+
+		/*! \brief Name of iteration `iteration`, used as the prefix of its exports. */
+		std::string iteration_name(const ParamsSource& parameters, int iteration);
+
+		/*!
+		 * \brief Transfers ParamsSource into a KarsticNetwork for one iteration.
+		 *
+		 * Shared by the legacy runner and the in-memory API. The call order is the historical
+		 * one: the noise permutation is seeded from a copy of the job RNG at the end.
+		 * \param in_memory When true, the connectivity matrix comes only from
+		 * parameters.connectivity_matrix and no file is read or written.
+		 */
+		void configure_network(KarsticNetwork& karst, ParamsSource& parameters,
+			const std::string& iteration_name, bool in_memory);
+
+		/*! \brief Runs one configured iteration; std::nullopt when no route exists. */
+		std::optional<KarstNetworkResult> run_network(KarsticNetwork& karst, const ParamsSource& parameters);
+	}
 
 };

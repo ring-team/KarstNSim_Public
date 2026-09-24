@@ -9,44 +9,50 @@ If you use this code, please cite : Gouy et al., 2024, Journal of Hydrology.
 ***************************************************************/
 
 #include "KarstNSim/randomgenerator.h"
+#include "KarstNSim/job_context.h"
 
-std::mt19937 globalRng;
-std::vector<std::uint32_t> globalSeed;
+std::mt19937& currentJobRng() {
+	return KarstNSim::detail::require_job("KarstNSim random generator").rng;
+}
 
 void initializeRng(const std::vector<std::uint32_t>& seed) {
-	globalSeed = seed;
-	globalRng = std::mt19937(globalSeed[0]); // Use the first element of the seed vector
+	if (seed.empty()) {
+		throw std::invalid_argument("initializeRng requires at least one seed value.");
+	}
+	KarstNSim::detail::JobContext& job = KarstNSim::detail::require_job("initializeRng");
+	job.seed = seed;
+	job.rng = std::mt19937(job.seed[0]); // Use the first element of the seed vector
 }
 
 float generateNormalRandom(float mean, float stddev) {
 	std::normal_distribution<float> normalDistribution(mean, stddev);
-	return normalDistribution(globalRng);
+	return normalDistribution(currentJobRng());
 }
 
 int generateRandomInt(int min, int max) {
 	std::uniform_int_distribution<int> distribution(min, max);
-	return distribution(globalRng);
+	return distribution(currentJobRng());
 }
 
 float generateRandomFloat(float min, float max) {
 	std::uniform_real_distribution<float> distribution(min, max);
-	return distribution(globalRng);
+	return distribution(currentJobRng());
 }
 
 bool generateRandomBool() {
 	std::bernoulli_distribution distribution(0.5);
-	return distribution(globalRng);
+	return distribution(currentJobRng());
 }
 
 char generateRandomChar() {
 	// For simplicity, generating a random ASCII character between 'a' and 'z'
 	std::uniform_int_distribution<int> distribution('a', 'z');
-	return static_cast<char>(distribution(globalRng));
+	return static_cast<char>(distribution(currentJobRng()));
 }
 
 std::size_t generateRandomIndex(std::size_t containerSize) {
 	std::uniform_int_distribution<std::size_t> distribution(0, containerSize - 1);
-	return distribution(globalRng);
+	return distribution(currentJobRng());
 }
 
 std::vector<float> generateGaussianVector(std::size_t size, float mean, float stddev) {
@@ -55,7 +61,7 @@ std::vector<float> generateGaussianVector(std::size_t size, float mean, float st
 
 	std::normal_distribution<float> distribution(mean, stddev);
 	for (std::size_t i = 0; i < size; ++i) {
-		result.push_back(distribution(globalRng));
+		result.push_back(distribution(currentJobRng()));
 	}
 
 	return result;
@@ -67,7 +73,7 @@ std::vector<int> generateRandomIntVector(std::size_t size, int minValue, int max
 
 	std::uniform_int_distribution<int> distribution(minValue, maxValue);
 	for (std::size_t i = 0; i < size; ++i) {
-		result.push_back(distribution(globalRng));
+		result.push_back(distribution(currentJobRng()));
 	}
 
 	return result;
@@ -79,7 +85,7 @@ std::vector<float> generateRandomFloatVector(std::size_t size, float minValue, f
 
 	std::uniform_real_distribution<float> distribution(minValue, maxValue);
 	for (std::size_t i = 0; i < size; ++i) {
-		result.push_back(distribution(globalRng));
+		result.push_back(distribution(currentJobRng()));
 	}
 
 	return result;
@@ -390,7 +396,7 @@ float select_random_element(const std::vector<float>& vec) {
 
 	// Shuffle the input vector
 	std::vector<float> shuffledVec = vec;
-	std::shuffle(shuffledVec.begin(), shuffledVec.end(), globalRng);
+	std::shuffle(shuffledVec.begin(), shuffledVec.end(), currentJobRng());
 
 	// Select the first n elements from the shuffled vector
 	result = shuffledVec[0];
@@ -410,7 +416,7 @@ std::vector<int> select_random_elements(const std::vector<int>& vec, int n) {
 
 	// Shuffle the input vector
 	std::vector<int> shuffledVec = vec;
-	std::shuffle(shuffledVec.begin(), shuffledVec.end(), globalRng);
+	std::shuffle(shuffledVec.begin(), shuffledVec.end(), currentJobRng());
 
 	// Select the first n elements from the shuffled vector
 	for (int i = 0; i < n; ++i) {
