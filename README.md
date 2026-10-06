@@ -3,7 +3,7 @@ Public version of KarstNSim, a C++ code for graph-based and geologically-driven 
 
 * [2024 Publication](https://doi.org/10.1016/j.jhydrol.2024.130878)
 * [2025 Thesis](https://hal.univ-lorraine.fr/tel-05114757v1)
-* [2026 Publication] (https://doi.org/10.1016/j.envsoft.2026.107168)
+* [2026 Publication](https://doi.org/10.1016/j.envsoft.2026.107168)
 
 Its inputs and outputs are ASCII files and it can be run through a single command.
 It adapts the Karst simulation code proposed by <b> Paris, A., Guérin, E., Peytavie, A., Collon, P., Galin, E., 2021. Synthesizing Geologically Coherent Cave Networks. Comput. Graph. Forum 40, 277–287. https://doi.org/10.1111/cgf.14420 which is available on Github at : https://github.com/aparis69/Karst-Synthesis. </b>
