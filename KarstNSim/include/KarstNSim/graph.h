@@ -335,6 +335,51 @@ namespace KarstNSim {
 		*/
 		float GetDirectedEdgeWeight(int source, int target, int outlet_count) const;
 
+		/*!
+		\brief Computes a reusable shortest-path field toward one or several target nodes.
+
+		The Dijkstra search is performed through the reverse adjacency structure while
+		reading the original directed edge weights. Consequently, distance_to_target[u]
+		is the exact directed shortest-path cost from node u toward the closest target.
+
+		This representation is particularly useful when several source nodes must be
+		routed on an unchanged cost graph, because the same field can be reused without
+		rerunning Dijkstra for every source.
+
+		\param cost_channel Cost channel used to read directed edge weights.
+		\param targets One or several target nodes used as zero-distance roots.
+		\param distance_to_target Shortest directed distance from every graph node to its closest target.
+		\param next_node Next node to follow from each graph node toward its selected target.
+		\param target_root Optional output storing the selected target root for every graph node.
+		*/
+		void DijkstraComputeReverseField(
+			int cost_channel,
+			const std::vector<int>& targets,
+			std::vector<float>& distance_to_target,
+			std::vector<int>& next_node,
+			std::vector<int>* target_root = nullptr) const;
+
+
+		/*!
+		\brief Reconstructs a directed shortest path from a reusable reverse Dijkstra field.
+
+		\param source Source node of the requested path.
+		\param target Target node corresponding to the reverse field.
+		\param cost_channel Cost channel used to recover individual directed edge costs.
+		\param distance_to_target Distance field produced by DijkstraComputeReverseField.
+		\param next_node Next-node field produced by DijkstraComputeReverseField.
+		\param total_cost Output total shortest-path cost.
+		\return Pair containing the ordered node path and individual edge costs.
+		*/
+		std::pair<std::vector<int>, std::vector<float>>
+			DijkstraGetShortestPathFromReverseField(
+				int source,
+				int target,
+				int cost_channel,
+				const std::vector<float>& distance_to_target,
+				const std::vector<int>& next_node,
+				float& total_cost) const;
+
 
 		/*!
 		\brief Computes the shortest paths from a source node to all other nodes using Dijkstra's algorithm. In practice, it's used for phreatic shortest path computation between the vadose ending point (source) and the spring (target).

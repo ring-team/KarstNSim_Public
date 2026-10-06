@@ -103,56 +103,192 @@ namespace KarstNSim {
 		const Surface& substratum_surf,
 		float ghost_rock_weight)
 	{
-		PointCloud centers2D = substratum_surf.get_centers_cloud(2);
+		const int nu = grid.get_nu();
+		const int nv = grid.get_nv();
+		const int nw = grid.get_nw();
 
-		float width_z = 0.0f;
-		const int power = 2;
-		int idx = -1;
-		bool is_inside = false;
-		int painted_cell_count = 0;
+		const int nb_segments = polyline.get_nb_segs();
+
+		// Keep the existing final normalization behavior even if the alteration
+		// polyline unexpectedly contains no segment.
+		if (nb_segments <= 0) {
+			standardize_to_range(ikp, 0.0f, 1.0f);
+			return;
+		}
+
+		// Build the substratum spatial index once. It is only queried for cells
+		// that have already passed all cheaper ghost-rock geometric tests.
+		const PointCloud centers2D = substratum_surf.get_centers_cloud(2);
 
 		const Vector2 bbox_min = polyline.get_bbox_min();
 		const Vector2 bbox_max = polyline.get_bbox_max();
 
-		// The fast plan-view rejection must include the maximum lateral radius of the
-		// ghost-rock corridor. Without this margin, straight or nearly axis-aligned
-		// alteration lines may reject nearly all cells before the actual corridor
-		// distance test is evaluated.
+		// The plan-view rejection must include the maximum lateral radius of the
+		// ghost-rock corridor.
 		const float bbox_margin = 0.5f * width;
 
-		for (int u = 0; u < grid.get_nu(); ++u) {
-			for (int v = 0; v < grid.get_nv(); ++v) {
-				for (int w = 0; w < grid.get_nw(); ++w) {
+		const float bbox_x_min = bbox_min.x - bbox_margin;
+		const float bbox_x_max = bbox_max.x + bbox_margin;
+		const float bbox_y_min = bbox_min.y - bbox_margin;
+		const float bbox_y_max = bbox_max.y + bbox_margin;
+
+		// Compute global elevation bounds of the alteration lines once. Any voxel
+		// outside [minimum alteration elevation - length, maximum alteration
+		// elevation] cannot belong to any ghost-rock corridor and can therefore be
+		// rejected before searching for its closest alteration-line segment.
+		float alteration_min_z = std::numeric_limits<float>::max();
+		float alteration_max_z = std::numeric_limits<float>::lowest();
+
+		for (int segment_index = 0; segment_index < nb_segments; ++segment_index) {
+			Segment segment = polyline.get_seg(segment_index);
+			const Vector3 p1 = segment.start();
+			const Vector3 p2 = segment.end();
+
+			alteration_min_z = std::min(
+				alteration_min_z,
+				std::min(p1.z, p2.z)
+			);
+
+			alteration_max_z = std::max(
+				alteration_max_z,
+				std::max(p1.z, p2.z)
+			);
+		}
+
+		const float ghostrock_global_min_z = alteration_min_z - length;
+		const float ghostrock_global_max_z = alteration_max_z;
+
+		// When a substratum constraint is used, its map-view bounding box can be
+		// used to avoid unnecessary KD-tree queries. Outside this bounding box,
+		// CheckBelowSurf() would not find a containing triangle and would return
+		// false, so skipping the query preserves the existing behavior.
+		Vector3 substratum_bbox_min;
+		Vector3 substratum_bbox_max;
+
+		if (use_max_depth_constraint) {
+			substratum_bbox_min = substratum_surf.get_boundbox_min();
+			substratum_bbox_max = substratum_surf.get_boundbox_max();
+		}
+
+		// The IKP array is flattened as:
+		// idx = u + nu * (v + nv * w).
+		//
+		// Keeping u as the innermost loop therefore traverses IKP contiguously in
+		// memory and improves cache locality.
+		for (int w = 0; w < nw; ++w) {
+			for (int v = 0; v < nv; ++v) {
+				for (int u = 0; u < nu; ++u) {
+
 					const Vector3 pt = grid.uvw2xyz(u, v, w);
 
-					if (pt.x < bbox_min.x - bbox_margin ||
-						pt.x > bbox_max.x + bbox_margin ||
-						pt.y < bbox_min.y - bbox_margin ||
-						pt.y > bbox_max.y + bbox_margin) {
+					// Cheap plan-view rejection before any segment-distance
+					// calculation.
+					if (pt.x < bbox_x_min ||
+						pt.x > bbox_x_max ||
+						pt.y < bbox_y_min ||
+						pt.y > bbox_y_max) {
 						continue;
 					}
 
-					is_inside = is_pt_in_ghostrock(
-						pt,
-						length,
+					// Cheap global vertical rejection before searching all alteration
+					// segments.
+					if (pt.z < ghostrock_global_min_z ||
+						pt.z > ghostrock_global_max_z) {
+						continue;
+					}
+
+					// Find the closest point on the closest alteration-line segment.
+					// This logic is kept locally here so that the subsequent tests can
+					// be reordered from cheapest to most expensive without adding a
+					// new helper function.
+					Vector3 closest_point;
+					float min_distance_sq = std::numeric_limits<float>::max();
+
+					for (int segment_index = 0;
+						segment_index < nb_segments;
+						++segment_index) {
+
+						Segment segment =
+							polyline.get_seg(segment_index);
+
+						const Vector3 p1 = segment.start();
+						const Vector3 p2 = segment.end();
+
+						float distance_sq = 0.0f;
+						Vector3 closest_point_on_segment;
+
+						squaredistance_to_segment2D(
+							pt,
+							p1,
+							p2,
+							distance_sq,
+							closest_point_on_segment
+						);
+
+						if (distance_sq < min_distance_sq) {
+							min_distance_sq = distance_sq;
+							closest_point = closest_point_on_segment;
+						}
+					}
+
+					// The voxel must lie vertically between the alteration line and
+					// the maximum ghost-rock depth.
+					if (pt.z < closest_point.z - length ||
+						pt.z > closest_point.z) {
+						continue;
+					}
+
+					// Compute the local lateral radius of the ghost-rock corridor.
+					// Keeping ellipsis_width() here preserves the existing corridor
+					// geometry exactly.
+					const float width_z = ellipsis_width(
+						pt.z,
+						closest_point.z - length / 2.0f,
 						width,
-						polyline,
-						use_max_depth_constraint,
-						substratum_surf,
-						power,
-						centers2D,
-						width_z
+						length,
+						2
 					);
 
-					if (!is_inside) {
+					// Reject laterally distant voxels before querying the substratum
+					// surface. This avoids the comparatively expensive KD-tree search
+					// performed by CheckBelowSurf() for voxels that are not actually
+					// inside the ghost-rock corridor.
+					if (min_distance_sq >= width_z * width_z) {
 						continue;
 					}
 
-					grid.ravel(u, v, w, idx);
+					if (use_max_depth_constraint) {
+
+						// Outside the substratum map-view bounding box,
+						// CheckBelowSurf() would return false because no containing
+						// triangle can exist there.
+						const bool inside_substratum_bbox =
+							pt.x >= substratum_bbox_min.x &&
+							pt.x <= substratum_bbox_max.x &&
+							pt.y >= substratum_bbox_min.y &&
+							pt.y <= substratum_bbox_max.y;
+
+						if (inside_substratum_bbox &&
+							GraphOperations::CheckBelowSurf(
+								pt,
+								substratum_surf,
+								centers2D
+							)) {
+							continue;
+						}
+					}
+
+					const std::size_t idx =
+						static_cast<std::size_t>(u) +
+						static_cast<std::size_t>(nu) *
+						(
+							static_cast<std::size_t>(v) +
+							static_cast<std::size_t>(nv) *
+							static_cast<std::size_t>(w)
+							);
 
 					if (ikp[idx] > -10000.0f) {
 						ikp[idx] += ghost_rock_weight;
-						++painted_cell_count;
 					}
 				}
 			}

@@ -1,5 +1,19 @@
 # KarstNSimPublic
 
+## Version 2.2
+
+10/06/2026
+
+### Modifications
+
+This update adds new options:
+
+- Added a new `ghostrock_waypoint_radius` parameter for conduit-section simulation. When ghost rocks and section simulation are both enabled, karst-skeleton nodes located inside ghost-rock corridors are now automatically used as waypoint conditioning data for the CB-SGS, using this user-defined section value.
+- Added a new `pred_update_interval` parameter controlling how frequently Pred path-cohesion reductions are committed during initial skeleton generation. A value of `1` preserves the previous sequential inlet-by-inlet update behavior, while larger values process several consecutive inlets on the same unchanged cost field before applying their accumulated cohesion contributions. This results in substantial computation time reduction.
+
+Several code improvements:
+
+- Ghost-rock painting on the background grid has been optimised because it was computationally expensive.
 
 ## Version 2.1
 

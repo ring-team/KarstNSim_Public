@@ -55,6 +55,7 @@ namespace {
 			"create_vset_sampling:",
 			"domain:",
 			"fraction_karst_perm:",
+			"pred_update_interval:",
 			"fraction_old_karst_perm:",
 			"fracture_constraint_weight:",
 			"fracture_families_orientations:",
@@ -63,6 +64,7 @@ namespace {
 			"ghost_rock_weight:",
 			"ghostrock_max_vertical_size:",
 			"ghostrock_width:",
+			"ghostrock_waypoint_radius:",
 			"global_range_of_neighborhood:",
 			"global_vario_model:",
 			"global_vario_nugget:",
@@ -380,12 +382,14 @@ namespace {
 			"selected_seed:", "number_of_iterations:", "k_pts:", "nghb_count:",
 			"refine_surface_sampling:", "nb_deadend_points:", "nb_cycles:",
 			"noise_frequency:", "noise_octaves:",
-			"number_max_of_neighborhood_points:", "nb_points_interbranch:"
+			"number_max_of_neighborhood_points:", "nb_points_interbranch:",
+			"pred_update_interval:"
 		};
 
 		static const std::unordered_set<std::string> floating_parameters = {
 			"poisson_radius:", "nghb_radius:", "waypoints_weight:",
 			"ghostrock_max_vertical_size:", "ghost_rock_weight:", "ghostrock_width:",
+			"ghostrock_waypoint_radius:",
 			"inception_surface_constraint_weight:", "max_inception_surface_distance:",
 			"karstification_potential_weight:", "fracture_constraint_weight:",
 			"fraction_old_karst_perm:", "water_table_constraint_weight_vadose:",
@@ -557,6 +561,8 @@ namespace {
 			require("water_table_constraint_weight_phreatic:",
 				"required for full network simulation");
 			require("fraction_karst_perm:", "required for path-cohesion updates");
+			require("pred_update_interval:",
+				"required to define the frequency of path-cohesion cost-field updates");
 			require("multiply_costs:", "required to define cost-term aggregation");
 			require("gamma:", "required for the graph parameter set");
 			require("vadose_cohesion:", "required to define cohesion behavior");
@@ -593,7 +599,9 @@ namespace {
 			}
 		}
 
-		// Ghost rocks can also overwrite conduit radii in sections-only mode.
+		// Ghost rocks affect the IKP workflow and, when conduit sections are
+		// simulated, also provide automatic waypoint conditioning data on every
+		// skeleton node located inside a ghost-rock corridor.
 		if (use_ghostrocks) {
 			require("domain:", "required to rasterize ghost-rock corridors");
 			require("use_karstification_potential:",
@@ -607,6 +615,12 @@ namespace {
 				"required when use_ghostrocks is true");
 			require("ghostrock_width:",
 				"required when use_ghostrocks is true");
+
+			if (simulate_sections) {
+				require("ghostrock_waypoint_radius:",
+					"required when ghost rocks and conduit-section simulation are both enabled");
+			}
+
 			if (boolean_parameter(index, "use_max_depth_constraint:", false)) {
 				require("max_depth_horizon:",
 					"required when use_max_depth_constraint is true");
@@ -951,6 +965,12 @@ namespace {
 					"[parameters] 'fraction_karst_perm' must satisfy 0 < value <= 1."
 				);
 			}
+
+			if (params.pred_update_interval < 1) {
+				throw std::runtime_error(
+					"[parameters] 'pred_update_interval' must be an integer >= 1."
+				);
+			}
 			if (!std::isfinite(params.gamma) || params.gamma <= 0.0f || params.gamma > 2.0f) {
 				throw std::runtime_error("[parameters] 'gamma' must satisfy 0 < gamma <= 2.");
 			}
@@ -1118,6 +1138,15 @@ namespace {
 					"[parameters] Ghost-rock dimensions must be > 0 and ghost_rock_weight must be >= 0."
 				);
 			}
+
+			if (params.simulate_sections &&
+				!std::isfinite(params.geostat_params.ghostrock_waypoint_radius)) {
+				throw std::runtime_error(
+					"[parameters] 'ghostrock_waypoint_radius' must be finite when "
+					"ghost rocks and conduit-section simulation are both enabled."
+				);
+			}
+
 			if (params.use_max_depth_constraint && params.max_depth_horizon.is_empty()) {
 				throw std::runtime_error(
 					"[parameters] 'max_depth_horizon' is empty while use_max_depth_constraint is true."
@@ -1843,7 +1872,10 @@ KarstNSim::ParamsSource ParseInputs::parse(const std::string& filename) {
 		params.max_depth_horizon = surf;
 		}
 		else if (paramType == "ghostrock_width:") {
-		iss >> params.ghostrock_width;
+			iss >> params.ghostrock_width;
+		}
+		else if (paramType == "ghostrock_waypoint_radius:") {
+			iss >> params.geostat_params.ghostrock_waypoint_radius;
 		}
 
 		// Inception surfaces
@@ -2192,8 +2224,11 @@ KarstNSim::ParamsSource ParseInputs::parse(const std::string& filename) {
 		// Other parameters
 
 		else if (paramType == "fraction_karst_perm:") {
-		iss >> params.fraction_karst_perm;
-		}
+			iss >> params.fraction_karst_perm;
+			}
+		else if (paramType == "pred_update_interval:") {
+				iss >> params.pred_update_interval;
+				}
 		else if (paramType == "multiply_costs:") {
 		std::string flag;
 		iss >> flag;

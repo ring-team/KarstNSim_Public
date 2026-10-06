@@ -119,6 +119,27 @@ std::vector<int> generateRandomIntVector(std::size_t size, int minValue, int max
 std::vector<float> generateRandomFloatVector(std::size_t size, float minValue, float maxValue);
 
 /**
+ * @brief Computes the cumulative distribution function of the standard normal distribution.
+ * @param x Standard-normal variate.
+ * @return Cumulative probability associated with x.
+ */
+float normal_cdf(float x);
+
+/**
+ * @brief Approximates the inverse complementary error function using Newton iterations.
+ * @param x Complementary-error-function probability.
+ * @return Approximation of erfc^{-1}(x).
+ */
+float approximate_erfcinv(float x);
+
+/**
+ * @brief Computes the inverse cumulative distribution function of the standard normal distribution.
+ * @param p Cumulative probability.
+ * @return Standard-normal quantile associated with p.
+ */
+float inverse_normal_cdf(float p);
+
+/**
  * @brief Transforms a distribution into a Gaussian distribution N(mean, stddev^2).
  * @param discreteDistribution Input discrete distribution.
  * @param mean Mean of the target Gaussian distribution.

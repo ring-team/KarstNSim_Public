@@ -197,6 +197,235 @@ namespace KarstNSim {
 		reverse_adjacency_ready_ = true;
 	}
 
+	void CostGraph::DijkstraComputeReverseField(
+		int cost_channel,
+		const std::vector<int>& targets,
+		std::vector<float>& distance_to_target,
+		std::vector<int>& next_node,
+		std::vector<int>* target_root) const
+	{
+		constexpr float inf = std::numeric_limits<float>::infinity();
+
+		const int n = static_cast<int>(adj.size());
+
+		distance_to_target.assign(static_cast<std::size_t>(n), inf);
+		next_node.assign(static_cast<std::size_t>(n), -1);
+
+		if (target_root != nullptr) {
+			target_root->assign(static_cast<std::size_t>(n), -1);
+		}
+
+		if (n == 0) {
+			return;
+		}
+
+		if (cost_channel < 0) {
+			throw std::runtime_error(
+				"[dijkstra] Cannot build reverse shortest-path field: invalid negative cost channel."
+			);
+		}
+
+		if (targets.empty()) {
+			throw std::runtime_error(
+				"[dijkstra] Cannot build reverse shortest-path field without at least one target node."
+			);
+		}
+
+		// The reverse adjacency contains only topology references. Edge weights are
+		// always read directly from adj[], so rebuilding this structure is not
+		// required when Pred changes numerical edge weights.
+		BuildReverseAdjacency();
+
+		std::priority_queue<
+			DijkstraQueueNode,
+			std::vector<DijkstraQueueNode>,
+			DijkstraQueueGreater> queue;
+
+		for (const int target : targets) {
+
+			if (target < 0 || target >= n) {
+				throw std::runtime_error(
+					"[dijkstra] Cannot build reverse shortest-path field: target node " +
+					std::to_string(target) + " is outside the graph."
+				);
+			}
+
+			// Duplicate roots are harmless.
+			if (distance_to_target[static_cast<std::size_t>(target)] == 0.0f) {
+				continue;
+			}
+
+			distance_to_target[static_cast<std::size_t>(target)] = 0.0f;
+
+			if (target_root != nullptr) {
+				(*target_root)[static_cast<std::size_t>(target)] = target;
+			}
+
+			queue.push({ 0.0f, target });
+		}
+
+		while (!queue.empty()) {
+
+			const DijkstraQueueNode current = queue.top();
+			queue.pop();
+
+			const float current_distance = current.distance;
+			const int u = current.node;
+
+			if (current_distance >
+				distance_to_target[static_cast<std::size_t>(u)]) {
+				continue;
+			}
+
+			// Traverse every original directed edge pred -> u through the reverse
+			// topology. The weight used is still the original directed weight
+			// stored in adj[pred][edge_slot].
+			for (std::size_t pos =
+				reverse_offsets_[static_cast<std::size_t>(u)];
+				pos <
+				reverse_offsets_[static_cast<std::size_t>(u + 1)];
+				++pos) {
+
+				const int pred = reverse_sources_[pos];
+				const int edge_slot =
+					static_cast<int>(reverse_edge_slots_[pos]);
+
+				const GraphEdge& original_edge =
+					adj(pred, edge_slot);
+
+				if (cost_channel >=
+					static_cast<int>(original_edge.weight.size())) {
+					continue;
+				}
+
+				const float weight =
+					original_edge.weight[cost_channel];
+
+				if (!std::isfinite(weight) || weight < 0.0f) {
+					continue;
+				}
+
+				const float candidate_distance =
+					current_distance + weight;
+
+				if (candidate_distance <
+					distance_to_target[
+						static_cast<std::size_t>(pred)]) {
+
+					distance_to_target[
+						static_cast<std::size_t>(pred)] =
+						candidate_distance;
+
+						next_node[
+							static_cast<std::size_t>(pred)] = u;
+
+						if (target_root != nullptr) {
+							(*target_root)[
+								static_cast<std::size_t>(pred)] =
+								(*target_root)[
+									static_cast<std::size_t>(u)];
+						}
+
+						queue.push({
+							candidate_distance,
+							pred
+							});
+				}
+			}
+		}
+	}
+
+	std::pair<std::vector<int>, std::vector<float>>
+		CostGraph::DijkstraGetShortestPathFromReverseField(
+			int source,
+			int target,
+			int cost_channel,
+			const std::vector<float>& distance_to_target,
+			const std::vector<int>& next_node,
+			float& total_cost) const
+	{
+		constexpr float inf = std::numeric_limits<float>::infinity();
+
+		total_cost = inf;
+
+		std::vector<int> path;
+		std::vector<float> path_cost;
+
+		const int n = static_cast<int>(adj.size());
+
+		if (source < 0 || source >= n ||
+			target < 0 || target >= n ||
+			distance_to_target.size() != static_cast<std::size_t>(n) ||
+			next_node.size() != static_cast<std::size_t>(n)) {
+
+			return std::make_pair(path, path_cost);
+		}
+
+		if (!std::isfinite(
+			distance_to_target[static_cast<std::size_t>(source)])) {
+
+			return std::make_pair(path, path_cost);
+		}
+
+		path.push_back(source);
+
+		// Keep the same convention as the existing path-cost vectors: the first
+		// node has no incoming edge and therefore receives a zero cost.
+		path_cost.push_back(0.0f);
+
+		if (source == target) {
+			total_cost = 0.0f;
+			return std::make_pair(path, path_cost);
+		}
+
+		int current = source;
+
+		for (int step = 0; step < n; ++step) {
+
+			const int next =
+				next_node[static_cast<std::size_t>(current)];
+
+			if (next < 0 || next >= n) {
+				path.clear();
+				path_cost.clear();
+				total_cost = inf;
+				return std::make_pair(path, path_cost);
+			}
+
+			const float edge_weight =
+				GetDirectedEdgeWeight(
+					current,
+					next,
+					cost_channel);
+
+			if (!std::isfinite(edge_weight) ||
+				edge_weight < 0.0f) {
+
+				path.clear();
+				path_cost.clear();
+				total_cost = inf;
+				return std::make_pair(path, path_cost);
+			}
+
+			path.push_back(next);
+			path_cost.push_back(edge_weight);
+
+			if (next == target) {
+				total_cost =
+					distance_to_target[
+						static_cast<std::size_t>(source)];
+
+				return std::make_pair(path, path_cost);
+			}
+
+			current = next;
+		}
+
+		throw std::runtime_error(
+			"[dijkstra] Reverse-field path reconstruction exceeded the graph node count."
+		);
+	}
+
 	void CostGraph::DijkstraComputePathsBidirectional(int outlet_count, int source, int target, std::vector<float>& distance, std::vector<int>& previous) const
 	{
 		constexpr float inf = std::numeric_limits<float>::infinity();

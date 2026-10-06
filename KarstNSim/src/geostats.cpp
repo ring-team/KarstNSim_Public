@@ -12,6 +12,10 @@ This work was performed in the frame of the RING project at Université de Lorra
 ***************************************************************/
 
 #include "KarstNSim/geostats.h"
+#include <array>
+#include <cstdint>
+#include <unordered_map>
+
 
 namespace {
 	// Variogram-parameter convention used by SGS:
@@ -32,6 +36,12 @@ namespace {
 	//          followed by a regression refit using the retained observations.
 	// false -> no MAD-based observation trimming or subsequent refit is performed.
 	constexpr bool K_EXT_DRIFT_ENABLE_MAD_TRIMMING = true;
+
+	// Enables compact diagnostic logging for the external-drift SGS workflow:
+	// true  -> reports regression filtering, fitted coefficients, robust trimming,
+	//          predictor ranges, final drift range, and residual-distribution scaling.
+	// false -> no additional SGS diagnostic output is produced.
+	constexpr bool K_EXT_DRIFT_ENABLE_DIAGNOSTIC_LOGS = false;
 
 	// Maximum equivalent radius accepted in the external-drift regression when
 	// K_EXT_DRIFT_ENABLE_RADIUS_CAP is true. The value uses the same length unit
@@ -271,6 +281,111 @@ namespace {
 	{
 		return active_variogram_converter == nullptr ? supplied_sill : 1.0;
 	}
+
+	/**
+	 * @brief Reusable scratch storage for truncated Dijkstra searches.
+	 *
+	 * Generation counters avoid clearing and reallocating arrays with one entry per
+	 * skeleton node for every local geostatistical search. Only entries touched by
+	 * the current search are logically initialized. This is strictly equivalent to
+	 * rebuilding distance, settled, and target arrays at each call.
+	 */
+	struct GeostatsDijkstraWorkspace {
+		std::vector<float> distance;
+		std::vector<std::uint32_t> distance_generation;
+		std::vector<std::uint32_t> settled_generation;
+		std::vector<std::uint32_t> target_generation;
+		std::uint32_t generation = 0;
+
+		/**
+		 * @brief Starts a new logical search and resizes storage when required.
+		 * @param node_count Number of skeleton nodes.
+		 */
+		void begin(const std::size_t node_count)
+		{
+			if (distance.size() != node_count) {
+				distance.assign(node_count, 0.0f);
+				distance_generation.assign(node_count, 0u);
+				settled_generation.assign(node_count, 0u);
+				target_generation.assign(node_count, 0u);
+				generation = 1u;
+				return;
+			}
+
+			++generation;
+			if (generation == 0u) {
+				std::fill(distance_generation.begin(), distance_generation.end(), 0u);
+				std::fill(settled_generation.begin(), settled_generation.end(), 0u);
+				std::fill(target_generation.begin(), target_generation.end(), 0u);
+				generation = 1u;
+			}
+		}
+
+		/**
+		 * @brief Returns the current-search distance or infinity when untouched.
+		 * @param node Skeleton node index.
+		 * @return Current tentative distance.
+		 */
+		float get_distance(const int node) const
+		{
+			return distance_generation[static_cast<std::size_t>(node)] == generation
+				? distance[static_cast<std::size_t>(node)]
+				: std::numeric_limits<float>::infinity();
+		}
+
+		/**
+		 * @brief Stores a tentative distance for the current search.
+		 * @param node Skeleton node index.
+		 * @param value Tentative shortest-path distance.
+		 */
+		void set_distance(const int node, const float value)
+		{
+			const std::size_t index = static_cast<std::size_t>(node);
+			distance[index] = value;
+			distance_generation[index] = generation;
+		}
+
+		/**
+		 * @brief Tests whether a node has already been settled in the current search.
+		 * @param node Skeleton node index.
+		 * @return True when the node is settled.
+		 */
+		bool is_settled(const int node) const
+		{
+			return settled_generation[static_cast<std::size_t>(node)] == generation;
+		}
+
+		/**
+		 * @brief Marks a node as settled in the current search.
+		 * @param node Skeleton node index.
+		 */
+		void mark_settled(const int node)
+		{
+			settled_generation[static_cast<std::size_t>(node)] = generation;
+		}
+
+		/**
+		 * @brief Marks a node as a target in the current search.
+		 * @param node Skeleton node index.
+		 */
+		void mark_target(const int node)
+		{
+			target_generation[static_cast<std::size_t>(node)] = generation;
+		}
+
+		/**
+		 * @brief Tests whether a node is a target in the current search.
+		 * @param node Skeleton node index.
+		 * @return True when the node is a target.
+		 */
+		bool is_target(const int node) const
+		{
+			return target_generation[static_cast<std::size_t>(node)] == generation;
+		}
+	};
+
+	thread_local GeostatsDijkstraWorkspace GEOSTATS_DIJKSTRA_WORKSPACE;
+
 }
 
 std::vector<int> find_neighborhood(
@@ -302,9 +417,8 @@ std::vector<int> find_neighborhood(
 		bool operator>(const NodeKey& other) const { return dist > other.dist; }
 	};
 
-	const float INF = std::numeric_limits<float>::infinity();
-	std::vector<float> dist(N, INF);
-	std::vector<char>  visited(N, 0);
+	auto& workspace = GEOSTATS_DIJKSTRA_WORKSPACE;
+	workspace.begin(static_cast<std::size_t>(N));
 
 	auto edge_length = [&](int u, int v) -> float {
 		// Geometric edge weight; same logic as before (Euclidean length).
@@ -314,7 +428,7 @@ std::vector<int> find_neighborhood(
 	};
 
 	std::priority_queue<NodeKey, std::vector<NodeKey>, std::greater<NodeKey>> pq;
-	dist[current_node_index] = 0.f;
+	workspace.set_distance(current_node_index, 0.f);
 	pq.push({ 0.f, current_node_index });
 
 	// We will collect candidates in (idx, dist) to sort and truncate deterministically.
@@ -334,10 +448,10 @@ std::vector<int> find_neighborhood(
 
 		if (popped > MAX_EXPANSIONS) break;
 		if (u < 0 || u >= N) continue;
-		if (visited[u]) continue;
-		visited[u] = 1;
+		if (workspace.is_settled(u)) continue;
+		workspace.mark_settled(u);
 
-		// Range truncation: in Dijkstra, if the minimum key exceeds R, remaining keys are ≥ du > R.
+		// Range truncation: in Dijkstra, if the minimum key exceeds R, remaining keys are >= du > R.
 		if (du > range_of_neighborhood) break;
 
 		// Skip the seed itself; accept valid neighbors meeting filters.
@@ -363,7 +477,7 @@ std::vector<int> find_neighborhood(
 		for (const auto& conn : conns) {
 			const int v = conn.destindex;
 			if (v < 0 || v >= N) continue;
-			if (visited[v]) continue;
+			if (workspace.is_settled(v)) continue;
 
 			const float w = edge_length(u, v);
 			if (!std::isfinite(w) || w < 0.f) continue;
@@ -371,14 +485,16 @@ std::vector<int> find_neighborhood(
 			const float alt = du + w;
 			if (!std::isfinite(alt) || alt > range_of_neighborhood) continue;
 
-			if (alt < dist[v]) {
-				dist[v] = alt;
+			if (alt < workspace.get_distance(v)) {
+				workspace.set_distance(v, alt);
 				pq.push({ alt, v });
 			}
 		}
 	}
 
-	// Sort by metric distance and truncate to K nearest within range
+	// Sort by metric distance and truncate to K nearest within range.
+	// The original full sort is deliberately retained because its tie behavior is
+	// part of the existing simulation path and therefore must remain unchanged.
 	std::sort(candidates.begin(), candidates.end(),
 		[](const auto& a, const auto& b) { return a.second < b.second; });
 
@@ -641,6 +757,794 @@ namespace {
 	}
 }
 
+
+namespace {
+	/**
+	 * @brief Accelerates exact leave-one-out weighted regressions used by drift trimming.
+	 *
+	 * The redundancy kernel depends only on a small local neighborhood: at most
+	 * 17 samples in the two-predictor case and at most 2*K+1 samples in the
+	 * one-predictor case, with K <= 8. Removing one observation therefore changes
+	 * only the redundancy weights of observations whose local neighborhood contains
+	 * the removed sample, provided that predictor normalization bounds are unchanged.
+	 *
+	 * This cache stores those local neighborhoods once. For each eligible leave-one-
+	 * out fit it recomputes exactly the affected raw weights, then performs the same
+	 * min/max weight rescaling, class balancing, weighted normal-equation assembly,
+	 * and matrix inversion in the same observation order as the original code.
+	 * Exclusions that change a predictor minimum/maximum, or a neighborhood-size
+	 * threshold, are intentionally rejected by this fast path and must use the
+	 * original full-fit fallback.
+	 */
+	class FastLeaveOneOutRegressionCache {
+	public:
+		/**
+		 * @brief Builds the reusable local-neighborhood representation.
+		 * @param indices Regression observation node indices in fitting order.
+		 * @param zwt Predictor values for vertical distance above phreatic level.
+		 * @param dcurv Predictor values for upstream curvilinear length.
+		 * @param response Equivalent-radius response values indexed by skeleton node.
+		 * @param is_spring_node Precomputed spring-class flag indexed by skeleton node.
+		 * @param use_zwt Whether zwt is active in the current regression.
+		 * @param use_dcurv Whether dcurv is active in the current regression.
+		 * @param zwt_min Normalization minimum used by the full current fit.
+		 * @param zwt_max Normalization maximum used by the full current fit.
+		 * @param dcurv_min Normalization minimum used by the full current fit.
+		 * @param dcurv_max Normalization maximum used by the full current fit.
+		 */
+		FastLeaveOneOutRegressionCache(
+			const std::vector<int>& indices,
+			const std::vector<float>& zwt,
+			const std::vector<float>& dcurv,
+			const std::vector<float>& response,
+			const std::vector<std::uint8_t>& is_spring_node,
+			const bool use_zwt,
+			const bool use_dcurv,
+			const float zwt_min,
+			const float zwt_max,
+			const float dcurv_min,
+			const float dcurv_max)
+			: indices_(indices),
+			zwt_(zwt),
+			dcurv_(dcurv),
+			response_(response),
+			is_spring_node_(is_spring_node),
+			use_zwt_(use_zwt),
+			use_dcurv_(use_dcurv),
+			zwt_min_(zwt_min),
+			zwt_max_(zwt_max),
+			dcurv_min_(dcurv_min),
+			dcurv_max_(dcurv_max)
+		{
+			initialize();
+		}
+
+		/**
+		 * @brief Tests whether one exclusion can use the cached exact fast path.
+		 * @param excluded_position Position of the removed observation in `indices`.
+		 * @return True when normalization and neighborhood-size rules are unchanged.
+		 */
+		bool can_fit_excluding(const int excluded_position) const
+		{
+			if (!enabled_ || excluded_position < 0 || excluded_position >= observation_count_) {
+				return false;
+			}
+
+			const int node_id = indices_[static_cast<std::size_t>(excluded_position)];
+			if (use_zwt_ && exclusion_changes_range(
+				zwt_[static_cast<std::size_t>(node_id)],
+				zwt_actual_min_, zwt_actual_max_, zwt_min_count_, zwt_max_count_)) {
+				return false;
+			}
+			if (use_dcurv_ && exclusion_changes_range(
+				dcurv_[static_cast<std::size_t>(node_id)],
+				dcurv_actual_min_, dcurv_actual_max_, dcurv_min_count_, dcurv_max_count_)) {
+				return false;
+			}
+			return true;
+		}
+
+		/**
+		 * @brief Fits the weighted regression after removing one observation.
+		 * @param excluded_position Position of the removed observation in `indices`.
+		 * @param beta Regression coefficients overwritten on success.
+		 * @return True when the cached fit is valid and the normal matrix is invertible.
+		 */
+		bool fit_excluding(const int excluded_position, std::vector<float>& beta)
+		{
+			if (!can_fit_excluding(excluded_position)) return false;
+			begin_override_generation();
+
+			const std::vector<int>& affected =
+				affected_by_exclusion_[static_cast<std::size_t>(excluded_position)];
+			for (int position : affected) {
+				if (position == excluded_position) continue;
+				override_raw_[static_cast<std::size_t>(position)] =
+					recompute_raw_weight(position, excluded_position);
+				override_generation_[static_cast<std::size_t>(position)] = override_generation_id_;
+			}
+
+			float wmin = std::numeric_limits<float>::infinity();
+			float wmax = -std::numeric_limits<float>::infinity();
+
+			for (const auto& item : raw_weight_order_) {
+				const int position = item.second;
+				if (position == excluded_position || has_override(position)) continue;
+				wmin = item.first;
+				break;
+			}
+			for (auto it = raw_weight_order_.rbegin(); it != raw_weight_order_.rend(); ++it) {
+				const int position = it->second;
+				if (position == excluded_position || has_override(position)) continue;
+				wmax = it->first;
+				break;
+			}
+			for (int position : affected) {
+				if (position == excluded_position || !has_override(position)) continue;
+				const float value = override_raw_[static_cast<std::size_t>(position)];
+				wmin = std::min(wmin, value);
+				wmax = std::max(wmax, value);
+			}
+
+			if (!std::isfinite(wmin) || !std::isfinite(wmax)) return false;
+
+			float Wspr = 0.0f;
+			float Woth = 0.0f;
+			for (int position = 0; position < observation_count_; ++position) {
+				if (position == excluded_position) continue;
+				const float raw = raw_weight_at(position);
+				float scaled = 1.0f;
+				if (wmax > wmin) {
+					scaled = 0.2f + 0.8f * (raw - wmin) / (wmax - wmin);
+				}
+				scaled_weight_workspace_[static_cast<std::size_t>(position)] = scaled;
+
+				const int node_id = indices_[static_cast<std::size_t>(position)];
+				if (is_spring_node_[static_cast<std::size_t>(node_id)] != 0u) Wspr += scaled;
+				else Woth += scaled;
+			}
+
+			const float Wtot = Wspr + Woth;
+			if (Wspr > 0.0f && Woth > 0.0f) {
+				const float target = 0.5f * Wtot;
+				const float fs = target / Wspr;
+				const float fo = target / Woth;
+				for (int position = 0; position < observation_count_; ++position) {
+					if (position == excluded_position) continue;
+					const int node_id = indices_[static_cast<std::size_t>(position)];
+					scaled_weight_workspace_[static_cast<std::size_t>(position)] *=
+						(is_spring_node_[static_cast<std::size_t>(node_id)] != 0u ? fs : fo);
+				}
+			}
+
+			const int n_var = 1 + (use_zwt_ ? 1 : 0) + (use_dcurv_ ? 1 : 0);
+			std::vector<std::vector<float>> XtX(
+				static_cast<std::size_t>(n_var),
+				std::vector<float>(static_cast<std::size_t>(n_var), 0.0f));
+			std::vector<float> XtY(static_cast<std::size_t>(n_var), 0.0f);
+
+			for (int position = 0; position < observation_count_; ++position) {
+				if (position == excluded_position) continue;
+				const int node_id = indices_[static_cast<std::size_t>(position)];
+
+				std::vector<float> row;
+				row.reserve(static_cast<std::size_t>(n_var));
+				row.push_back(1.0f);
+				if (use_zwt_) {
+					row.push_back(
+						(zwt_[static_cast<std::size_t>(node_id)] - zwt_min_) /
+						std::max(1e-12f, zwt_max_ - zwt_min_));
+				}
+				if (use_dcurv_) {
+					row.push_back(
+						(dcurv_[static_cast<std::size_t>(node_id)] - dcurv_min_) /
+						std::max(1e-12f, dcurv_max_ - dcurv_min_));
+				}
+
+				const float y = response_[static_cast<std::size_t>(node_id)];
+				const float w = scaled_weight_workspace_[static_cast<std::size_t>(position)];
+				for (int j = 0; j < n_var; ++j) {
+					XtY[static_cast<std::size_t>(j)] += w * row[static_cast<std::size_t>(j)] * y;
+					for (int l = 0; l < n_var; ++l) {
+						XtX[static_cast<std::size_t>(j)][static_cast<std::size_t>(l)] +=
+							w * row[static_cast<std::size_t>(j)] * row[static_cast<std::size_t>(l)];
+					}
+				}
+			}
+
+			std::vector<std::vector<float>> inverse;
+			if (!invert_matrix(XtX, inverse)) return false;
+
+			beta.assign(static_cast<std::size_t>(n_var), 0.0f);
+			for (int j = 0; j < n_var; ++j) {
+				for (int l = 0; l < n_var; ++l) {
+					beta[static_cast<std::size_t>(j)] +=
+						inverse[static_cast<std::size_t>(j)][static_cast<std::size_t>(l)] *
+						XtY[static_cast<std::size_t>(l)];
+				}
+			}
+			return true;
+		}
+
+	private:
+		/**
+		 * @brief Initializes normalization metadata and local redundancy neighborhoods.
+		 */
+		void initialize()
+		{
+			observation_count_ = static_cast<int>(indices_.size());
+			if (observation_count_ < 32 || (!use_zwt_ && !use_dcurv_)) return;
+
+			const int loo_count = observation_count_ - 1;
+			const int full_k = std::max(1, std::min(8, observation_count_ / 10));
+			const int loo_k = std::max(1, std::min(8, loo_count / 10));
+			if (full_k != loo_k) return;
+			K_ = full_k;
+
+			compute_extrema_metadata();
+			base_raw_weight_.assign(static_cast<std::size_t>(observation_count_), 1.0f);
+			affected_by_exclusion_.assign(
+				static_cast<std::size_t>(observation_count_), {});
+			override_raw_.assign(static_cast<std::size_t>(observation_count_), 1.0f);
+			override_generation_.assign(static_cast<std::size_t>(observation_count_), 0u);
+			scaled_weight_workspace_.assign(static_cast<std::size_t>(observation_count_), 1.0f);
+
+			if (use_zwt_ && use_dcurv_) {
+				initialize_two_dimensional();
+			}
+			else {
+				initialize_one_dimensional();
+			}
+
+			if (!enabled_) return;
+			raw_weight_order_.reserve(static_cast<std::size_t>(observation_count_));
+			for (int position = 0; position < observation_count_; ++position) {
+				raw_weight_order_.emplace_back(
+					base_raw_weight_[static_cast<std::size_t>(position)], position);
+			}
+			std::sort(raw_weight_order_.begin(), raw_weight_order_.end());
+		}
+
+		/**
+		 * @brief Builds the two-predictor nearest-neighbor cache.
+		 */
+		void initialize_two_dimensional()
+		{
+			local_count_ = std::min(observation_count_, 2 * K_ + 1);
+			const int loo_local_count = std::min(observation_count_ - 1, 2 * K_ + 1);
+			if (local_count_ != loo_local_count || local_count_ >= observation_count_) return;
+
+			z01_.reserve(static_cast<std::size_t>(observation_count_));
+			d01_.reserve(static_cast<std::size_t>(observation_count_));
+			const float zrng = std::max(1e-12f, zwt_max_ - zwt_min_);
+			const float drng = std::max(1e-12f, dcurv_max_ - dcurv_min_);
+			for (int node_id : indices_) {
+				z01_.push_back((zwt_[static_cast<std::size_t>(node_id)] - zwt_min_) / zrng);
+				d01_.push_back((dcurv_[static_cast<std::size_t>(node_id)] - dcurv_min_) / drng);
+			}
+
+			const int stored_count = local_count_ + 1;
+			nearest_two_dimensional_.assign(
+				static_cast<std::size_t>(observation_count_),
+				std::vector<std::pair<float, int>>(static_cast<std::size_t>(stored_count)));
+			std::vector<std::pair<float, int>> local_dist(
+				static_cast<std::size_t>(observation_count_));
+
+			for (int k = 0; k < observation_count_; ++k) {
+				for (int s = 0; s < observation_count_; ++s) {
+					const float dz = z01_[static_cast<std::size_t>(s)] - z01_[static_cast<std::size_t>(k)];
+					const float dd = d01_[static_cast<std::size_t>(s)] - d01_[static_cast<std::size_t>(k)];
+					local_dist[static_cast<std::size_t>(s)] =
+					{ std::sqrt(dz * dz + dd * dd), s };
+				}
+				std::partial_sort(
+					local_dist.begin(),
+					local_dist.begin() + stored_count,
+					local_dist.end());
+
+				float acc = 0.0f;
+				float norm = 0.0f;
+				for (int s = 0; s < stored_count; ++s) {
+					nearest_two_dimensional_[static_cast<std::size_t>(k)][static_cast<std::size_t>(s)] =
+						local_dist[static_cast<std::size_t>(s)];
+					if (s < local_count_) {
+						const float distance = local_dist[static_cast<std::size_t>(s)].first;
+						const float kernel = std::max(0.0f, 1.0f - distance);
+						acc += kernel;
+						norm += 1.0f;
+						affected_by_exclusion_[static_cast<std::size_t>(
+							local_dist[static_cast<std::size_t>(s)].second)].push_back(k);
+					}
+				}
+				const float density = (norm > 0.0f ? acc / norm : 1.0f);
+				base_raw_weight_[static_cast<std::size_t>(k)] = 1.0f / (1.0f + density);
+			}
+			enabled_ = true;
+		}
+
+		/**
+		 * @brief Builds the one-predictor sorted-window cache.
+		 */
+		void initialize_one_dimensional()
+		{
+			axis01_.resize(static_cast<std::size_t>(observation_count_));
+			if (use_dcurv_) {
+				const float range = std::max(1e-12f, dcurv_max_ - dcurv_min_);
+				for (int position = 0; position < observation_count_; ++position) {
+					const int node_id = indices_[static_cast<std::size_t>(position)];
+					axis01_[static_cast<std::size_t>(position)] =
+						(dcurv_[static_cast<std::size_t>(node_id)] - dcurv_min_) / range;
+				}
+			}
+			else {
+				const float range = std::max(1e-12f, zwt_max_ - zwt_min_);
+				for (int position = 0; position < observation_count_; ++position) {
+					const int node_id = indices_[static_cast<std::size_t>(position)];
+					axis01_[static_cast<std::size_t>(position)] =
+						(zwt_[static_cast<std::size_t>(node_id)] - zwt_min_) / range;
+				}
+			}
+
+			one_dimensional_order_.reserve(static_cast<std::size_t>(observation_count_));
+			for (int position = 0; position < observation_count_; ++position) {
+				one_dimensional_order_.emplace_back(
+					axis01_[static_cast<std::size_t>(position)], position);
+			}
+			std::sort(one_dimensional_order_.begin(), one_dimensional_order_.end());
+			one_dimensional_rank_.assign(static_cast<std::size_t>(observation_count_), -1);
+			for (int rank = 0; rank < observation_count_; ++rank) {
+				one_dimensional_rank_[static_cast<std::size_t>(
+					one_dimensional_order_[static_cast<std::size_t>(rank)].second)] = rank;
+			}
+
+			for (int rank = 0; rank < observation_count_; ++rank) {
+				const int position = one_dimensional_order_[static_cast<std::size_t>(rank)].second;
+				const int left = std::max(0, rank - K_);
+				const int right = std::min(observation_count_ - 1, rank + K_);
+				float acc = 0.0f;
+				float norm = 0.0f;
+				for (int s = left; s <= right; ++s) {
+					const int neighbor_position =
+						one_dimensional_order_[static_cast<std::size_t>(s)].second;
+					const float distance = std::abs(
+						one_dimensional_order_[static_cast<std::size_t>(s)].first -
+						one_dimensional_order_[static_cast<std::size_t>(rank)].first);
+					const float kernel = std::max(0.0f, 1.0f - distance);
+					acc += kernel;
+					norm += 1.0f;
+					affected_by_exclusion_[static_cast<std::size_t>(neighbor_position)].push_back(position);
+				}
+				const float density = (norm > 0.0f ? acc / norm : 1.0f);
+				base_raw_weight_[static_cast<std::size_t>(position)] = 1.0f / (1.0f + density);
+			}
+			enabled_ = true;
+		}
+
+		/**
+		 * @brief Computes exact full-subset extrema and their multiplicities.
+		 */
+		void compute_extrema_metadata()
+		{
+			auto compute = [&](const std::vector<float>& values,
+				float& minimum, float& maximum, int& minimum_count, int& maximum_count) {
+				minimum = std::numeric_limits<float>::infinity();
+				maximum = -std::numeric_limits<float>::infinity();
+				for (int node_id : indices_) {
+					const float value = values[static_cast<std::size_t>(node_id)];
+					minimum = std::min(minimum, value);
+					maximum = std::max(maximum, value);
+				}
+				minimum_count = 0;
+				maximum_count = 0;
+				for (int node_id : indices_) {
+					const float value = values[static_cast<std::size_t>(node_id)];
+					if (value == minimum) ++minimum_count;
+					if (value == maximum) ++maximum_count;
+				}
+			};
+
+			if (use_zwt_) {
+				compute(zwt_, zwt_actual_min_, zwt_actual_max_, zwt_min_count_, zwt_max_count_);
+			}
+			if (use_dcurv_) {
+				compute(dcurv_, dcurv_actual_min_, dcurv_actual_max_, dcurv_min_count_, dcurv_max_count_);
+			}
+		}
+
+		/**
+		 * @brief Tests whether removing a value changes a predictor normalization range.
+		 */
+		static bool exclusion_changes_range(
+			const float value,
+			const float minimum,
+			const float maximum,
+			const int minimum_count,
+			const int maximum_count)
+		{
+			return (value == minimum && minimum_count == 1) ||
+				(value == maximum && maximum_count == 1);
+		}
+
+		/**
+		 * @brief Recomputes one raw redundancy weight after one observation is removed.
+		 */
+		float recompute_raw_weight(const int position, const int excluded_position) const
+		{
+			if (use_zwt_ && use_dcurv_) {
+				float acc = 0.0f;
+				float norm = 0.0f;
+				int accepted = 0;
+				for (const auto& item : nearest_two_dimensional_[static_cast<std::size_t>(position)]) {
+					if (item.second == excluded_position) continue;
+					const float kernel = std::max(0.0f, 1.0f - item.first);
+					acc += kernel;
+					norm += 1.0f;
+					if (++accepted == local_count_) break;
+				}
+				const float density = (norm > 0.0f ? acc / norm : 1.0f);
+				return 1.0f / (1.0f + density);
+			}
+
+			const int excluded_rank =
+				one_dimensional_rank_[static_cast<std::size_t>(excluded_position)];
+			const int full_rank = one_dimensional_rank_[static_cast<std::size_t>(position)];
+			const int loo_rank = full_rank - (excluded_rank < full_rank ? 1 : 0);
+			const int loo_count = observation_count_ - 1;
+			const int left = std::max(0, loo_rank - K_);
+			const int right = std::min(loo_count - 1, loo_rank + K_);
+
+			float acc = 0.0f;
+			float norm = 0.0f;
+			const float target = axis01_[static_cast<std::size_t>(position)];
+			for (int loo_sorted_position = left; loo_sorted_position <= right; ++loo_sorted_position) {
+				const int full_sorted_position =
+					loo_sorted_position >= excluded_rank
+					? loo_sorted_position + 1
+					: loo_sorted_position;
+				const float distance = std::abs(
+					one_dimensional_order_[static_cast<std::size_t>(full_sorted_position)].first - target);
+				const float kernel = std::max(0.0f, 1.0f - distance);
+				acc += kernel;
+				norm += 1.0f;
+			}
+			const float density = (norm > 0.0f ? acc / norm : 1.0f);
+			return 1.0f / (1.0f + density);
+		}
+
+		/**
+		 * @brief Starts a new sparse raw-weight override generation.
+		 */
+		void begin_override_generation()
+		{
+			++override_generation_id_;
+			if (override_generation_id_ == 0u) {
+				std::fill(override_generation_.begin(), override_generation_.end(), 0u);
+				override_generation_id_ = 1u;
+			}
+		}
+
+		/**
+		 * @brief Tests whether one observation has a raw-weight override.
+		 */
+		bool has_override(const int position) const
+		{
+			return override_generation_[static_cast<std::size_t>(position)] == override_generation_id_;
+		}
+
+		/**
+		 * @brief Returns the active raw redundancy weight of one observation.
+		 */
+		float raw_weight_at(const int position) const
+		{
+			return has_override(position)
+				? override_raw_[static_cast<std::size_t>(position)]
+				: base_raw_weight_[static_cast<std::size_t>(position)];
+		}
+
+		const std::vector<int>& indices_;
+		const std::vector<float>& zwt_;
+		const std::vector<float>& dcurv_;
+		const std::vector<float>& response_;
+		const std::vector<std::uint8_t>& is_spring_node_;
+		bool use_zwt_ = false;
+		bool use_dcurv_ = false;
+		float zwt_min_ = 0.0f;
+		float zwt_max_ = 1.0f;
+		float dcurv_min_ = 0.0f;
+		float dcurv_max_ = 1.0f;
+		int observation_count_ = 0;
+		int K_ = 0;
+		int local_count_ = 0;
+		bool enabled_ = false;
+
+		float zwt_actual_min_ = 0.0f;
+		float zwt_actual_max_ = 0.0f;
+		float dcurv_actual_min_ = 0.0f;
+		float dcurv_actual_max_ = 0.0f;
+		int zwt_min_count_ = 0;
+		int zwt_max_count_ = 0;
+		int dcurv_min_count_ = 0;
+		int dcurv_max_count_ = 0;
+
+		std::vector<float> z01_;
+		std::vector<float> d01_;
+		std::vector<float> axis01_;
+		std::vector<std::vector<std::pair<float, int>>> nearest_two_dimensional_;
+		std::vector<std::pair<float, int>> one_dimensional_order_;
+		std::vector<int> one_dimensional_rank_;
+		std::vector<std::vector<int>> affected_by_exclusion_;
+		std::vector<float> base_raw_weight_;
+		std::vector<std::pair<float, int>> raw_weight_order_;
+		std::vector<float> override_raw_;
+		std::vector<std::uint32_t> override_generation_;
+		std::uint32_t override_generation_id_ = 0u;
+		std::vector<float> scaled_weight_workspace_;
+	};
+}
+
+
+namespace {
+	/**
+	 * @brief Returns the two closest entries of a uniquely valued sorted distribution.
+	 *
+	 * The ordering criterion is identical to `find_closest_values`: absolute
+	 * distance to the query first, then the smaller property value on an exact
+	 * distance tie. Only the two bracketing entries and their immediate neighbors
+	 * can be among the two closest values on a sorted one-dimensional support.
+	 *
+	 * @param sorted_values Pairs of (value, original index), sorted by value.
+	 * @param query Query value.
+	 * @return Two closest (value, original index) pairs in the legacy ordering.
+	 */
+	static std::pair<std::pair<float, std::size_t>, std::pair<float, std::size_t>>
+		find_two_closest_unique_sorted_values(
+			const std::vector<std::pair<float, std::size_t>>& sorted_values,
+			const float query)
+	{
+		auto lower = std::lower_bound(
+			sorted_values.begin(), sorted_values.end(), query,
+			[](const std::pair<float, std::size_t>& item, const float value) {
+			return item.first < value;
+		});
+		const int center = static_cast<int>(lower - sorted_values.begin());
+		const int first = std::max(0, center - 2);
+		const int last = std::min(static_cast<int>(sorted_values.size()), center + 2);
+
+		std::array<std::pair<float, std::size_t>, 4> candidates{};
+		int candidate_count = 0;
+		for (int index = first; index < last; ++index) {
+			candidates[static_cast<std::size_t>(candidate_count++)] =
+				sorted_values[static_cast<std::size_t>(index)];
+		}
+		std::sort(
+			candidates.begin(), candidates.begin() + candidate_count,
+			[query](const auto& lhs, const auto& rhs) {
+			const float lhs_diff = std::abs(lhs.first - query);
+			const float rhs_diff = std::abs(rhs.first - query);
+			if (lhs_diff == rhs_diff) return lhs.first < rhs.first;
+			return lhs_diff < rhs_diff;
+		});
+		return { candidates[0], candidates[1] };
+	}
+
+	/**
+	 * @brief Performs the conditioning-data normal-score transform without repeated full sorts.
+	 *
+	 * The legacy implementation calls `find_closest_values` independently for each
+	 * conditioning datum, which rebuilds and sorts the complete simulation
+	 * distribution every time. When distribution values are unique, the same two
+	 * values are obtained by one global value sort followed by logarithmic searches.
+	 * If exact duplicate values are present, this helper deliberately falls back to
+	 * the legacy routine because `std::sort` does not define the relative order of
+	 * comparator-equivalent duplicates and the legacy index permutation is observable
+	 * in its current quantile lookup.
+	 *
+	 * @param data_vector Conditioning values, including optional -99999 NDV entries.
+	 * @param discrete_distribution Simulation marginal distribution.
+	 * @param mean Target Gaussian mean.
+	 * @param stddev Target Gaussian standard deviation.
+	 * @return Normal-score transformed conditioning vector.
+	 */
+	static std::vector<float> nst_data_with_nodata_fast_equivalent(
+		const std::vector<float>& data_vector,
+		const std::vector<float>& discrete_distribution,
+		const float mean,
+		const float stddev)
+	{
+		std::vector<float> filtered_distribution;
+		filtered_distribution.reserve(discrete_distribution.size());
+		for (const float value : discrete_distribution) {
+			if (std::abs(value - (-99999.0f)) > 1e-12f) {
+				if (!std::isfinite(value)) {
+					return nst_data_with_nodata(data_vector, discrete_distribution, mean, stddev);
+				}
+				filtered_distribution.push_back(value);
+			}
+		}
+		if (filtered_distribution.size() < 2u) {
+			return nst_data_with_nodata(data_vector, discrete_distribution, mean, stddev);
+		}
+		for (const float value : data_vector) {
+			if (std::abs(value - (-99999.0f)) > 1e-12f && !std::isfinite(value)) {
+				return nst_data_with_nodata(data_vector, discrete_distribution, mean, stddev);
+			}
+		}
+
+		std::vector<std::pair<float, std::size_t>> sorted_values;
+		sorted_values.reserve(filtered_distribution.size());
+		for (std::size_t index = 0; index < filtered_distribution.size(); ++index) {
+			sorted_values.emplace_back(filtered_distribution[index], index);
+		}
+		std::sort(
+			sorted_values.begin(), sorted_values.end(),
+			[](const auto& lhs, const auto& rhs) { return lhs.first < rhs.first; });
+
+		for (std::size_t index = 1; index < sorted_values.size(); ++index) {
+			if (sorted_values[index].first == sorted_values[index - 1].first) {
+				return nst_data_with_nodata(data_vector, discrete_distribution, mean, stddev);
+			}
+		}
+
+		std::vector<std::size_t> ranks(filtered_distribution.size());
+		std::iota(ranks.begin(), ranks.end(), 0);
+		std::sort(
+			ranks.begin(), ranks.end(),
+			[&](const std::size_t i, const std::size_t j) {
+			return filtered_distribution[i] > filtered_distribution[j];
+		});
+
+		std::vector<float> quantiles(filtered_distribution.size());
+		for (std::size_t rank = 0; rank < filtered_distribution.size(); ++rank) {
+			quantiles[ranks[rank]] =
+				(static_cast<float>(rank) + 0.5f) /
+				static_cast<float>(filtered_distribution.size());
+		}
+
+		std::vector<float> transformed_values(data_vector.size());
+		for (std::size_t index = 0; index < data_vector.size(); ++index) {
+			const float data = data_vector[index];
+			if (std::abs(data - (-99999.0f)) <= 1e-12f) {
+				transformed_values[index] = -99999.0f;
+				continue;
+			}
+
+			const auto closest = find_two_closest_unique_sorted_values(sorted_values, data);
+			const float q1 = quantiles[ranks[closest.first.second]];
+			const float q2 = quantiles[ranks[closest.second.second]];
+			float q = 0.0f;
+			const bool has_two_neighbors =
+				std::abs(closest.first.first - data) >= 1e-4f &&
+				!((closest.first.first > data && closest.second.first > data) ||
+					(closest.first.first < data && closest.second.first < data));
+
+			if (has_two_neighbors) {
+				q = interpolate(
+					q1, closest.first.first, q2, closest.second.first, data);
+			}
+			else if (closest.first.first < data) {
+				q = interpolate(
+					q1, closest.first.first, q2, closest.second.first, data);
+			}
+			else if (closest.first.first > data) {
+				q = interpolate(
+					q1, closest.first.first, q2, closest.second.first, data);
+			}
+			else {
+				q = q1;
+			}
+			transformed_values[index] = mean + stddev * inverse_normal_cdf(1.0f - q);
+		}
+		return transformed_values;
+	}
+
+	/**
+	 * @brief Back-transforms Gaussian values using one ranked marginal-distribution table.
+	 *
+	 * Quantiles of the initial empirical distribution are uniformly spaced rank
+	 * midpoints. The legacy routine nevertheless sorts the complete quantile table
+	 * for every simulated node to recover the two closest ranks. This implementation
+	 * constructs the same ranked property values and midpoint quantiles once, then
+	 * searches only the local bracketing ranks. The interpolation operands and their
+	 * order are identical to the legacy implementation, including extrapolation.
+	 *
+	 * @param gaussian_distribution Gaussian-space simulated values.
+	 * @param discrete_distribution Initial property-space marginal distribution.
+	 * @return Property-space back-transformed values.
+	 */
+	static std::vector<float> back_transform_fast_equivalent(
+		const std::vector<float>& gaussian_distribution,
+		const std::vector<float>& discrete_distribution)
+	{
+		std::vector<float> filtered_distribution;
+		filtered_distribution.reserve(discrete_distribution.size());
+		for (const float value : discrete_distribution) {
+			if (std::abs(value - (-99999.0f)) > 1e-12f) {
+				if (!std::isfinite(value)) {
+					return back_transform(gaussian_distribution, discrete_distribution);
+				}
+				filtered_distribution.push_back(value);
+			}
+		}
+		if (filtered_distribution.size() < 2u) {
+			return back_transform(gaussian_distribution, discrete_distribution);
+		}
+
+		std::vector<std::size_t> ranks(filtered_distribution.size());
+		std::iota(ranks.begin(), ranks.end(), 0);
+		std::sort(
+			ranks.begin(), ranks.end(),
+			[&](const std::size_t i, const std::size_t j) {
+			return filtered_distribution[i] < filtered_distribution[j];
+		});
+
+		std::vector<float> sorted_property(filtered_distribution.size());
+		std::vector<float> rank_quantiles(filtered_distribution.size());
+		for (std::size_t rank = 0; rank < filtered_distribution.size(); ++rank) {
+			sorted_property[rank] = filtered_distribution[ranks[rank]];
+			rank_quantiles[rank] =
+				(static_cast<float>(rank) + 0.5f) /
+				static_cast<float>(filtered_distribution.size());
+		}
+
+		std::vector<float> back_transformed(gaussian_distribution.size());
+		for (std::size_t index = 0; index < gaussian_distribution.size(); ++index) {
+			const float gaussian_value = gaussian_distribution[index];
+			if (std::abs(gaussian_value - (-99999.0f)) <= 1e-12f) {
+				back_transformed[index] = -99999.0f;
+				continue;
+			}
+
+			const float tested_quantile = normal_cdf(gaussian_value);
+			auto lower = std::lower_bound(
+				rank_quantiles.begin(), rank_quantiles.end(), tested_quantile);
+			const int center = static_cast<int>(lower - rank_quantiles.begin());
+			const int first = std::max(0, center - 2);
+			const int last = std::min(static_cast<int>(rank_quantiles.size()), center + 2);
+
+			std::array<std::pair<float, int>, 4> candidates{};
+			int candidate_count = 0;
+			for (int rank = first; rank < last; ++rank) {
+				candidates[static_cast<std::size_t>(candidate_count++)] =
+				{ rank_quantiles[static_cast<std::size_t>(rank)], rank };
+			}
+			std::sort(
+				candidates.begin(), candidates.begin() + candidate_count,
+				[tested_quantile](const auto& lhs, const auto& rhs) {
+				const float lhs_diff = std::abs(lhs.first - tested_quantile);
+				const float rhs_diff = std::abs(rhs.first - tested_quantile);
+				if (lhs_diff == rhs_diff) return lhs.first < rhs.first;
+				return lhs_diff < rhs_diff;
+			});
+
+			const float q1 = candidates[0].first;
+			const float q2 = candidates[1].first;
+			const float value1 = sorted_property[static_cast<std::size_t>(candidates[0].second)];
+			const float value2 = sorted_property[static_cast<std::size_t>(candidates[1].second)];
+			const bool has_two_neighbors =
+				std::abs(q1 - tested_quantile) >= 1e-4f &&
+				!((q1 > tested_quantile && q2 > tested_quantile) ||
+					(q1 < tested_quantile && q2 < tested_quantile));
+
+			if (has_two_neighbors) {
+				back_transformed[index] = interpolate(
+					value1, q1, value2, q2, tested_quantile);
+			}
+			else if (q1 < tested_quantile) {
+				back_transformed[index] = interpolate(
+					value1, q1, value2, q2, tested_quantile);
+			}
+			else if (q1 > tested_quantile) {
+				back_transformed[index] = interpolate(
+					value1, q1, value2, q2, tested_quantile);
+			}
+			else {
+				back_transformed[index] = value1;
+			}
+		}
+		return back_transformed;
+	}
+}
+
 // --- Helper: truncated Dijkstra shortest-path distances to a set of targets ---
 // Returns distances from 'src' to each 'targets[t]' (INF if beyond 'range_cap' or unreachable).
 std::vector<float> dijkstra_to_targets_truncated(
@@ -652,8 +1556,8 @@ std::vector<float> dijkstra_to_targets_truncated(
 	const int N = (int)curve->nodes.size();
 	const float INF = std::numeric_limits<float>::infinity();
 
-	std::vector<float> dist(N, INF);
-	std::vector<char>  seen(N, 0);
+	auto& workspace = GEOSTATS_DIJKSTRA_WORKSPACE;
+	workspace.begin(static_cast<std::size_t>(N));
 
 	struct Q { float d; int i; bool operator>(const Q& o) const { return d > o.d; } };
 	std::priority_queue<Q, std::vector<Q>, std::greater<Q>> pq;
@@ -664,39 +1568,41 @@ std::vector<float> dijkstra_to_targets_truncated(
 		return KarstNSim::magnitude(pu - pv);
 	};
 
-	dist[src] = 0.f;
+	workspace.set_distance(src, 0.f);
 	pq.push({ 0.f, src });
 
-	// For an early-out when every target is settled
-	std::vector<char> is_target(N, 0);
-	for (int t : targets) if (t >= 0 && t < N) is_target[t] = 1;
+	// Preserve the original target counting semantics, including invalid or
+	// duplicate target entries, while avoiding an O(N) target-array reset.
+	for (int t : targets) {
+		if (t >= 0 && t < N) workspace.mark_target(t);
+	}
 	int remaining = (int)targets.size();
 
 	while (!pq.empty()) {
 		auto [du, u] = pq.top(); pq.pop();
-		if (seen[u]) continue;
-		seen[u] = 1;
+		if (workspace.is_settled(u)) continue;
+		workspace.mark_settled(u);
 
-		if (du > range_cap) break;               // all further keys ≥ du
-		if (is_target[u]) {                      // settled a target
-			if (--remaining == 0) break;        // all found
+		if (du > range_cap) break;               // all further keys >= du
+		if (workspace.is_target(u)) {            // settled a target
+			if (--remaining == 0) break;          // all found
 		}
 
 		for (const auto& c : curve->nodes[u].connections) {
 			const int v = c.destindex;
 			if (v < 0 || v >= N) continue;
-			if (seen[v]) continue;
+			if (workspace.is_settled(v)) continue;
 			const float w = edge_len(u, v);
 			if (!std::isfinite(w) || w < 0.f) continue;
 			const float alt = du + w;
-			if (alt >= dist[v] || alt > range_cap) continue;
-			dist[v] = alt;
+			if (alt >= workspace.get_distance(v) || alt > range_cap) continue;
+			workspace.set_distance(v, alt);
 			pq.push({ alt, v });
 		}
 	}
 
 	std::vector<float> out; out.reserve(targets.size());
-	for (int t : targets) out.push_back((t >= 0 && t < N) ? dist[t] : INF);
+	for (int t : targets) out.push_back((t >= 0 && t < N) ? workspace.get_distance(t) : INF);
 	return out;
 }
 
@@ -1031,7 +1937,8 @@ namespace {
 	static int nearest_node_index(const KarstNSim::KarsticSkeleton* sk,
 		const Vector3& P)
 	{
-		// Linear scan is fine here; can be replaced by a spatial index if needed.
+		// Linear scan is deliberately retained to preserve the exact tie-breaking
+		// behavior of the previous implementation.
 		int best = -1;
 		float best2 = std::numeric_limits<float>::infinity();
 		for (int i = 0; i < (int)sk->nodes.size(); ++i) {
@@ -1042,48 +1949,80 @@ namespace {
 		return best;
 	}
 
-	// Select sources per component using the *input* spring Z, then map to nodes.
-	// We first keep all input springs whose nearest node lies in the component,
-	// compute zmin on the *spring Z*, and keep only those with S.z <= zmin + z_window.
-	// Finally we map these selected springs to their nearest node indices and deduplicate.
-	static std::vector<int> pick_component_sources_from_springs(
+	/**
+	 * @brief Stores the nearest skeleton node and elevation of one input spring.
+	 */
+	struct MappedSpring {
+		int node_id;
+		float spring_z;
+	};
+
+	/**
+	 * @brief Maps every input spring to its nearest skeleton node once.
+	 *
+	 * The former implementation repeated the same O(N) nearest-node scan for every
+	 * spring in every connected component. The mapping is independent of the
+	 * component being processed, so computing it once preserves exactly the same
+	 * node selection while removing redundant work.
+	 *
+	 * @param sk Skeleton graph.
+	 * @param springs_xyz Input spring coordinates.
+	 * @return Spring-to-node mapping in the original spring order.
+	 */
+	static std::vector<MappedSpring> map_springs_to_nodes(
 		const KarstNSim::KarsticSkeleton* sk,
+		const std::vector<Vector3>& springs_xyz)
+	{
+		std::vector<MappedSpring> mapped;
+		mapped.reserve(springs_xyz.size());
+		for (const Vector3& spring : springs_xyz) {
+			mapped.push_back({ nearest_node_index(sk, spring), spring.z });
+		}
+		return mapped;
+	}
+
+	/**
+	 * @brief Selects source nodes for one connected component from pre-mapped springs.
+	 *
+	 * @param comp Connected-component label of every skeleton node.
+	 * @param cid Component being processed.
+	 * @param mapped_springs Precomputed nearest-node mapping of all input springs.
+	 * @param z_window Elevation window above the lowest spring.
+	 * @return Deduplicated source-node indices in ascending node-index order.
+	 */
+	static std::vector<int> pick_component_sources_from_mapped_springs(
 		const std::vector<int>& comp,
 		int cid,
-		const std::vector<Vector3>& springs_xyz,
+		const std::vector<MappedSpring>& mapped_springs,
 		float z_window = 40.f)
 	{
-		struct Cand { int spring_id; int node_id; float spring_z; };
-		std::vector<Cand> cand;
-		cand.reserve(springs_xyz.size());
+		std::vector<MappedSpring> candidates;
+		candidates.reserve(mapped_springs.size());
 
-		// Map every spring to its nearest node and keep only those landing in this component
-		for (int sid = 0; sid < (int)springs_xyz.size(); ++sid) {
-			const auto& S = springs_xyz[sid];
-			const int nidx = nearest_node_index(sk, S);
-			if (nidx >= 0 && comp[nidx] == cid) {
-				cand.push_back({ sid, nidx, S.z }); // NOTE: keep *spring* Z here
+		for (const MappedSpring& spring : mapped_springs) {
+			if (spring.node_id >= 0 && comp[spring.node_id] == cid) {
+				candidates.push_back(spring);
 			}
 		}
-		if (cand.empty()) return {};
+		if (candidates.empty()) return {};
 
-		// Lowest *spring* Z among candidates of this component
-		float zmin = cand[0].spring_z;
-		for (const auto& c : cand) zmin = std::min(zmin, c.spring_z);
+		float zmin = candidates[0].spring_z;
+		for (const MappedSpring& candidate : candidates) {
+			zmin = std::min(zmin, candidate.spring_z);
+		}
 
-		// Keep only springs within +z_window of the lowest spring Z (component-wise)
 		std::vector<int> sources_nodes;
-		sources_nodes.reserve(cand.size());
-		for (const auto& c : cand) {
-			if (c.spring_z <= zmin + z_window) {
-				sources_nodes.push_back(c.node_id);
+		sources_nodes.reserve(candidates.size());
+		for (const MappedSpring& candidate : candidates) {
+			if (candidate.spring_z <= zmin + z_window) {
+				sources_nodes.push_back(candidate.node_id);
 			}
 		}
 
-		// Deduplicate node indices (several springs could map to the same node)
 		std::sort(sources_nodes.begin(), sources_nodes.end());
-		sources_nodes.erase(std::unique(sources_nodes.begin(), sources_nodes.end()), sources_nodes.end());
-
+		sources_nodes.erase(
+			std::unique(sources_nodes.begin(), sources_nodes.end()),
+			sources_nodes.end());
 		return sources_nodes;
 	}
 
@@ -1270,25 +2209,50 @@ namespace {
 
 	// --- Build upstream DAG (multi-parents) ----------------------------------
 
-	static void build_upstream_parents(
+	/**
+	 * @brief Upstream DAG edge with a compact union identifier and cached length.
+	 */
+	struct UpstreamParentEdge {
+		int upstream_node;
+		int edge_id;
+		float length;
+	};
+
+	static int build_upstream_parents(
 		const KarstNSim::KarsticSkeleton* sk,
 		const std::vector<int>& comp, int cid,
+		const std::vector<int>& component_nodes,
 		const std::vector<float>& dist,
-		std::vector<std::vector<int>>& parents)
+		std::vector<std::vector<UpstreamParentEdge>>& parents)
 	{
 		const int N = (int)sk->nodes.size();
 		parents.assign(N, {});
-		for (int v = 0; v < N; ++v) {
-			if (comp[v] != cid) continue;
+
+		// Assign a compact identifier to each undirected DAG edge once. Duplicate
+		// adjacency entries, if any, deliberately receive the same identifier so
+		// that the former unordered-set edge-union semantics are preserved.
+		std::unordered_map<uint64_t, int> edge_ids;
+		edge_ids.reserve(std::max<std::size_t>(1024, component_nodes.size() * 2));
+		int next_edge_id = 0;
+
+		for (int v : component_nodes) {
 			for (const auto& c : sk->nodes[v].connections) {
-				int u = c.destindex;
+				const int u = c.destindex;
 				if (u < 0 || u >= N) continue;
 				if (comp[u] != cid) continue;
 				if (dist[u] > dist[v] + DCURV_EPS) {
-					parents[v].push_back(u); // u is strictly upstream of v
+					const uint64_t key = make_edge_key(u, v);
+					auto insertion = edge_ids.emplace(key, next_edge_id);
+					if (insertion.second) ++next_edge_id;
+					parents[v].push_back({
+						u,
+						insertion.first->second,
+						edge_length(sk, u, v)
+						});
 				}
 			}
 		}
+		return next_edge_id;
 	}
 
 	// --- Exact upstream union per target set ---------------------------------
@@ -1297,39 +2261,62 @@ namespace {
 	static std::vector<float> exact_dcurv_for_targets(
 		const KarstNSim::KarsticSkeleton* curve,
 		const std::vector<int>& comp, int cid,
-		const std::vector<std::vector<int>>& parents,
+		const std::vector<std::vector<UpstreamParentEdge>>& parents,
+		const int edge_count,
 		const std::vector<int>& targets)
 	{
-		using EdgeKey = uint64_t;
-		std::vector<float> out; out.reserve(targets.size());
+		std::vector<float> out;
+		out.reserve(targets.size());
 
-		std::vector<int> stack; stack.reserve(1024);
+		std::vector<int> stack;
+		stack.reserve(1024);
+
+		// Reusable generation-stamped arrays replace one unordered_set allocation
+		// and thousands of hash operations per target. The DFS stack order and the
+		// order in which edge lengths are added are unchanged, so floating-point
+		// accumulation follows the same sequence as in the previous implementation.
+		std::vector<std::uint32_t> seen_edge_generation(
+			static_cast<std::size_t>(std::max(0, edge_count)), 0u);
+		std::vector<std::uint32_t> expanded_node_generation(
+			curve->nodes.size(), 0u);
+		std::uint32_t generation = 0u;
 
 		for (int t : targets) {
+			++generation;
+			if (generation == 0u) {
+				std::fill(seen_edge_generation.begin(), seen_edge_generation.end(), 0u);
+				std::fill(expanded_node_generation.begin(), expanded_node_generation.end(), 0u);
+				generation = 1u;
+			}
+
 			if (t < 0 || t >= (int)curve->nodes.size() || comp[t] != cid) {
 				out.push_back(0.0f);
 				continue;
 			}
 
-			std::unordered_set<EdgeKey> seen_edges;
-			seen_edges.reserve(1024); // heuristic
-
 			float total = 0.0f;
 			stack.clear();
 			stack.push_back(t);
 
-			// Non-recursive DFS up the parents DAG
+			// Non-recursive DFS up the parents DAG. A node reached more than once can
+			// be skipped after its first expansion because all of its parent edges were
+			// already examined atomically during that expansion.
 			while (!stack.empty()) {
 				const int v = stack.back();
 				stack.pop_back();
 
-				for (int u : parents[v]) {
-					const EdgeKey ek = make_edge_key(u, v);
-					if (seen_edges.insert(ek).second) {
-						total += edge_length(curve, u, v);
-						stack.push_back(u);
+				if (expanded_node_generation[static_cast<std::size_t>(v)] == generation) {
+					continue;
+				}
+				expanded_node_generation[static_cast<std::size_t>(v)] = generation;
+
+				for (const UpstreamParentEdge& parent : parents[v]) {
+					const std::size_t edge_index = static_cast<std::size_t>(parent.edge_id);
+					if (seen_edge_generation[edge_index] != generation) {
+						seen_edge_generation[edge_index] = generation;
+						total += parent.length;
+						stack.push_back(parent.upstream_node);
 					}
-					// else: edge already counted; skip to avoid double counting.
 				}
 			}
 
@@ -1356,70 +2343,72 @@ std::vector<float> compute_upstream_curvilinear_length(
 
 	// 1) Connected components
 	std::vector<int> comp = build_components(curve);
-	int ncomp = 0; for (int x : comp) ncomp = std::max(ncomp, x + 1);
+	int ncomp = 0;
+	for (int x : comp) ncomp = std::max(ncomp, x + 1);
+
+	// Cache component-node lists in increasing global node order. Besides avoiding
+	// repeated O(N) scans for every component, this preserves the exact iteration
+	// order used by the former implementation.
+	std::vector<std::vector<int>> component_nodes(static_cast<std::size_t>(ncomp));
+	for (int v = 0; v < N; ++v) {
+		if (comp[v] >= 0) component_nodes[static_cast<std::size_t>(comp[v])].push_back(v);
+	}
+
+	// The nearest skeleton node of a spring is independent of the component loop.
+	// Compute the identical linear-scan mapping once instead of once per component.
+	const std::vector<MappedSpring> mapped_springs =
+		map_springs_to_nodes(curve, springs_xyz);
 
 	// 2) Process each component independently
 	for (int cid = 0; cid < ncomp; ++cid) {
+		const std::vector<int>& nodes_in_component =
+			component_nodes[static_cast<std::size_t>(cid)];
+
 		// 2.1) Select sources among springs located in this component:
 		//      lowest-Z spring + any other spring within +40 m in Z.
-		std::vector<int> sources = pick_component_sources_from_springs(
-			curve, comp, cid, springs_xyz, 40.f);
+		std::vector<int> sources = pick_component_sources_from_mapped_springs(
+			comp, cid, mapped_springs, 40.f);
 
 		if (sources.empty()) {
-			//	"dcurv will be 0 for all nodes in this component.");
-			continue; // nothing to orient here
+			continue;
 		}
 
 		// 2.2) Multi-source Dijkstra distances
 		std::vector<float> dist = dijkstra_multi_source(curve, comp, cid, sources, nullptr);
 
-		// 2.2) Multi-source Dijkstra distances + labels (which spring each node belongs to)
-		//std::vector<int> label_of; // size N after call, values in [0..S-1] or -1
-		//std::vector<float> dist = dijkstra_multi_source(curve, comp, cid, sources, &label_of);
+		// 2.3) Upstream DAG (multi-parents). Parent edges receive compact IDs and
+		//      cache their geometric length once for all target traversals.
+		std::vector<std::vector<UpstreamParentEdge>> parents;
+		const int upstream_edge_count = build_upstream_parents(
+			curve, comp, cid, nodes_in_component, dist, parents);
 
-		// --- Basin audit & CSV export ----------------------------------------------
-		//std::vector<double> basin_len;
-		//double comp_len_check = 0.0;
-		//accumulate_basin_edge_lengths(curve, comp, cid, dist, label_of, sources, basin_len, comp_len_check);
-		//// Save CSV for plotting boundaries (plan view)
-		//const std::string out_csv = "C:\\Users\\gouy2\\PycharmProjects\\project_karst\\outputs\\basin_boundaries_comp" + std::to_string(cid) + ".csv";
-		//save_basin_edges_csv(curve, comp, cid, dist, label_of, out_csv);
-
-		// 2.3) Upstream DAG (multi-parents)
-		std::vector<std::vector<int>> parents;
-		build_upstream_parents(curve, comp, cid, dist, parents);
-
-		// (Optional) Compute total undirected edge length of this component for sanity logs
+		// Compute total undirected edge length of this component using the same
+		// node and connection order as before.
 		double comp_total_len = 0.0;
-		for (int v = 0; v < N; ++v) if (comp[v] == cid) {
+		for (int v : nodes_in_component) {
 			for (const auto& c : curve->nodes[v].connections) {
-				int u = c.destindex;
+				const int u = c.destindex;
 				if (u < 0 || u >= N || comp[u] != cid) continue;
 				if (u < v) comp_total_len += edge_length(curve, u, v);
 			}
 		}
 
-		// 2.4) Exact upstream edge-union length for ALL nodes in the component
-		std::vector<int> targets; targets.reserve(1024);
-		for (int v = 0; v < N; ++v) if (comp[v] == cid) targets.push_back(v);
-
+		// 2.4) Exact upstream edge-union length for all nodes in the component.
+		// `nodes_in_component` has the same increasing order as the former target
+		// construction and can therefore be used directly.
 		std::vector<float> dcurv_comp = exact_dcurv_for_targets(
-			curve, comp, cid, parents, targets);
+			curve, comp, cid, parents, upstream_edge_count, nodes_in_component);
 
-		// Scatter back to global dcurv
-		size_t k = 0;
-		for (int v = 0; v < N; ++v) {
-			if (comp[v] != cid) continue;
-			dcurv[v] = dcurv_comp[k++];
-			// Optional clamp & warning (should never trigger with union-logic)
+		for (std::size_t k = 0; k < nodes_in_component.size(); ++k) {
+			const int v = nodes_in_component[k];
+			dcurv[v] = dcurv_comp[k];
 			if (dcurv[v] > comp_total_len + 1e-3f) {
 				dcurv[v] = (float)comp_total_len;
 			}
 		}
-
 	}
 
-	// 3) Stats/log
+	// 3) Stats retained for strict behavioral parity with the previous code.
 	float mn = std::numeric_limits<float>::infinity();
 	float mx = -std::numeric_limits<float>::infinity();
 	int n_zero = 0, n_iso = 0;
@@ -1501,22 +2490,110 @@ std::vector<float> compute_external_drift(
 	// ---- 1) Collect observed nodes (non-NDV eq_radius) ------------------------
 	std::vector<int> valid_indices;
 	valid_indices.reserve(N);
+
+	int n_hard_data = 0;
+	int n_excluded_by_radius_cap = 0;
+	int n_candidate_inlets = 0;
+	int n_candidate_outlets = 0;
+	int n_candidate_waypoints = 0;
+
 	for (int i = 0; i < N; ++i) {
-		if (i < (int)eq_radius_values.size()) {
-			const float r = eq_radius_values[i];
-			const bool has_data = (std::abs(r - (-99999.0f)) > 1e-12f);
-			const bool pass_radius_cap =
-				(!K_EXT_DRIFT_ENABLE_RADIUS_CAP || r <= K_RADIUS_MAX_FOR_REGRESSION);
-			if (has_data && pass_radius_cap) {
-				valid_indices.push_back(i);
-			}
+		if (i >= static_cast<int>(eq_radius_values.size())) {
+			continue;
 		}
+
+		const float r = eq_radius_values[i];
+		const bool has_data =
+			(std::abs(r - (-99999.0f)) > 1e-12f);
+
+		if (!has_data) {
+			continue;
+		}
+
+		++n_hard_data;
+
+		const bool pass_radius_cap =
+			(!K_EXT_DRIFT_ENABLE_RADIUS_CAP ||
+				r <= K_RADIUS_MAX_FOR_REGRESSION);
+
+		if (!pass_radius_cap) {
+			++n_excluded_by_radius_cap;
+			continue;
+		}
+
+		valid_indices.push_back(i);
+
+		switch (conditioning_role_at(i)) {
+		case ConditioningDataRole::Inlet:
+			++n_candidate_inlets;
+			break;
+		case ConditioningDataRole::Outlet:
+			++n_candidate_outlets;
+			break;
+		case ConditioningDataRole::Waypoint:
+			++n_candidate_waypoints;
+			break;
+		default:
+			break;
+		}
+	}
+
+	if (K_EXT_DRIFT_ENABLE_DIAGNOSTIC_LOGS) {
+		std::cout
+			<< "[geostats][external_drift][diag] Hard conditioning data: "
+			<< n_hard_data
+			<< "; regression candidates: " << valid_indices.size()
+			<< " (inlets=" << n_candidate_inlets
+			<< ", outlets=" << n_candidate_outlets
+			<< ", waypoints=" << n_candidate_waypoints << ")"
+			<< "; excluded by radius cap: " << n_excluded_by_radius_cap;
+
+		if (K_EXT_DRIFT_ENABLE_RADIUS_CAP) {
+			std::cout << " (cap=" << K_RADIUS_MAX_FOR_REGRESSION << ")";
+		}
+		else {
+			std::cout << " (cap disabled)";
+		}
+
+		std::cout << std::endl;
 	}
 
 	const int n_obs = static_cast<int>(valid_indices.size());
 	if (n_obs == 0 || (!use_drift_zwt && !use_drift_curv)) {
 		weights_out.assign(N, 0.0f);
 		return drift;
+	}
+
+	// Precompute spring-class membership once. The previous implementation repeated
+	// the same coordinate-to-spring proximity test inside every full and leave-one-
+	// out regression fit, although the classification is subset-independent.
+	const float SPR_EPS = 1e-2f;
+	std::vector<std::uint8_t> is_spring_observation(static_cast<std::size_t>(N), 0u);
+	for (int id : valid_indices) {
+		const Vector3& point = curve->nodes[id].p;
+		for (const Vector3& spring : springs_xyz) {
+			if (KarstNSim::magnitude(point - spring) <= SPR_EPS) {
+				is_spring_observation[static_cast<std::size_t>(id)] = 1u;
+				break;
+			}
+		}
+	}
+
+	if (K_EXT_DRIFT_ENABLE_DIAGNOSTIC_LOGS) {
+		int n_spring_class = 0;
+		for (int id : valid_indices) {
+			if (is_spring_observation[static_cast<std::size_t>(id)] != 0u) {
+				++n_spring_class;
+			}
+		}
+
+		std::cout
+			<< "[geostats][external_drift][diag] Regression spring class: "
+			<< n_spring_class
+			<< " observations recognized geometrically, versus "
+			<< n_candidate_outlets
+			<< " observations tagged as outlets."
+			<< std::endl;
 	}
 
 	// ---- Helpers ---------------------------------------------------------------
@@ -1556,21 +2633,33 @@ std::vector<float> compute_external_drift(
 
 		if (use_zwt && use_dcurv) {
 			const int local_count = std::min(M, 2 * K + 1);
-			for (int k = 0; k < M; ++k) {
-				std::vector<std::pair<float, int>> local_dist;
-				local_dist.reserve(M);
+			std::vector<std::pair<float, int>> local_dist(static_cast<std::size_t>(M));
 
+			for (int k = 0; k < M; ++k) {
 				for (int s = 0; s < M; ++s) {
 					const float dz = z01[s] - z01[k];
 					const float dd = d01[s] - d01[k];
-					local_dist.emplace_back(std::sqrt(dz * dz + dd * dd), s);
+					local_dist[static_cast<std::size_t>(s)] =
+					{ std::sqrt(dz * dz + dd * dd), s };
 				}
 
-				std::sort(local_dist.begin(), local_dist.end());
+				// Only the nearest `local_count` entries contribute to the density.
+				// partial_sort returns exactly the same ordered prefix as a complete
+				// lexicographic sort of (distance, index), while reducing the sorting
+				// cost from O(M log M) to O(M log local_count), with local_count <= 17.
+				if (local_count < M) {
+					std::partial_sort(
+						local_dist.begin(),
+						local_dist.begin() + local_count,
+						local_dist.end());
+				}
+				else {
+					std::sort(local_dist.begin(), local_dist.end());
+				}
 
 				float acc = 0.0f, norm = 0.0f;
 				for (int s = 0; s < local_count; ++s) {
-					const float distance = local_dist[s].first;
+					const float distance = local_dist[static_cast<std::size_t>(s)].first;
 					const float kernel = std::max(0.0f, 1.0f - distance);
 					acc += kernel;
 					norm += 1.0f;
@@ -1632,18 +2721,12 @@ std::vector<float> compute_external_drift(
 			dcurv_max);
 
 		// === Class-balance 50/50 (SPRINGS vs OTHERS), exact proximity (EPS=1e-2) ===
-		const float SPR_EPS = 1e-2f;
 		float Wspr = 0.0f, Woth = 0.0f;
 		std::vector<uint8_t> is_spring(idxs.size(), 0);
 		for (size_t k = 0; k < idxs.size(); ++k) {
 			const int id = idxs[k];
-			const Vector3& p = curve->nodes[id].p;
-
-			bool sflag = false;
-			for (size_t si = 0; si < springs_xyz.size(); ++si) {
-				const float dist = KarstNSim::magnitude(p - springs_xyz[si]);
-				if (dist <= SPR_EPS) { sflag = true; break; }
-			}
+			const bool sflag =
+				is_spring_observation[static_cast<std::size_t>(id)] != 0u;
 
 			is_spring[k] = sflag ? 1u : 0u;
 			if (sflag) Wspr += out_weights[k];
@@ -1720,6 +2803,120 @@ std::vector<float> compute_external_drift(
 		return prediction;
 	};
 
+	auto log_regression_state = [&](
+		const char* stage,
+		const std::vector<int>& indices,
+		const std::vector<float>& beta_local,
+		const std::vector<float>& weights_local,
+		const bool active_zwt,
+		const bool active_dcurv,
+		const float zwt_min_local,
+		const float zwt_max_local,
+		const float dcurv_min_local,
+		const float dcurv_max_local)
+	{
+		if (!K_EXT_DRIFT_ENABLE_DIAGNOSTIC_LOGS || indices.empty()) {
+			return;
+		}
+
+		float y_min = std::numeric_limits<float>::infinity();
+		float y_max = -std::numeric_limits<float>::infinity();
+		double y_sum = 0.0;
+		double weighted_y_sum = 0.0;
+		double weight_sum = 0.0;
+
+		int n_inlets = 0;
+		int n_outlets = 0;
+		int n_waypoints = 0;
+
+		for (std::size_t k = 0; k < indices.size(); ++k) {
+			const int id = indices[k];
+			const float y = eq_radius_values[id];
+
+			y_min = std::min(y_min, y);
+			y_max = std::max(y_max, y);
+			y_sum += static_cast<double>(y);
+
+			if (k < weights_local.size()) {
+				const double w =
+					static_cast<double>(weights_local[k]);
+				weighted_y_sum += w * static_cast<double>(y);
+				weight_sum += w;
+			}
+
+			switch (conditioning_role_at(id)) {
+			case ConditioningDataRole::Inlet:
+				++n_inlets;
+				break;
+			case ConditioningDataRole::Outlet:
+				++n_outlets;
+				break;
+			case ConditioningDataRole::Waypoint:
+				++n_waypoints;
+				break;
+			default:
+				break;
+			}
+		}
+
+		std::cout
+			<< "[geostats][external_drift][diag] " << stage
+			<< " fit: n=" << indices.size()
+			<< " (inlets=" << n_inlets
+			<< ", outlets=" << n_outlets
+			<< ", waypoints=" << n_waypoints << ")"
+			<< "; Y[min/mean/max]=["
+			<< y_min << ", "
+			<< y_sum / static_cast<double>(indices.size()) << ", "
+			<< y_max << "]";
+
+		if (weight_sum > 0.0) {
+			std::cout
+				<< "; weighted Y mean="
+				<< weighted_y_sum / weight_sum;
+		}
+
+		if (!beta_local.empty()) {
+			std::cout << "; beta0=" << beta_local[0];
+
+			int beta_index = 1;
+			if (active_zwt) {
+				std::cout
+					<< ", beta_zwt="
+					<< beta_local[beta_index++];
+			}
+			if (active_dcurv) {
+				std::cout
+					<< ", beta_dcurv="
+					<< beta_local[beta_index++];
+			}
+		}
+
+		if (active_zwt) {
+			const auto full_bounds =
+				std::minmax_element(zwt.begin(), zwt.end());
+
+			std::cout
+				<< "; zwt calib=[" << zwt_min_local
+				<< ", " << zwt_max_local
+				<< "], all=[" << *full_bounds.first
+				<< ", " << *full_bounds.second << "]";
+		}
+
+		if (active_dcurv) {
+			const auto full_bounds =
+				std::minmax_element(dcurv.begin(), dcurv.end());
+
+			std::cout
+				<< "; dcurv calib=[" << dcurv_min_local
+				<< ", " << dcurv_max_local
+				<< "], all=[" << *full_bounds.first
+				<< ", " << *full_bounds.second << "]";
+		}
+
+		std::cout << std::endl;
+	};
+
 	// ---- 2) Initial fit --------------------------------------------------------
 	float zwt_min = 0.0f, zwt_max = 1.0f, dcurv_min = 0.0f, dcurv_max = 1.0f;
 	std::vector<float> beta, weights_obs;
@@ -1728,6 +2925,19 @@ std::vector<float> compute_external_drift(
 		weights_out.assign(N, 0.0f);
 		return drift;
 	}
+
+	log_regression_state(
+		"initial",
+		valid_indices,
+		beta,
+		weights_obs,
+		use_drift_zwt,
+		use_drift_curv,
+		zwt_min,
+		zwt_max,
+		dcurv_min,
+		dcurv_max
+	);
 
 	// ---- 3) Geological sign checks --------------------------------------------
 	// Expectation: zwt -> beta < 0 ; dcurv -> beta > 0
@@ -1745,6 +2955,19 @@ std::vector<float> compute_external_drift(
 
 	const bool drift_flags_changed =
 		(drift_valid_zwt != use_drift_zwt || drift_valid_dcurv != use_drift_curv);
+
+	if (K_EXT_DRIFT_ENABLE_DIAGNOSTIC_LOGS &&
+		drift_flags_changed) {
+
+		std::cout
+			<< "[geostats][external_drift][diag] Geological sign check changed "
+			<< "the active predictors: zwt="
+			<< (drift_valid_zwt ? "kept" : "rejected")
+			<< ", dcurv="
+			<< (drift_valid_dcurv ? "kept" : "rejected")
+			<< "."
+			<< std::endl;
+	}
 
 	// Refit after a geological-sign rejection so that the retained coefficients
 	// and normalization ranges are estimated with exactly the active predictors.
@@ -1806,7 +3029,25 @@ std::vector<float> compute_external_drift(
 		std::vector<uint8_t> residual_is_testable;
 		residual_is_testable.reserve(n_obs);
 
-		for (const int id : valid_indices) {
+		// Cache local redundancy neighborhoods once. For ordinary omissions this
+		// preserves the exact leave-one-out weighting while avoiding a complete
+		// O(M^2) density reconstruction for each observation. Unique predictor
+		// extrema deliberately fall back to the original complete subset fit.
+		FastLeaveOneOutRegressionCache fast_loo_cache(
+			valid_indices,
+			zwt,
+			dcurv,
+			eq_radius_values,
+			is_spring_observation,
+			drift_valid_zwt,
+			drift_valid_dcurv,
+			zwt_min,
+			zwt_max,
+			dcurv_min,
+			dcurv_max);
+
+		for (int observation_position = 0; observation_position < n_obs; ++observation_position) {
+			const int id = valid_indices[static_cast<std::size_t>(observation_position)];
 			const ConditioningDataRole role = conditioning_role_at(id);
 			bool loo_allowed = true;
 			if (role == ConditioningDataRole::Inlet && n_inlets <= 1) {
@@ -1815,14 +3056,7 @@ std::vector<float> compute_external_drift(
 			if (role == ConditioningDataRole::Outlet && n_outlets <= 1) {
 				loo_allowed = false;
 			}
-
-			std::vector<int> loo_indices;
-			loo_indices.reserve(
-				valid_indices.empty() ? 0 : valid_indices.size() - 1);
-			for (const int other_id : valid_indices) {
-				if (other_id != id) loo_indices.push_back(other_id);
-			}
-			if (static_cast<int>(loo_indices.size()) < n_var_cur) {
+			if (n_obs - 1 < n_var_cur) {
 				loo_allowed = false;
 			}
 
@@ -1830,23 +3064,36 @@ std::vector<float> compute_external_drift(
 			bool used_loo = false;
 			if (loo_allowed) {
 				std::vector<float> beta_loo;
-				std::vector<float> weights_loo;
 				float zwt_min_loo = zwt_min;
 				float zwt_max_loo = zwt_max;
 				float dcurv_min_loo = dcurv_min;
 				float dcurv_max_loo = dcurv_max;
+				bool fit_success = false;
 
-				if (fit_on_subset(
-					loo_indices,
-					drift_valid_zwt,
-					drift_valid_dcurv,
-					beta_loo,
-					weights_loo,
-					zwt_min_loo,
-					zwt_max_loo,
-					dcurv_min_loo,
-					dcurv_max_loo))
-				{
+				if (fast_loo_cache.can_fit_excluding(observation_position)) {
+					fit_success = fast_loo_cache.fit_excluding(
+						observation_position, beta_loo);
+				}
+				else {
+					std::vector<int> loo_indices;
+					loo_indices.reserve(valid_indices.size() - 1);
+					for (const int other_id : valid_indices) {
+						if (other_id != id) loo_indices.push_back(other_id);
+					}
+					std::vector<float> weights_loo;
+					fit_success = fit_on_subset(
+						loo_indices,
+						drift_valid_zwt,
+						drift_valid_dcurv,
+						beta_loo,
+						weights_loo,
+						zwt_min_loo,
+						zwt_max_loo,
+						dcurv_min_loo,
+						dcurv_max_loo);
+				}
+
+				if (fit_success) {
 					const float prediction_loo = predict_with_beta(
 						id,
 						beta_loo,
@@ -1877,7 +3124,6 @@ std::vector<float> compute_external_drift(
 			residuals_cur.push_back(residual);
 			residual_is_testable.push_back(used_loo ? 1u : 0u);
 		}
-
 		std::vector<float> absolute_residuals = residuals_cur;
 		for (float& value : absolute_residuals) value = std::abs(value);
 		std::nth_element(
@@ -1888,7 +3134,17 @@ std::vector<float> compute_external_drift(
 		const float sigma = std::max(1e-6f, 1.4826f * mad);
 
 		// Two-sided central Gaussian compatibility interval of approximately 80%.
-		const float C_CUTOFF = 1.28f;
+		//| Central fraction retained | Cutoff |
+		//	| 80 % | 1.282 |
+		//	| 85 % | 1.440 |
+		//	| 90 % | 1.645 |
+		//	| 95 % | 1.960 |
+		//	| 97.5 % | 2.241 |
+		//	| 98 % | 2.326 |
+		//	| 99 % | 2.576 |
+		//	| 99.5 % | 2.807 |
+		//	| 99.9 % | 3.291 |
+		const float C_CUTOFF = 2.241f;
 		std::vector<int> survivors;
 		survivors.reserve(n_obs);
 		for (int observation = 0; observation < n_obs; ++observation) {
@@ -1898,6 +3154,58 @@ std::vector<float> compute_external_drift(
 				standardized_residual <= C_CUTOFF) {
 				survivors.push_back(valid_indices[observation]);
 			}
+		}
+
+		if (K_EXT_DRIFT_ENABLE_DIAGNOSTIC_LOGS) {
+			int trimmed_inlets = 0;
+			int trimmed_outlets = 0;
+			int trimmed_waypoints = 0;
+
+			for (int observation = 0;
+				observation < n_obs;
+				++observation) {
+
+				const float standardized_residual =
+					std::abs(residuals_cur[observation]) / sigma;
+
+				const bool trimmed =
+					residual_is_testable[observation] &&
+					standardized_residual > C_CUTOFF;
+
+				if (!trimmed) {
+					continue;
+				}
+
+				switch (conditioning_role_at(
+					valid_indices[observation])) {
+
+				case ConditioningDataRole::Inlet:
+					++trimmed_inlets;
+					break;
+				case ConditioningDataRole::Outlet:
+					++trimmed_outlets;
+					break;
+				case ConditioningDataRole::Waypoint:
+					++trimmed_waypoints;
+					break;
+				default:
+					break;
+				}
+			}
+
+			std::cout
+				<< "[geostats][external_drift][diag] LOO/MAD: MAD="
+				<< mad
+				<< ", robust sigma=" << sigma
+				<< ", cutoff=" << C_CUTOFF
+				<< "; retained=" << survivors.size()
+				<< "/" << n_obs
+				<< "; trimmed(inlets/outlets/waypoints)="
+				<< trimmed_inlets << "/"
+				<< trimmed_outlets << "/"
+				<< trimmed_waypoints
+				<< "."
+				<< std::endl;
 		}
 
 		if (static_cast<int>(survivors.size()) >= n_var_cur &&
@@ -1931,6 +3239,19 @@ std::vector<float> compute_external_drift(
 		}
 	}
 
+	log_regression_state(
+		"final",
+		valid_indices,
+		beta,
+		weights_obs,
+		drift_valid_zwt,
+		drift_valid_dcurv,
+		zwt_min,
+		zwt_max,
+		dcurv_min,
+		dcurv_max
+	);
+
 	// ---- 5) Export weights per node (0 for non-observed / trimmed) ------------
 	weights_out.assign(N, 0.0f);
 	for (size_t k = 0; k < valid_indices.size(); ++k) {
@@ -1944,6 +3265,26 @@ std::vector<float> compute_external_drift(
 		if (drift_valid_zwt) { const float z01 = (zwt[i] - zwt_min) / std::max(1e-12f, (zwt_max - zwt_min));   v += beta[bi++] * z01; }
 		if (drift_valid_dcurv) { const float d01 = (dcurv[i] - dcurv_min) / std::max(1e-12f, (dcurv_max - dcurv_min)); v += beta[bi++] * d01; }
 		drift[i] = v;
+	}
+
+	if (K_EXT_DRIFT_ENABLE_DIAGNOSTIC_LOGS && !drift.empty()) {
+		const auto bounds =
+			std::minmax_element(drift.begin(), drift.end());
+
+		const double mean =
+			std::accumulate(
+				drift.begin(),
+				drift.end(),
+				0.0
+			) / static_cast<double>(drift.size());
+
+		std::cout
+			<< "[geostats][external_drift][diag] Final drift field: "
+			<< "min=" << *bounds.first
+			<< ", mean=" << mean
+			<< ", max=" << *bounds.second
+			<< "."
+			<< std::endl;
 	}
 
 	return drift;
@@ -1989,9 +3330,8 @@ void SGS3(
 
 	// 1) Perform Normal Score Transform of initial distrib AND initial data vector
 	std::vector<float> simulated_prop_gauss;
-	std::vector<float> simulated_property_copy = simulated_property;
 	if (!simulated_property.empty()) {
-		simulated_prop_gauss = nst_data_with_nodata(simulated_property, *simulation_distribution, 0., 1.); // gaussianize the data values if any (do not change the no data values though)
+		simulated_prop_gauss = nst_data_with_nodata_fast_equivalent(simulated_property, *simulation_distribution, 0., 1.); // gaussianize the data values if any (do not change the no data values though)
 	}
 	else {
 		simulated_prop_gauss.resize(curve->nodes.size());
@@ -2063,6 +3403,18 @@ void SGS3(
 	//save_data(*simulation_distribution, "distrib.txt");
 	//save_data(sim_distrib_gauss, "gauss_distrib.txt");
 
+	// Cache branch membership once in global node-index order. The former code
+	// rescanned the complete skeleton for every branch in both SGS passes. Keeping
+	// each branch list ordered by node index preserves the exact input order passed
+	// to `select_random_elements`, and therefore preserves the RNG sequence.
+	std::vector<std::vector<int>> nodes_by_branch(curve->branch_sizes.size());
+	for (int node_index = 0; node_index < static_cast<int>(curve->nodes.size()); ++node_index) {
+		const int branch_id = curve->nodes[static_cast<std::size_t>(node_index)].branch_id;
+		if (branch_id >= 0 && branch_id < static_cast<int>(nodes_by_branch.size())) {
+			nodes_by_branch[static_cast<std::size_t>(branch_id)].push_back(node_index);
+		}
+	}
+
 	// 2) Interbranch simulation with interbranch variogram
 
 	// iterate on branches:
@@ -2072,10 +3424,10 @@ void SGS3(
 		int nb_nodes_to_simulate = compute_prop_branch(curve->branch_sizes.at(branch_id), nb_points_interbranch, proportion_interbranch);
 
 		std::vector<int> all_branch_nodes;
-		// create list of indices of nodes of that branch in nodes, and shuffle that list to get the random order of iteration
-		for (int i = 0; i < curve->nodes.size(); i++) {
-			if (curve->nodes.at(i).branch_id == branch_id && (simulated_prop_gauss[i] - (-99999)) < 1e-12) { // check that the node is in the same branch and isnt assigned to a value yet (no data value)
-				all_branch_nodes.push_back(i);
+		all_branch_nodes.reserve(nodes_by_branch[static_cast<std::size_t>(branch_id)].size());
+		for (int node_index : nodes_by_branch[static_cast<std::size_t>(branch_id)]) {
+			if ((simulated_prop_gauss[static_cast<std::size_t>(node_index)] - (-99999)) < 1e-12) {
+				all_branch_nodes.push_back(node_index);
 			}
 		}
 		std::vector<int> nodes_to_simulate = select_random_elements(all_branch_nodes, nb_nodes_to_simulate);
@@ -2120,10 +3472,10 @@ void SGS3(
 		int nb_nodes_to_simulate = compute_prop_branch(curve->branch_sizes.at(branch_id), curve->branch_sizes.at(branch_id), 1.); // compute ALL remaining nodes
 
 		std::vector<int> all_branch_nodes;
-		// create list of indices of nodes of that branch in nodes, and shuffle that list to get the random order of iteration
-		for (int i = 0; i < curve->nodes.size(); i++) {
-			if (curve->nodes.at(i).branch_id == branch_id && (simulated_prop_gauss[i] - (-99999)) < 1e-12) { // check that the node is in the same branch and isnt assigned to a value yet (no data value)
-				all_branch_nodes.push_back(i);
+		all_branch_nodes.reserve(nodes_by_branch[static_cast<std::size_t>(branch_id)].size());
+		for (int node_index : nodes_by_branch[static_cast<std::size_t>(branch_id)]) {
+			if ((simulated_prop_gauss[static_cast<std::size_t>(node_index)] - (-99999)) < 1e-12) {
+				all_branch_nodes.push_back(node_index);
 			}
 		}
 		std::vector<int> nodes_to_simulate = select_random_elements(all_branch_nodes, nb_nodes_to_simulate);
@@ -2203,7 +3555,7 @@ void SGS3(
 	//	simulated_property = back_transform(simulated_prop_gauss, simulated_property_copy);
 	//}
 	//else { // else, use the initial distribution instead
-	simulated_property = back_transform(simulated_prop_gauss, *simulation_distribution);
+	simulated_property = back_transform_fast_equivalent(simulated_prop_gauss, *simulation_distribution);
 	//}
 }
 
@@ -2311,44 +3663,174 @@ void SGS3_with_external_drift(
 		);
 		return; // no recomposition residual + drift
 	}
-	// === 3) Compute residuals on observed nodes: Re(x) - m(x) ===
+	// === 3) Compute conditioning residuals and estimate background residual scale ===
+	//
+	// Every hard conditioning datum remains in the residual vector so that SGS can
+	// honor it locally, including observations excluded from the drift regression.
+	// The background residual variance is estimated only from observations retained
+	// in the final drift fit. `weights_output` is zero for observations excluded by
+	// the active regression filters or robust trimming and positive for final-fit data.
 	std::vector<float> residuals(simulated_property.size(), -99999.0f);
-	for (size_t i = 0; i < simulated_property.size(); ++i) {
-		if (std::abs(simulated_property[i] - (-99999.0f)) > 1e-12f) {
-			residuals[i] = simulated_property[i] - drift[i];
-		}
-	}
-	// === 4) Simulate residuals with a zero-centered distribution ============
-	// Rationale:
-	//  - If the provided simulation distribution has a non-zero mean,
-	//    the simulated residuals would inherit that bias and add it to m(x),
-	//    creating an artificial offset in the final property.
-	//  - To avoid this, we re-center the distribution to zero mean before
-	//    passing it to SGS3. This ensures residuals have mean ~0.
-	std::vector<float> residual_sim_distribution;
-	if (simulation_distribution && !simulation_distribution->empty()) {
-		residual_sim_distribution = *simulation_distribution;
-		double mu = std::accumulate(residual_sim_distribution.begin(),
-			residual_sim_distribution.end(), 0.0)
-			/ static_cast<double>(residual_sim_distribution.size());
-		for (float& v : residual_sim_distribution) v -= static_cast<float>(mu);
+	double weighted_residual_squared_sum = 0.0;
+	double residual_weight_sum = 0.0;
+	float conditioning_residual_min = std::numeric_limits<float>::infinity();
+	float conditioning_residual_max = -std::numeric_limits<float>::infinity();
+	std::size_t conditioning_residual_count = 0;
 
-		// Safety: if everything cancels to ~0, keep a tiny symmetric spread
-		bool degenerate = true;
-		for (float v : residual_sim_distribution) {
-			if (std::abs(v) > 1e-12f) { degenerate = false; break; }
+	for (size_t i = 0; i < simulated_property.size(); ++i) {
+		if (std::abs(simulated_property[i] - (-99999.0f)) <= 1e-12f) {
+			continue;
 		}
-		if (degenerate) residual_sim_distribution = { -1.f, 0.f, 1.f };
+
+		const float residual = simulated_property[i] - drift[i];
+		if (!std::isfinite(residual)) {
+			throw std::runtime_error(
+				"[geostats][external_drift] A non-finite conditioning residual was produced."
+			);
+		}
+
+		residuals[i] = residual;
+		conditioning_residual_min = std::min(conditioning_residual_min, residual);
+		conditioning_residual_max = std::max(conditioning_residual_max, residual);
+		++conditioning_residual_count;
+
+		if (i < weights_output.size() && weights_output[i] > 0.0f) {
+			const double weight = static_cast<double>(weights_output[i]);
+			weighted_residual_squared_sum +=
+				weight * static_cast<double>(residual) * static_cast<double>(residual);
+			residual_weight_sum += weight;
+		}
 	}
-	else {
-		// No distribution provided -> create a small zero-mean placeholder
-		residual_sim_distribution = { -1.f, 0.f, 1.f };
+
+	if (conditioning_residual_count == 0) {
+		throw std::runtime_error(
+			"[geostats][external_drift] Cannot construct the residual simulation: "
+			"no valid conditioning observation is available."
+		);
 	}
+
+	if (!std::isfinite(residual_weight_sum) || residual_weight_sum <= 0.0) {
+		throw std::runtime_error(
+			"[geostats][external_drift] Cannot estimate background residual variability: "
+			"the final drift fit contains no positively weighted observation."
+		);
+	}
+
+	// The final WLS fit includes an intercept, so its residual process is modeled
+	// around zero. Use the same final regression weights to estimate the unexplained
+	// background variability without allowing deliberately excluded hard anomalies
+	// to inflate the residual variance throughout the network.
+	const double sigma_residual_background = std::sqrt(
+		weighted_residual_squared_sum / residual_weight_sum
+	);
+
+	// === 4) Build the background residual distribution and add rare tail anchors ===
+	//
+	// Preserve the standardized shape of the supplied total-property marginal while
+	// replacing its spread by the residual variability unexplained by the final drift:
+	//
+	//     e_j = (Y_j - mean(Y)) * sigma_e / sigma_Y
+	//
+	// Hard conditioning residuals excluded from the drift fit must still be honored.
+	// If they lie beyond the background support, append only the most extreme lower
+	// and/or upper residual as tail anchors. This extends the numerical support without
+	// letting the number of anomalous conditioning points define their probability mass.
+	if (simulation_distribution == nullptr || simulation_distribution->empty()) {
+		throw std::invalid_argument(
+			"[geostats][external_drift] A non-empty simulation distribution is required "
+			"to construct the residual distribution."
+		);
+	}
+
+	const double distribution_mean = std::accumulate(
+		simulation_distribution->begin(),
+		simulation_distribution->end(),
+		0.0
+	) / static_cast<double>(simulation_distribution->size());
+
+	double distribution_squared_deviation_sum = 0.0;
+	for (const float value : *simulation_distribution) {
+		if (!std::isfinite(value)) {
+			throw std::runtime_error(
+				"[geostats][external_drift] Cannot construct the residual distribution: "
+				"the supplied simulation distribution contains a non-finite value."
+			);
+		}
+		const double centered = static_cast<double>(value) - distribution_mean;
+		distribution_squared_deviation_sum += centered * centered;
+	}
+
+	const double sigma_distribution = std::sqrt(
+		distribution_squared_deviation_sum /
+		static_cast<double>(simulation_distribution->size())
+	);
+
+	if (!std::isfinite(sigma_distribution) ||
+		sigma_distribution <= std::numeric_limits<double>::epsilon()) {
+		throw std::runtime_error(
+			"[geostats][external_drift] Cannot construct the residual distribution: "
+			"the supplied simulation distribution has zero or non-finite variance."
+		);
+	}
+
+	if (!std::isfinite(sigma_residual_background)) {
+		throw std::runtime_error(
+			"[geostats][external_drift] Cannot construct the residual distribution: "
+			"the background residual variance is non-finite."
+		);
+	}
+
+	const double residual_scale =
+		sigma_residual_background / sigma_distribution;
+
+	std::vector<float> residual_sim_distribution;
+	residual_sim_distribution.reserve(simulation_distribution->size() + 2u);
+	for (const float value : *simulation_distribution) {
+		const double centered = static_cast<double>(value) - distribution_mean;
+		residual_sim_distribution.push_back(
+			static_cast<float>(centered * residual_scale)
+		);
+	}
+
+	auto background_bounds = std::minmax_element(
+		residual_sim_distribution.begin(), residual_sim_distribution.end());
+	const float background_min = *background_bounds.first;
+	const float background_max = *background_bounds.second;
+
+	if (K_EXT_DRIFT_ENABLE_DIAGNOSTIC_LOGS) {
+		std::cout
+			<< "[geostats][external_drift][diag] Residual SGS: "
+			<< "sigma(property)=" << sigma_distribution
+			<< ", sigma(background residual)="
+			<< sigma_residual_background
+			<< ", residual scale=" << residual_scale
+			<< "; hard residual range=["
+			<< conditioning_residual_min << ", "
+			<< conditioning_residual_max << "]"
+			<< "; background residual support=["
+			<< background_min << ", "
+			<< background_max << "]"
+			<< "; tail anchors(lower/upper)="
+			<< (conditioning_residual_min < background_min ? "yes" : "no")
+			<< "/"
+			<< (conditioning_residual_max > background_max ? "yes" : "no")
+			<< "."
+			<< std::endl;
+	}
+
+	if (conditioning_residual_min < background_min) {
+		residual_sim_distribution.push_back(conditioning_residual_min);
+	}
+	if (conditioning_residual_max > background_max) {
+		residual_sim_distribution.push_back(conditioning_residual_max);
+	}
+
+	std::sort(residual_sim_distribution.begin(), residual_sim_distribution.end());
 
 	SGS3(
 		curve,
 		residuals,
-		&residual_sim_distribution, // zero-mean residual distribution
+		&residual_sim_distribution, // background residual distribution with rare hard-data tail anchors
 		global_vario_range,
 		global_range_of_neighborhood,
 		global_vario_sill,

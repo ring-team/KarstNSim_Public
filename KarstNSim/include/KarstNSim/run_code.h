@@ -204,6 +204,7 @@ namespace KarstNSim {
 
 		float gamma = 2.0f; //!< Gamma parameter for the network pruning based on graph-graph rule.
 		float fraction_karst_perm = 0.9f; //!< Cost reduction (cohesion) factor Pred for karsts.
+		int pred_update_interval = 1; //!< Number of consecutively processed inlets between two Pred cost-field updates.
 		bool vadose_cohesion = true; //!< Flag to enable cohesion in vadose zone (if false, cohesion is only applied in phreatic zone).
 		bool multiply_costs = false; //!< Flag to multiply costs instead of summing them.
 		float vertical_distance_stretching_factor = 1.0f; //!< Stretching factor applied to distance computations on the cost graph. The greater, the more penalized vertical edges are.

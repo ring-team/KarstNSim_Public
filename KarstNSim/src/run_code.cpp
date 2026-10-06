@@ -160,10 +160,24 @@ namespace KarstNSim {
 				karst.set_karstification_potential_parameters(parameters.karstification_potential_weight);
 
 				if (parameters.use_ghostrocks) {
-					karst.set_ghost_rocks(parameters.domain, parameters.propikp, parameters.alteration_lines,
-						parameters.interpolate_lines, parameters.ghostrock_max_vertical_size,
-						parameters.use_max_depth_constraint, parameters.ghost_rock_weight,
-						&parameters.max_depth_horizon, parameters.ghostrock_width);
+					// Ghost-rock painting modifies the IKP property used to build the cost graph.
+					// It is unnecessary in sections-only mode because the existing skeleton is
+					// tested directly against the ghost-rock geometry.
+					const bool paint_ghostrocks_on_ikp =
+						!parameters.sections_simulation_only;
+
+					karst.set_ghost_rocks(
+						parameters.domain,
+						parameters.propikp,
+						parameters.alteration_lines,
+						parameters.interpolate_lines,
+						parameters.ghostrock_max_vertical_size,
+						parameters.use_max_depth_constraint,
+						parameters.ghost_rock_weight,
+						&parameters.max_depth_horizon,
+						parameters.ghostrock_width,
+						paint_ghostrocks_on_ikp
+					);
 				}
 			}
 
@@ -222,8 +236,16 @@ namespace KarstNSim {
 				karst.set_water_table_weight(parameters.water_table_constraint_weight_vadose, parameters.water_table_constraint_weight_phreatic);
 				karst.set_gradient_constraint_weight(parameters.gradient_constraint_weight);
 				karst.set_outlet_selection_cost_factor(parameters.outlet_selection_cost_factor);
-				karst.set_simulation_parameters(parameters.nghb_count, parameters.use_max_nghb_radius, parameters.nghb_radius, parameters.poisson_radius, parameters.gamma,
-					parameters.multiply_costs, parameters.vadose_cohesion, parameters.vertical_distance_stretching_factor);
+				karst.set_simulation_parameters(
+					parameters.nghb_count,
+					parameters.use_max_nghb_radius,
+					parameters.nghb_radius,
+					parameters.poisson_radius,
+					parameters.gamma,
+					parameters.multiply_costs,
+					parameters.vadose_cohesion,
+					parameters.pred_update_interval,
+					parameters.vertical_distance_stretching_factor);
 				karst.initialize_connectivity_matrix(
 					parameters.use_user_connectivity_matrix,
 					parameters.simulation_input_dir,

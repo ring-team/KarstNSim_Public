@@ -17,9 +17,17 @@ namespace KarstNSim {
 		karstic_network_name(karstic_network_name), box(box), params(params), keypts(keypts), water_tables(water_tables) {
 	};
 
-	void KarsticNetwork::set_simulation_parameters(const int& nghb_count, const bool& use_max_nghb_radius, const float& nghb_radius, const float& poisson_radius,
-		const float& gamma, const bool& multiply_costs, const bool& vadose_cohesion, const float& vertical_distance_stretching_factor) {
-
+	void KarsticNetwork::set_simulation_parameters(
+		const int& nghb_count,
+		const bool& use_max_nghb_radius,
+		const float& nghb_radius,
+		const float& poisson_radius,
+		const float& gamma,
+		const bool& multiply_costs,
+		const bool& vadose_cohesion,
+		const int& pred_update_interval,
+		const float& vertical_distance_stretching_factor)
+	{
 		params.gamma = gamma;
 		params.graphNeighbourCount = nghb_count;
 		params.graphuse_max_nghb_radius = use_max_nghb_radius;
@@ -28,8 +36,15 @@ namespace KarstNSim {
 		params.distanceCost = CostTerm(true, 1);
 		params.multiply_costs = multiply_costs;
 		params.vadose_cohesion = vadose_cohesion;
+
+		// Defensive clamp. The instruction parser already rejects values below 1
+		params.pred_update_interval = std::max(1, pred_update_interval);
+
 		is_simulation_parametrized = true;
-		params.vertical_distance_stretching_factor = std::max(1.0f, vertical_distance_stretching_factor);
+
+		params.vertical_distance_stretching_factor =
+			std::max(1.0f, vertical_distance_stretching_factor);
+
 		set_domain_geometry();
 	}
 
@@ -552,8 +567,23 @@ namespace KarstNSim {
 		params.horizonCost = CostTerm(true, inception_horizon_constraint_weight);
 	}
 
-	void KarsticNetwork::set_ghost_rocks(const Box& grid, std::vector<float>& ikp, const Line& alteration_lines, const bool& interpolate_lines, const float& ghostrock_max_vertical_size, const bool& use_max_depth_constraint, const float& ghost_rock_weight, Surface* max_depth_horizon, const float& ghostrock_width) {
+	void KarsticNetwork::set_ghost_rocks(
+		const Box& grid,
+		std::vector<float>& ikp,
+		const Line& alteration_lines,
+		const bool& interpolate_lines,
+		const float& ghostrock_max_vertical_size,
+		const bool& use_max_depth_constraint,
+		const float& ghost_rock_weight,
+		Surface* max_depth_horizon,
+		const float& ghostrock_width,
+		const bool& paint_ikp)
+	{
 		(void)interpolate_lines;
+
+		// Ghost-rock geometry is required independently of IKP painting. In particular,
+		// sections-only simulations use these parameters to identify skeleton nodes
+		// located inside ghost-rock corridors and condition their simulated sections.
 		params.use_ghost_rocks = true;
 		params.length = ghostrock_max_vertical_size;
 		params.width = ghostrock_width;
@@ -561,8 +591,21 @@ namespace KarstNSim {
 		params.use_max_depth_constraint = use_max_depth_constraint;
 		params.substratum_surf = *max_depth_horizon;
 
-		// modify "ikp" object with ghostrocks ("paint" it). Note that density property is NOT changed, hence passed as const ref
-		paint_KP_with_ghostrocks(grid, ikp, ghostrock_max_vertical_size, ghostrock_width, alteration_lines, use_max_depth_constraint, *max_depth_horizon, ghost_rock_weight);
+		// Painting the full background grid is only useful when the IKP contributes
+		// to cost-graph construction. Sections-only simulations operate on an already
+		// existing skeleton and therefore skip this potentially expensive operation.
+		if (paint_ikp) {
+			paint_KP_with_ghostrocks(
+				grid,
+				ikp,
+				ghostrock_max_vertical_size,
+				ghostrock_width,
+				alteration_lines,
+				use_max_depth_constraint,
+				*max_depth_horizon,
+				ghost_rock_weight
+			);
+		}
 	}
 
 	void KarsticNetwork::disable_inception_horizon() {
@@ -818,9 +861,19 @@ namespace KarstNSim {
 
 		if (geostatparams.is_used) {
 
-			if (use_sinks_radius_ || use_springs_radius_ || use_waypoints_radius_) {
+			// Initialize the property vector whenever at least one explicit or
+			// automatically generated section-conditioning datum can be present.
+			if (use_sinks_radius_ ||
+				use_springs_radius_ ||
+				use_waypoints_radius_ ||
+				params.use_ghost_rocks) {
+
 				geostatparams.simulated_property.resize(skel.nodes.size());
-				std::fill(geostatparams.simulated_property.begin(), geostatparams.simulated_property.end(), -99999);
+				std::fill(
+					geostatparams.simulated_property.begin(),
+					geostatparams.simulated_property.end(),
+					-99999.0f
+				);
 			}
 
 			std::vector<ConditioningDataRole> conditioning_roles(
@@ -832,6 +885,7 @@ namespace KarstNSim {
 			{
 				if (radius_property.index < 0 ||
 					radius_property.index >= static_cast<int>(keypts.size())) {
+
 					throw std::runtime_error(
 						std::string("[sections] Invalid ") + source_label +
 						" radius reference: keypoint index " +
@@ -840,85 +894,153 @@ namespace KarstNSim {
 				}
 			};
 
-			auto same_keypoint_position = [](const Vector3& first, const Vector3& second) {
+			auto same_keypoint_position = [](
+				const Vector3& first,
+				const Vector3& second) {
+
 				return first == second;
 			};
 
 			// Inlets and outlets are distinct hydraulic boundary conditions and
 			// cannot provide two different roles at the same skeleton position.
 			for (int inlet_index = 0;
-				inlet_index < static_cast<int>(keypts.size()); ++inlet_index) {
-				if (keypts[inlet_index].type != KeyPointType::Sink) continue;
+				inlet_index < static_cast<int>(keypts.size());
+				++inlet_index) {
+
+				if (keypts[inlet_index].type != KeyPointType::Sink) {
+					continue;
+				}
 
 				for (int outlet_index = 0;
-					outlet_index < static_cast<int>(keypts.size()); ++outlet_index) {
-					if (keypts[outlet_index].type != KeyPointType::Spring) continue;
+					outlet_index < static_cast<int>(keypts.size());
+					++outlet_index) {
+
+					if (keypts[outlet_index].type != KeyPointType::Spring) {
+						continue;
+					}
+
 					if (!same_keypoint_position(
-						keypts[inlet_index].p, keypts[outlet_index].p)) continue;
+						keypts[inlet_index].p,
+						keypts[outlet_index].p)) {
+
+						continue;
+					}
 
 					std::ostringstream message;
-					message << "[sections] Invalid keypoint configuration: inlet keypoint #"
-						<< inlet_index << " and outlet keypoint #" << outlet_index
-						<< " share the same position (" << keypts[inlet_index].p.x
-						<< ", " << keypts[inlet_index].p.y
-						<< ", " << keypts[inlet_index].p.z << "). "
+					message
+						<< "[sections] Invalid keypoint configuration: inlet keypoint #"
+						<< inlet_index
+						<< " and outlet keypoint #"
+						<< outlet_index
+						<< " share the same position ("
+						<< keypts[inlet_index].p.x << ", "
+						<< keypts[inlet_index].p.y << ", "
+						<< keypts[inlet_index].p.z << "). "
 						<< "A conduit-size simulation cannot assign both inlet and outlet "
 						<< "boundary radii to the same skeleton node.";
+
 					throw std::runtime_error(message.str());
 				}
 			}
 
 			std::vector<Propidx> filtered_waypoint_radii;
 			filtered_waypoint_radii.reserve(propwaypointsradius_.size());
+
 			if (use_waypoints_radius_) {
 				for (const Propidx& waypoint_radius : propwaypointsradius_) {
-					validate_radius_keypoint_index(waypoint_radius, "waypoint");
-					const KeyPoint& waypoint = keypts[waypoint_radius.index];
-					if (waypoint.type != KeyPointType::Waypoint) continue;
+
+					validate_radius_keypoint_index(
+						waypoint_radius,
+						"waypoint"
+					);
+
+					const KeyPoint& waypoint =
+						keypts[waypoint_radius.index];
+
+					if (waypoint.type != KeyPointType::Waypoint) {
+						continue;
+					}
 
 					bool overlaps_boundary = false;
+
 					for (const KeyPoint& endpoint : keypts) {
 						if (endpoint.type != KeyPointType::Sink &&
-							endpoint.type != KeyPointType::Spring) continue;
-						if (same_keypoint_position(waypoint.p, endpoint.p)) {
+							endpoint.type != KeyPointType::Spring) {
+
+							continue;
+						}
+
+						if (same_keypoint_position(
+							waypoint.p,
+							endpoint.p)) {
+
 							overlaps_boundary = true;
 							break;
 						}
 					}
-					if (!overlaps_boundary) filtered_waypoint_radii.push_back(waypoint_radius);
+
+					if (!overlaps_boundary) {
+						filtered_waypoint_radii.push_back(
+							waypoint_radius
+						);
+					}
 				}
 			}
 
-			// Set conditioning data and retain their hydraulic role for LOO testing.
+			// Set user-defined conditioning data first. These observations have
+			// priority over automatically generated ghost-rock waypoints.
 			auto assign_conditioning_radius = [&](
 				const Propidx& radius_property,
 				const char* source_label,
 				const ConditioningDataRole role)
 			{
-				validate_radius_keypoint_index(radius_property, source_label);
+				validate_radius_keypoint_index(
+					radius_property,
+					source_label
+				);
 
 				for (int node_index = 0;
-					node_index < static_cast<int>(skel.nodes.size()); ++node_index) {
-					if (!(skel.nodes[node_index].p == keypts[radius_property.index].p)) continue;
+					node_index < static_cast<int>(skel.nodes.size());
+					++node_index) {
+
+					if (!(skel.nodes[node_index].p ==
+						keypts[radius_property.index].p)) {
+
+						continue;
+					}
 
 					if (role == ConditioningDataRole::Inlet &&
-						conditioning_roles[node_index] == ConditioningDataRole::Outlet) {
+						conditioning_roles[node_index] ==
+						ConditioningDataRole::Outlet) {
+
 						throw std::runtime_error(
-							"[sections] Invalid conduit-size conditioning: an inlet and an outlet share the same skeleton node.");
+							"[sections] Invalid conduit-size conditioning: "
+							"an inlet and an outlet share the same skeleton node.");
 					}
+
 					if (role == ConditioningDataRole::Outlet &&
-						conditioning_roles[node_index] == ConditioningDataRole::Inlet) {
+						conditioning_roles[node_index] ==
+						ConditioningDataRole::Inlet) {
+
 						throw std::runtime_error(
-							"[sections] Invalid conduit-size conditioning: an outlet and an inlet share the same skeleton node.");
+							"[sections] Invalid conduit-size conditioning: "
+							"an outlet and an inlet share the same skeleton node.");
 					}
+
 					if (role == ConditioningDataRole::Waypoint &&
-						(conditioning_roles[node_index] == ConditioningDataRole::Inlet ||
-							conditioning_roles[node_index] == ConditioningDataRole::Outlet)) {
+						(conditioning_roles[node_index] ==
+							ConditioningDataRole::Inlet ||
+							conditioning_roles[node_index] ==
+							ConditioningDataRole::Outlet)) {
+
 						break;
 					}
 
-					geostatparams.simulated_property[node_index] = radius_property.prop;
+					geostatparams.simulated_property[node_index] =
+						radius_property.prop;
+
 					conditioning_roles[node_index] = role;
+
 					break;
 				}
 			};
@@ -926,23 +1048,123 @@ namespace KarstNSim {
 			if (use_sinks_radius_) {
 				for (const Propidx& sink_radius : propsinksradius_) {
 					assign_conditioning_radius(
-						sink_radius, "inlet", ConditioningDataRole::Inlet);
-				}
-			}
-			if (use_springs_radius_) {
-				for (const Propidx& spring_radius : propspringsradius_) {
-					assign_conditioning_radius(
-						spring_radius, "outlet", ConditioningDataRole::Outlet);
-				}
-			}
-			if (use_waypoints_radius_) {
-				for (const Propidx& waypoint_radius : filtered_waypoint_radii) {
-					assign_conditioning_radius(
-						waypoint_radius, "waypoint", ConditioningDataRole::Waypoint);
+						sink_radius,
+						"inlet",
+						ConditioningDataRole::Inlet
+					);
 				}
 			}
 
-			// Simulate property with Frantz's modified SGS algorithm (with 3 variograms) (2021)
+			if (use_springs_radius_) {
+				for (const Propidx& spring_radius : propspringsradius_) {
+					assign_conditioning_radius(
+						spring_radius,
+						"outlet",
+						ConditioningDataRole::Outlet
+					);
+				}
+			}
+
+			if (use_waypoints_radius_) {
+				for (const Propidx& waypoint_radius :
+					filtered_waypoint_radii) {
+
+					assign_conditioning_radius(
+						waypoint_radius,
+						"waypoint",
+						ConditioningDataRole::Waypoint
+					);
+				}
+			}
+
+			// Automatically use skeleton nodes located inside ghost-rock corridors
+			// as waypoint conditioning data for conduit-section simulation.
+			//
+			// User-defined inlet, outlet and waypoint radii always take priority.
+			// If such a datum is colocated with an automatic ghost-rock waypoint,
+			// the ghost-rock value is ignored for that node and an explicit warning
+			// is emitted.
+			if (params.use_ghost_rocks) {
+
+				const PointCloud centers2D =
+					params.substratum_surf.get_centers_cloud(2);
+
+				const int ghostrock_shape_power = 2;
+				float width_z = 0.0f;
+
+				auto conditioning_role_name =
+					[](const ConditioningDataRole role) -> const char*
+				{
+					switch (role) {
+					case ConditioningDataRole::Inlet:
+						return "inlet";
+					case ConditioningDataRole::Outlet:
+						return "outlet";
+					case ConditioningDataRole::Waypoint:
+						return "waypoint";
+					default:
+						return "unknown";
+					}
+				};
+
+				for (int node_index = 0;
+					node_index < static_cast<int>(skel.nodes.size());
+					++node_index) {
+
+					const Vector3& node_position =
+						skel.nodes[node_index].p;
+
+					const bool is_inside_ghostrock =
+						is_pt_in_ghostrock(
+							node_position,
+							params.length,
+							params.width,
+							params.polyline,
+							params.use_max_depth_constraint,
+							params.substratum_surf,
+							ghostrock_shape_power,
+							centers2D,
+							width_z
+						);
+
+					if (!is_inside_ghostrock) {
+						continue;
+					}
+
+					// A user-provided conditioning datum always has priority over
+					// the automatically generated ghost-rock waypoint.
+					if (conditioning_roles[node_index] !=
+						ConditioningDataRole::None) {
+
+						std::cerr
+							<< "WARNING: [sections][ghost-rock] Skeleton node #"
+							<< node_index
+							<< " at ("
+							<< node_position.x << ", "
+							<< node_position.y << ", "
+							<< node_position.z
+							<< ") lies inside a ghost-rock corridor but already "
+							<< "has user-defined "
+							<< conditioning_role_name(
+								conditioning_roles[node_index])
+							<< " radius conditioning. The user-defined value "
+							<< "takes priority and the automatic ghost-rock "
+							<< "waypoint is ignored for this node."
+							<< std::endl;
+
+						continue;
+					}
+
+					geostatparams.simulated_property[node_index] =
+						geostatparams.ghostrock_waypoint_radius;
+
+					conditioning_roles[node_index] =
+						ConditioningDataRole::Waypoint;
+				}
+			}
+
+			// Simulate property with Frantz's modified SGS algorithm
+			// (with 3 variograms) (2021).
 			SGS3_with_external_drift(
 				&skel,
 				this->pt_spring,
@@ -973,25 +1195,47 @@ namespace KarstNSim {
 				drift_output,
 				weights_output
 			);
-			if (geostatparams.use_drift_zwt) params.use_drift_zwt = true;
-			if (geostatparams.use_drift_curv) params.use_drift_curv = true;
 
-			// assign property to skeleton :
+			if (geostatparams.use_drift_zwt) {
+				params.use_drift_zwt = true;
+			}
 
-			for (int i = 0; i < geostatparams.simulated_property.size(); i++) {
-				skel.nodes.at(i).eq_radius = geostatparams.simulated_property.at(i);
-				if (geostatparams.use_drift_zwt || geostatparams.use_drift_curv) {
+			if (geostatparams.use_drift_curv) {
+				params.use_drift_curv = true;
+			}
 
-					skel.nodes.at(i).drift_value = drift_output[i];
-					skel.nodes.at(i).drift_weight = weights_output[i];
+			// Assign the simulated property to the skeleton.
+			for (int i = 0;
+				i < static_cast<int>(
+					geostatparams.simulated_property.size());
+				++i) {
+
+				skel.nodes.at(i).eq_radius =
+					geostatparams.simulated_property.at(i);
+
+				if (geostatparams.use_drift_zwt ||
+					geostatparams.use_drift_curv) {
+
+					skel.nodes.at(i).drift_value =
+						drift_output[i];
+
+					skel.nodes.at(i).drift_weight =
+						weights_output[i];
 				}
 			}
-		}
 
-		//Finally we paint any node that is within a ghostrock to have the ghost rock width
+			//Finally we paint any node that is within a ghostrock to have the ghost rock width
 
-		if (params.use_ghost_rocks) {
-			paint_karst_sections_with_ghostrocks(skel, params.length, params.width, params.polyline, params.use_max_depth_constraint, params.substratum_surf);
+			//if (params.use_ghost_rocks) {
+			//	paint_karst_sections_with_ghostrocks(
+			//		skel,
+			//		params.length,
+			//		params.width,
+			//		params.polyline,
+			//		params.use_max_depth_constraint,
+			//		params.substratum_surf
+			//	);
+			//}
 		}
 	}
 

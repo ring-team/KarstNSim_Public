@@ -84,6 +84,7 @@ struct GeostatParams {
 	float proportion_interbranch; //!< Proportion of points considered per branch for inter-branch variogram.
 	bool use_drift_zwt = false; //!< Flag indicating if an external drift based on the distance to the water table should be enabled.
 	bool use_drift_curv = false; //!< Flag indicating if an external drift based on an upstream/downstream increasing drain size trend should be enabled.
+	float ghostrock_waypoint_radius = 0.0f; //!< Section - conditioning value assigned to skeleton nodes located inside ghost - rock corridors.
 	std::vector<float> drift_output; //!< Simulated drift term for each node of the karst skeleton. Only filled if a drift is applied.
 	std::vector<float> weights_output; //!< Simulated drift weight for each node of the karst skeleton. Only filled if a drift is applied.
 };

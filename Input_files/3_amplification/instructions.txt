@@ -72,6 +72,7 @@ use_ghostrocks: false
 //ghost_rock_weight: 2
 //max_depth_horizon:
 //ghostrock_width: 60
+//ghostrock_waypoint_radius: 1.0
 
 // Inception surfaces :
 
@@ -163,6 +164,7 @@ use_drift_curv: false
 gamma: 2.0
 fraction_karst_perm: 0.9
 vadose_cohesion: true
+pred_update_interval: 1
 multiply_costs: false
 vertical_distance_stretching_factor: 1
 gradient_constraint_weight: 0.0

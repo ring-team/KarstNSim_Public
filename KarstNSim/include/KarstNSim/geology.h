@@ -147,6 +147,7 @@ namespace KarstNSim {
 		bool multiply_costs; //!< Flag to multiply cost terms during cost function computation instead of adding them.
 		bool allow_single_outlet; //!< Allow a connection to a single outlet for each inlet, not more. This will use the ``closest'' spring algorithm (see Thesis for details)
 		bool vadose_cohesion; //!< Flag to enable vadose zone cohesion in the simulation (cohesion only in phreatic zone if set to false).
+		int pred_update_interval = 1; //!< Number of processed inlets between two committed Pred updates.
 		float vertical_distance_stretching_factor=1.0f; //!< Stretching factor in the vertical direction used to artificially increase vertical distances and penalize vertical edges
 
 		bool use_input_nghb_graph = false; //!< Flag defining if the user has defined an input nearest neighbor graph for the simulation

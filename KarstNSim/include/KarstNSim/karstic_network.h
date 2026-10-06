@@ -190,8 +190,20 @@ namespace KarstNSim {
 		\param ghost_rock_weight Weight of ghost rocks in the simulation
 		\param max_depth_horizon Pointer to maximum depth horizon surface
 		\param ghostrock_width Max width of ghost rock corridors
+		\param paint_ikp Whether ghost-rock corridors must be painted onto the background-grid IKP property.
 		*/
-		void set_ghost_rocks(const Box& grid, std::vector<float>& ikp, const Line& alteration_lines, const bool& interpolate_lines, const float& ghostrock_max_vertical_size, const bool& use_max_depth_constraint, const float& ghost_rock_weight, Surface* max_depth_horizon, const float& ghostrock_width);
+		void set_ghost_rocks(
+			const Box& grid,
+			std::vector<float>& ikp,
+			const Line& alteration_lines,
+			const bool& interpolate_lines,
+			const float& ghostrock_max_vertical_size,
+			const bool& use_max_depth_constraint,
+			const float& ghost_rock_weight,
+			Surface* max_depth_horizon,
+			const float& ghostrock_width,
+			const bool& paint_ikp
+		);
 
 		/*!
 		\brief Sets the simulation with the inception hoizon parameters if we want to use this constraint
@@ -241,10 +253,19 @@ namespace KarstNSim {
 		\param gamma Parameter used for the beta-skeleton appraoch to build the network
 		\param multiply_costs Boolean to indicate whether to multiply costs (instead of summing them)
 		\param vadose_cohesion Boolean for vadose cohesion consideration: if true, cohesion is applied everywhere, if false, cohesion is only applied in the phreatic zone
-		\param vertical_graph_distance_factor Vertical anisotropy factor used for selected graph-related distances.
+		\param pred_update_interval Number of consecutively processed inlets sharing the same cost field before accumulated Pred reductions are committed
+		\param vertical_distance_stretching_factor Vertical anisotropy factor used for selected graph-related distances.
 		*/
-		void set_simulation_parameters(const int& nghb_count, const bool& use_max_nghb_radius, const float& nghb_radius, const float& poisson_radius, const float& gamma,
-			const bool& multiply_costs, const bool& vadose_cohesion, const float& vertical_distance_stretching_factor);
+		void set_simulation_parameters(
+			const int& nghb_count,
+			const bool& use_max_nghb_radius,
+			const float& nghb_radius,
+			const float& poisson_radius,
+			const float& gamma,
+			const bool& multiply_costs,
+			const bool& vadose_cohesion,
+			const int& pred_update_interval,
+			const float& vertical_distance_stretching_factor);
 
 		/*!
 		\brief Sets the domain geometry and the boundary box dimensions with the Box class attribute

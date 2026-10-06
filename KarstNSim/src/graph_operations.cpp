@@ -41,16 +41,8 @@ namespace {
 	}
 
 	
-	// --- Shortest-path method switch ---------------------------------------------------------------
-	// NormalDijkstra is kept for legacy support. BidirectionalDijkstra is the
-	// preferred method for source-target shortest-path computations.
-
-	//constexpr KarstNSim::ShortestPathMethod K_SHORTEST_PATH_METHOD =
-	//	KarstNSim::ShortestPathMethod::NormalDijkstra;
-
-	constexpr KarstNSim::ShortestPathMethod K_SHORTEST_PATH_METHOD =
-		KarstNSim::ShortestPathMethod::BidirectionalDijkstra;
-
+	// Reverse shortest-path topology is kept only while the initial skeleton is
+	// generated. It can be released afterwards to recover memory.
 	constexpr bool K_CLEAR_SHORTEST_PATH_PREPROCESSING_AFTER_SKELETON = true;
 }
 
@@ -1523,532 +1515,1104 @@ namespace KarstNSim {
 		return -1;
 	}
 
-	void GraphOperations::ComputeKarsticSkeleton(const std::vector<KeyPoint>& pts, const float fraction_karst_perm, std::vector<std::vector<int>>& pathsFinal, std::vector<std::vector<float>>& costsFinal, std::vector<std::vector<char>>& vadoseFinal,
-		std::vector<int>& springidxFinal, bool save_new_connectivity_matrix)
+	void GraphOperations::ComputeKarsticSkeleton(
+		const std::vector<KeyPoint>& pts,
+		const float fraction_karst_perm,
+		std::vector<std::vector<int>>& pathsFinal,
+		std::vector<std::vector<float>>& costsFinal,
+		std::vector<std::vector<char>>& vadoseFinal,
+		std::vector<int>& springidxFinal,
+		bool save_new_connectivity_matrix)
 	{
-		float step1 = 0.0f, step2 = 0.0f, step3 = 0.0f, step4 = 0.0f, step5 = 0.0f, step6 = 0.0f, step7 = 0.0f, step8 = 0.0f, step_sink = 0.0f;
-		float step_shortest_path = 0.0f;
-		const clock_t time1 = clock();
+		constexpr float eps = 1e-10f;
 
-		Array2D<int> new_connectivity_matrix = params.connectivity_matrix; // initially, we copy the old matrix. We will then update it to solve the uncertain '2' connections
+		Array2D<int> new_connectivity_matrix =
+			params.connectivity_matrix;
 
-		// Internal representation of key points, storing their index (with two sublists : one for sinks and one for springs)
+		// ---------------------------------------------------------------------
+		// Build the internal inlet/outlet representation.
+		// ---------------------------------------------------------------------
+
 		std::vector<InternalKeyPoint> keypts;
 		std::vector<InternalKeyPoint> keyptssinks;
 		std::vector<InternalKeyPoint> keyptssprings;
-		float eps = 1e-10f;
-		for (int i = 0; i < int(pts.size()); i++) {
-			keypts.push_back({ NodeIndex(pts[i].p), pts[i].p, pts[i].type });
-			if (pts[i].type == KeyPointType::Sink)
-			{
-				keyptssinks.push_back({ NodeIndex(pts[i].p), pts[i].p, pts[i].type });
+
+		for (int i = 0; i < static_cast<int>(pts.size()); ++i) {
+
+			const int node_index = NodeIndex(pts[i].p);
+
+			keypts.push_back({
+				node_index,
+				pts[i].p,
+				pts[i].type
+				});
+
+			if (pts[i].type == KeyPointType::Sink) {
+				keyptssinks.push_back({
+					node_index,
+					pts[i].p,
+					pts[i].type
+					});
 			}
 			else if (pts[i].type == KeyPointType::Spring) {
-				keyptssprings.push_back({ NodeIndex(pts[i].p), pts[i].p, pts[i].type,pts[i].wt_idx });
+				keyptssprings.push_back({
+					node_index,
+					pts[i].p,
+					pts[i].type,
+					pts[i].wt_idx
+					});
 			}
 		}
-		// Allocates all temporary arrays
-		std::vector<std::vector<float>> all_distances;
-		std::vector<std::vector<float>> all_selection_distances;
-		std::vector<std::vector<std::vector<float>>> all_distances_detailled; // version where each cost for each segment is precised
-		std::vector<std::vector<std::vector<int>>> all_paths;
-		std::vector< std::vector<std::vector<char>>> all_vadose;
-		all_paths.resize(keyptssinks.size());
-		all_vadose.resize(keyptssinks.size());
-		all_distances.resize(keyptssinks.size(), std::vector<float>(keyptssprings.size(), std::numeric_limits<float>::infinity()));
-		all_selection_distances.resize(keyptssinks.size(), std::vector<float>(keyptssprings.size(), std::numeric_limits<float>::infinity()));
-		all_distances_detailled.resize(keyptssinks.size());
-		for (int i = 0; i < keyptssinks.size(); i++)
-		{
-			all_distances_detailled[i].resize(keyptssprings.size());
-			all_paths[i].resize(keyptssprings.size());
-			all_vadose[i].resize(keyptssprings.size());
+
+		// ---------------------------------------------------------------------
+		// Allocate path/result arrays.
+		// ---------------------------------------------------------------------
+
+		const int total_sinks =
+			static_cast<int>(keyptssinks.size());
+
+		const int total_springs =
+			static_cast<int>(keyptssprings.size());
+
+		std::vector<std::vector<float>> all_distances(
+			total_sinks,
+			std::vector<float>(
+				total_springs,
+				std::numeric_limits<float>::infinity()));
+
+		std::vector<std::vector<float>> all_selection_distances(
+			total_sinks,
+			std::vector<float>(
+				total_springs,
+				std::numeric_limits<float>::infinity()));
+
+		std::vector<std::vector<std::vector<float>>>
+			all_distances_detailled(total_sinks);
+
+		std::vector<std::vector<std::vector<int>>>
+			all_paths(total_sinks);
+
+		std::vector<std::vector<std::vector<char>>>
+			all_vadose(total_sinks);
+
+		for (int i = 0; i < total_sinks; ++i) {
+			all_distances_detailled[i].resize(total_springs);
+			all_paths[i].resize(total_springs);
+			all_vadose[i].resize(total_springs);
 		}
-		// Iterate on all sinks points
-		clock_t time1point5 = clock();
 
-		step1 = float(time1point5 - time1) / CLOCKS_PER_SEC;
+		// ---------------------------------------------------------------------
+		// Resolve and validate the cost channel associated with each spring once.
+		// ---------------------------------------------------------------------
 
-		const int total_sinks = static_cast<int>(keyptssinks.size());
+		std::vector<int> spring_cost_channels(
+			total_springs,
+			-1);
+
+		for (int j = 0; j < total_springs; ++j) {
+
+			const bool has_associated_wt =
+				keyptssprings[j].wt_idx > 0;
+
+			const int cost_channel =
+				has_associated_wt
+				? keyptssprings[j].wt_idx - 1
+				: params.no_wt_cost_index;
+
+			if (cost_channel < 0 ||
+				cost_channel >= params.nb_wt) {
+
+				throw std::runtime_error(
+					"[skeleton] Invalid internal cost channel for spring " +
+					std::to_string(j + 1) +
+					". This means that a spring without water table was detected "
+					"but the vadose-only cost channel was not initialized."
+				);
+			}
+
+			spring_cost_channels[j] =
+				cost_channel;
+		}
+
+		// A Pred value equal to 1 never changes the graph. In that special case,
+		// all inlets can safely share a single cost-field batch independently of
+		// the user-provided interval.
+		const int effective_pred_update_interval =
+			fraction_karst_perm == 1.0f
+			? std::max(1, total_sinks)
+			: std::max(1, params.pred_update_interval);
+
 		int next_progress_percent = 10;
 
-		for (int i = 0; i < total_sinks; i++) {
-			const clock_t time_sink = clock();
+		// ---------------------------------------------------------------------
+		// Process inlets by batches. Graph edge weights are immutable inside a
+		// batch, allowing reverse Dijkstra fields to be shared by all its inlets.
+		// ---------------------------------------------------------------------
 
-			int source = keyptssinks[i].index;
+		for (int batch_begin = 0;
+			batch_begin < total_sinks;
+			batch_begin += effective_pred_update_interval) {
 
-			const float z_inlet = keyptssinks[i].p.z;
-			bool retained_path_for_sink = false;
+			const int batch_end =
+				std::min(
+					total_sinks,
+					batch_begin + effective_pred_update_interval);
 
-			// Pick the inlet/outlet connections when val = 2 in connectivity matrix if the random connectivity option was chosen
+			const clock_t batch_start_time = clock();
 
-			if (!params.allow_single_outlet) {
-				std::vector<int> list_of_two;
-				for (int j = 0; j < keyptssprings.size(); j++) {
-					const int connectivity_flag = params.connectivity_matrix[params.sinks_index[i] - 1][j];
-					if (connectivity_flag != 2) {
-						continue;
+			// -----------------------------------------------------------------
+			// Resolve random ambiguous connectivity before shortest-path work.
+			// This part does not depend on the graph cost field.
+			// -----------------------------------------------------------------
+
+			for (int i = batch_begin; i < batch_end; ++i) {
+
+				const float z_inlet =
+					keyptssinks[i].p.z;
+
+				if (!params.allow_single_outlet) {
+
+					std::vector<int> list_of_two;
+
+					for (int j = 0; j < total_springs; ++j) {
+
+						const int connectivity_flag =
+							params.connectivity_matrix[
+								params.sinks_index[i] - 1][j];
+
+								if (connectivity_flag != 2) {
+									continue;
+								}
+
+								// Reject hydraulically inadmissible outlets before random
+								// selection. Equal elevations remain admissible.
+								if (z_inlet < keyptssprings[j].p.z) {
+
+									new_connectivity_matrix[
+										params.sinks_index[i] - 1][j] = 0;
+
+										continue;
+								}
+
+								list_of_two.push_back(j);
 					}
 
-					// Reject outlets located above the inlet before random outlet selection.
-					// This prevents single-outlet random mode from selecting a hydraulically
-					// inadmissible outlet while discarding admissible lower outlets.
-					if (z_inlet < keyptssprings[j].p.z) {
-						new_connectivity_matrix[params.sinks_index[i] - 1][j] = 0;
-						continue;
-					}
-						list_of_two.push_back(j);
-				}
-				if (int(list_of_two.size()) != 0) {
-					std::size_t random_idx_number = generateRandomIndex(list_of_two.size());
-					int random_idx = list_of_two[random_idx_number];
-					for (int j = 0; j < keyptssprings.size(); j++) {
+					if (!list_of_two.empty()) {
 
-						int connectivity_flag = params.connectivity_matrix[params.sinks_index[i] - 1][j];
+						const std::size_t random_idx_number =
+							generateRandomIndex(
+								list_of_two.size());
 
-						if (connectivity_flag == 2 && j != random_idx) {
-							params.connectivity_matrix[params.sinks_index[i] - 1][j] = 0;
-							new_connectivity_matrix[params.sinks_index[i] - 1][j] = 0;
-						}
-						else if (connectivity_flag == 2 && j == random_idx) {
-							params.connectivity_matrix[params.sinks_index[i] - 1][j] = 1;
-							new_connectivity_matrix[params.sinks_index[i] - 1][j] = 1;
+						const int random_idx =
+							list_of_two[random_idx_number];
+
+						for (int j = 0; j < total_springs; ++j) {
+
+							const int connectivity_flag =
+								params.connectivity_matrix[
+									params.sinks_index[i] - 1][j];
+
+									if (connectivity_flag != 2) {
+										continue;
+									}
+
+									if (j == random_idx) {
+
+										params.connectivity_matrix[
+											params.sinks_index[i] - 1][j] = 1;
+
+											new_connectivity_matrix[
+												params.sinks_index[i] - 1][j] = 1;
+									}
+									else {
+
+										params.connectivity_matrix[
+											params.sinks_index[i] - 1][j] = 0;
+
+											new_connectivity_matrix[
+												params.sinks_index[i] - 1][j] = 0;
+									}
 						}
 					}
 				}
 			}
 
-			// now iterate on springs, and look for path only if connectivity flag is equal to 1 (or 2 if shortest distance option was chosen)
+			// -----------------------------------------------------------------
+			// Helper used when a requested path cannot be reconstructed.
+			// -----------------------------------------------------------------
 
-			for (int j = 0; j < keyptssprings.size(); j++) {
+			auto skip_unreachable_connection =
+				[&](const int i,
+					const int j,
+					const std::string& reason)
+			{
+				const int source =
+					keyptssinks[i].index;
 
-				int connectivity_flag = params.connectivity_matrix[params.sinks_index[i] - 1][j];
-				if (connectivity_flag == 0) continue; // skip springs for which flag equals 0 (no connection)
-				// Reject hydraulically inadmissible inlet-outlet pairs before any shortest-path computation.
-				// The comparison is strict: equal elevations are still allowed as a zero-gradient limit case.
-				if (z_inlet < keyptssprings[j].p.z) {
-					new_connectivity_matrix[params.sinks_index[i] - 1][j] = 0;
+				const int target =
+					keyptssprings[j].index;
+
+				const int connectivity_flag =
+					params.connectivity_matrix[
+						params.sinks_index[i] - 1][j];
+
+						const int cost_channel =
+							spring_cost_channels[j];
+
+						std::cout
+							<< "[skeleton][warn] No path could be computed for inlet "
+							<< params.sinks_index[i]
+							<< " toward outlet " << (j + 1)
+							<< ". The connection will be ignored. "
+							<< "Reason: " << reason
+							<< ". inlet_order_index=" << (i + 1)
+							<< ", inlet_connectivity_index="
+							<< params.sinks_index[i]
+							<< ", outlet_connectivity_index=" << (j + 1)
+							<< ", source_node=" << source
+							<< ", target_node=" << target
+							<< ", source_xyz=("
+							<< keyptssinks[i].p.x << ", "
+							<< keyptssinks[i].p.y << ", "
+							<< keyptssinks[i].p.z << ")"
+							<< ", target_xyz=("
+							<< keyptssprings[j].p.x << ", "
+							<< keyptssprings[j].p.y << ", "
+							<< keyptssprings[j].p.z << ")"
+							<< ", wt_idx="
+							<< keyptssprings[j].wt_idx
+							<< ", cost_channel="
+							<< cost_channel
+							<< ", connectivity_flag="
+							<< connectivity_flag
+							<< std::endl;
+
+						new_connectivity_matrix[
+							params.sinks_index[i] - 1][j] = 0;
+			};
+
+			// -----------------------------------------------------------------
+			// Compute reusable fields channel by channel.
+			//
+			// Only one water-table field and one outlet field are held in memory
+			// at a time. This avoids an O(nodes * springs) persistent cache.
+			// -----------------------------------------------------------------
+
+			for (int cost_channel = 0;
+				cost_channel < params.nb_wt;
+				++cost_channel) {
+
+				std::vector<int> springs_in_channel;
+
+				for (int j = 0; j < total_springs; ++j) {
+
+					if (spring_cost_channels[j] ==
+						cost_channel) {
+
+						springs_in_channel.push_back(j);
+					}
+				}
+
+				if (springs_in_channel.empty()) {
 					continue;
 				}
 
-				int target = keyptssprings[j].index;
+				bool channel_is_used_in_batch = false;
 
-				const bool has_associated_wt = (keyptssprings[j].wt_idx > 0);
-				const int cost_channel = has_associated_wt
-					? keyptssprings[j].wt_idx - 1
-					: params.no_wt_cost_index;
+				for (const int j : springs_in_channel) {
 
-				if (cost_channel < 0 || cost_channel >= params.nb_wt) {
-					throw std::runtime_error(
-						"[skeleton] Invalid internal cost channel for spring " + std::to_string(j + 1) +
-						". This means that a spring without water table was detected but the vadose-only cost channel was not initialized."
-					);
-				}
+					for (int i = batch_begin;
+						i < batch_end;
+						++i) {
 
-				
-				auto skip_unreachable_connection = [&](const std::string& reason)
-				{
-					std::cout << "[skeleton][warn] No path could be computed for inlet "
-						<< params.sinks_index[i]
-						<< " toward outlet " << (j + 1)
-						<< ". The connection will be ignored. "
-						<< "Reason: " << reason
-						<< ". inlet_order_index=" << (i + 1)
-						<< ", inlet_connectivity_index=" << params.sinks_index[i]
-						<< ", outlet_connectivity_index=" << (j + 1)
-						<< ", source_node=" << source
-						<< ", target_node=" << target
-						<< ", source_xyz=(" << keyptssinks[i].p.x << ", " << keyptssinks[i].p.y << ", " << keyptssinks[i].p.z << ")"
-						<< ", target_xyz=(" << keyptssprings[j].p.x << ", " << keyptssprings[j].p.y << ", " << keyptssprings[j].p.z << ")"
-						<< ", wt_idx=" << keyptssprings[j].wt_idx
-						<< ", cost_channel=" << cost_channel
-						<< ", connectivity_flag=" << connectivity_flag
-						<< std::endl;
+						const int connectivity_flag =
+							params.connectivity_matrix[
+								params.sinks_index[i] - 1][j];
 
-					new_connectivity_matrix[params.sinks_index[i] - 1][j] = 0;
-				};
+								if (connectivity_flag == 0) {
+									continue;
+								}
 
-				const clock_t time2 = clock();
+								if (keyptssinks[i].p.z <
+									keyptssprings[j].p.z) {
 
-				std::vector<int> path_full;
-				std::vector<float> path_cost_full;
-				std::vector<char> vadose_full;
-				float pathSize_full = 0.0f;
+									continue;
+								}
 
-				if (!has_associated_wt) {
-					// Springs without an associated water table are handled as overflow/relict
-					// outlets. They are connected directly from the inlet to the spring through
-					// the vadose-only cost channel, and the whole path is flagged as vadose.
-					std::vector<float> distances_direct;
-					std::vector<int> previous_direct;
-					float pathSize_direct = 0.0f;
-
-										const clock_t time_shortest_path_begin = clock();
-
-					switch (K_SHORTEST_PATH_METHOD) {
-					case ShortestPathMethod::NormalDijkstra:
-						DijkstraComputePaths(
-							cost_channel,
-							source,
-							distances_direct,
-							previous_direct,
-							target
-						);
-						break;
-
-					case ShortestPathMethod::BidirectionalDijkstra:
-						DijkstraComputePathsBidirectional(
-							cost_channel,
-							source,
-							target,
-							distances_direct,
-							previous_direct
-						);
-						break;
+								channel_is_used_in_batch = true;
+								break;
 					}
 
-					const clock_t time_shortest_path_end = clock();
-					step_shortest_path += float(time_shortest_path_end - time_shortest_path_begin) / CLOCKS_PER_SEC;
-
-					std::pair<std::vector<int>, std::vector<float>> pair_direct =
-					DijkstraGetShortestPathTo(target, previous_direct, distances_direct, pathSize_direct);
-
-					path_full = pair_direct.first;
-					path_cost_full = pair_direct.second;
-					vadose_full.resize(path_full.size(), true);
-					pathSize_full = pathSize_direct;
-
-					if (path_full.size() <= 1 || !std::isfinite(pathSize_full)) {
-						skip_unreachable_connection("no direct Dijkstra path from inlet to outlet");
-						continue;
+					if (channel_is_used_in_batch) {
+						break;
 					}
 				}
-				else {
-					int reach = -1; // first reachable node located on the associated water table
 
-				// 1) GENERATING VADOSE ZONE CONDUIT
+				if (!channel_is_used_in_batch) {
+					continue;
+				}
 
-					std::vector<float> distances_vadose;
-					std::vector<int> previous_vadose;
-					bool already_reached = false;
-					float pathSize_vadose = 0.0f;
+				const bool physical_water_table_channel =
+					cost_channel <
+					params.nb_wt_surfaces;
 
-					const clock_t time_shortest_path_begin_vadose = clock();
+				std::vector<float> surface_distances;
+				std::vector<int> surface_next;
+				std::vector<int> surface_root;
 
-					switch (K_SHORTEST_PATH_METHOD) {
-					case ShortestPathMethod::NormalDijkstra:
-					DijkstraComputePathsSurface(
+				if (physical_water_table_channel) {
+
+					std::vector<int> water_table_nodes;
+
+					for (int node_index = 0;
+						node_index <
+						static_cast<int>(samples.size());
+						++node_index) {
+
+						if (samples_on_wt_flags(
+							node_index,
+							cost_channel)) {
+
+							water_table_nodes.push_back(
+								node_index);
+						}
+					}
+
+					if (water_table_nodes.empty()) {
+
+						throw std::runtime_error(
+							"[dijkstra] Cannot compute reusable path field to "
+							"water table " +
+							std::to_string(cost_channel + 1) +
+							": no graph node is flagged on this surface."
+						);
+					}
+
+					DijkstraComputeReverseField(
 						cost_channel,
-						source,
-						reach,
-						distances_vadose,
-						previous_vadose,
-						samples_on_wt_flags,
-						target,
-						already_reached
-					);
-					break;
+						water_table_nodes,
+						surface_distances,
+						surface_next,
+						&surface_root);
+				}
 
-					case ShortestPathMethod::BidirectionalDijkstra:
-						DijkstraComputePathsSurfaceBidirectional(
-							cost_channel,
-							source,
-							reach,
-							distances_vadose,
-							previous_vadose,
-							samples_on_wt_flags,
-							target,
-							already_reached
-						);
-						break;
+				// -------------------------------------------------------------
+				// One reverse target field per spring is sufficient for every
+				// inlet of the current batch.
+				// -------------------------------------------------------------
+
+				for (const int j : springs_in_channel) {
+
+					bool spring_is_used_in_batch = false;
+
+					for (int i = batch_begin;
+						i < batch_end;
+						++i) {
+
+						const int connectivity_flag =
+							params.connectivity_matrix[
+								params.sinks_index[i] - 1][j];
+
+								if (connectivity_flag == 0) {
+									continue;
+								}
+
+								if (keyptssinks[i].p.z <
+									keyptssprings[j].p.z) {
+
+									continue;
+								}
+
+								spring_is_used_in_batch = true;
+								break;
 					}
 
-					const clock_t time_shortest_path_end_vadose = clock();
-					step_shortest_path += float(time_shortest_path_end_vadose - time_shortest_path_begin_vadose) / CLOCKS_PER_SEC;
-
-					if (reach < 0) {
-						skip_unreachable_connection("no reachable water-table node from inlet");
+					if (!spring_is_used_in_batch) {
 						continue;
 					}
 
-					std::pair<std::vector<int>, std::vector<float>> pair_vadose =
-						DijkstraGetShortestPathTo(reach, previous_vadose, distances_vadose, pathSize_vadose);
+					const int target =
+						keyptssprings[j].index;
 
-					std::vector<int> path_vadose = pair_vadose.first;
-					std::vector<float> path_cost_vadose = pair_vadose.second;
+					std::vector<float> target_distances;
+					std::vector<int> target_next;
 
-					if (path_vadose.empty() || !std::isfinite(pathSize_vadose)) {
-						skip_unreachable_connection("invalid vadose path from inlet to reached water-table node");
-						continue;
-					}
+					DijkstraComputeReverseField(
+						cost_channel,
+						std::vector<int>{ target },
+						target_distances,
+						target_next,
+						nullptr);
 
-					if (source != reach && path_vadose.size() <= 1) {
-						skip_unreachable_connection("degenerate vadose path from inlet to reached water-table node");
-						continue;
-					}
+					for (int i = batch_begin;
+						i < batch_end;
+						++i) {
 
-					// 2) GENERATING PHREATIC ZONE CONDUIT
-					std::vector<float> distances;
-					std::vector<int> previous;
-					float pathSize = 0.0f;
-					std::vector<int> path;
-					std::vector<float> path_cost;
+						const int connectivity_flag =
+							params.connectivity_matrix[
+								params.sinks_index[i] - 1][j];
 
-					if (!already_reached) {
-						const clock_t time_shortest_path_begin_phreatic = clock();
+								if (connectivity_flag == 0) {
+									continue;
+								}
 
-						switch (K_SHORTEST_PATH_METHOD) {
-						case ShortestPathMethod::NormalDijkstra:
-							DijkstraComputePaths(
-								cost_channel,
-								reach,
-								distances,
-								previous,
-								target
-							);
-							break;
+								const float z_inlet =
+									keyptssinks[i].p.z;
 
-						case ShortestPathMethod::BidirectionalDijkstra:
-							DijkstraComputePathsBidirectional(
-								cost_channel,
-								reach,
-								target,
-								distances,
-								previous
-							);
-							break;
-						}
+								if (z_inlet <
+									keyptssprings[j].p.z) {
 
-						const clock_t time_shortest_path_end_phreatic = clock();
-						step_shortest_path += float(time_shortest_path_end_phreatic - time_shortest_path_begin_phreatic) / CLOCKS_PER_SEC;
+									new_connectivity_matrix[
+										params.sinks_index[i] - 1][j] = 0;
 
-						std::pair<std::vector<int>, std::vector<float>> pair =
-							DijkstraGetShortestPathTo(target, previous, distances, pathSize);
+										continue;
+								}
 
-						path = pair.first;
-						path_cost = pair.second;
+								const int source =
+									keyptssinks[i].index;
 
-						if (path.size() <= 1 || !std::isfinite(pathSize)) {
-							skip_unreachable_connection("no phreatic Dijkstra path from reached water-table node to outlet");
-							continue;
-						}
-					}
+								const bool has_associated_wt =
+									keyptssprings[j].wt_idx > 0;
 
-					if (!path_vadose.empty()) {
-						path_full.insert(path_full.end(), path_vadose.begin(), path_vadose.end());
-						path_cost_full.insert(path_cost_full.end(), path_cost_vadose.begin(), path_cost_vadose.end());
-						vadose_full.resize(path_vadose.size(), true);
-					}
+								std::vector<int> path_full;
+								std::vector<float> path_cost_full;
+								std::vector<char> vadose_full;
 
-					pathSize_full = pathSize + pathSize_vadose;
+								float pathSize_full = 0.0f;
 
-					if (!already_reached && !path.empty()) {
-						vadose_full.insert(vadose_full.end(), path.size() - 1, false);
-						path_full.insert(path_full.end(), path.begin() + 1, path.end());
-						path_cost_full.insert(path_cost_full.end(), path_cost.begin() + 1, path_cost.end());
+								if (!has_associated_wt) {
+
+									// Overflow/relict springs are reached directly through
+									// the vadose-only cost channel.
+									float pathSize_direct = 0.0f;
+
+									const auto pair_direct =
+										DijkstraGetShortestPathFromReverseField(
+											source,
+											target,
+											cost_channel,
+											target_distances,
+											target_next,
+											pathSize_direct);
+
+									path_full =
+										pair_direct.first;
+
+									path_cost_full =
+										pair_direct.second;
+
+									vadose_full.assign(
+										path_full.size(),
+										true);
+
+									pathSize_full =
+										pathSize_direct;
+
+									if (path_full.size() <= 1 ||
+										!std::isfinite(
+											pathSize_full)) {
+
+										skip_unreachable_connection(
+											i,
+											j,
+											"no direct Dijkstra path from inlet to outlet");
+
+										continue;
+									}
+								}
+								else {
+
+									// -------------------------------------------------
+									// 1) Vadose part: inlet -> closest node belonging
+									//    to the water table associated with this spring.
+									// -------------------------------------------------
+
+									if (source < 0 ||
+										source >=
+										static_cast<int>(
+											surface_root.size())) {
+
+										skip_unreachable_connection(
+											i,
+											j,
+											"invalid inlet node for reusable water-table field");
+
+										continue;
+									}
+
+									const int reach =
+										surface_root[
+											static_cast<std::size_t>(
+												source)];
+
+									if (reach < 0) {
+
+										skip_unreachable_connection(
+											i,
+											j,
+											"no reachable water-table node from inlet");
+
+										continue;
+									}
+
+									float pathSize_vadose = 0.0f;
+
+									const auto pair_vadose =
+										DijkstraGetShortestPathFromReverseField(
+											source,
+											reach,
+											cost_channel,
+											surface_distances,
+											surface_next,
+											pathSize_vadose);
+
+									const std::vector<int>&
+										path_vadose =
+										pair_vadose.first;
+
+									const std::vector<float>&
+										path_cost_vadose =
+										pair_vadose.second;
+
+									if (path_vadose.empty() ||
+										!std::isfinite(
+											pathSize_vadose)) {
+
+										skip_unreachable_connection(
+											i,
+											j,
+											"invalid vadose path from inlet to reached water-table node");
+
+										continue;
+									}
+
+									if (source != reach &&
+										path_vadose.size() <= 1) {
+
+										skip_unreachable_connection(
+											i,
+											j,
+											"degenerate vadose path from inlet to reached water-table node");
+
+										continue;
+									}
+
+									path_full.insert(
+										path_full.end(),
+										path_vadose.begin(),
+										path_vadose.end());
+
+									path_cost_full.insert(
+										path_cost_full.end(),
+										path_cost_vadose.begin(),
+										path_cost_vadose.end());
+
+									vadose_full.assign(
+										path_vadose.size(),
+										true);
+
+									pathSize_full =
+										pathSize_vadose;
+
+									// -------------------------------------------------
+									// 2) Phreatic part: reached WT node -> spring.
+									// -------------------------------------------------
+
+									if (reach != target) {
+
+										float pathSize_phreatic =
+											0.0f;
+
+										const auto pair_phreatic =
+											DijkstraGetShortestPathFromReverseField(
+												reach,
+												target,
+												cost_channel,
+												target_distances,
+												target_next,
+												pathSize_phreatic);
+
+										const std::vector<int>&
+											path_phreatic =
+											pair_phreatic.first;
+
+										const std::vector<float>&
+											path_cost_phreatic =
+											pair_phreatic.second;
+
+										if (path_phreatic.size() <= 1 ||
+											!std::isfinite(
+												pathSize_phreatic)) {
+
+											skip_unreachable_connection(
+												i,
+												j,
+												"no phreatic Dijkstra path from reached water-table node to outlet");
+
+											continue;
+										}
+
+										// Avoid duplicating the reached water-table node.
+										path_full.insert(
+											path_full.end(),
+											path_phreatic.begin() + 1,
+											path_phreatic.end());
+
+										path_cost_full.insert(
+											path_cost_full.end(),
+											path_cost_phreatic.begin() + 1,
+											path_cost_phreatic.end());
+
+										vadose_full.insert(
+											vadose_full.end(),
+											path_phreatic.size() - 1,
+											false);
+
+										pathSize_full +=
+											pathSize_phreatic;
+									}
+								}
+
+								if (path_full.size() <= 1 ||
+									!std::isfinite(pathSize_full)) {
+
+									skip_unreachable_connection(
+										i,
+										j,
+										"final inlet/outlet path is empty, degenerate, or non-finite");
+
+									continue;
+								}
+
+								all_paths[i][j] =
+									std::move(path_full);
+
+								all_vadose[i][j] =
+									std::move(vadose_full);
+
+								all_distances[i][j] =
+									pathSize_full;
+
+								all_selection_distances[i][j] =
+									pathSize_full;
+
+								all_distances_detailled[i][j] =
+									std::move(path_cost_full);
 					}
 				}
-
-				if (path_full.size() <= 1 || !std::isfinite(pathSize_full)) {
-					skip_unreachable_connection("final inlet/outlet path is empty, degenerate, or non-finite");
-					continue;
-				}
-
-				all_paths[i][j] = path_full;
-				all_vadose[i][j] = vadose_full;
-				all_distances[i][j] = pathSize_full;
-				all_selection_distances[i][j] = pathSize_full;
-				all_distances_detailled[i][j] = path_cost_full;
-				clock_t time7 = clock();
-				step6 += float(time7 - time2) / CLOCKS_PER_SEC;
-			}
-			clock_t time8 = clock();
-			// Connectivity choice: select the outlet with the lowest corrected cumulative path cost.
-			// The correction is applied only to ambiguous links (connectivity flag == 2) and only
-			// for the selection step. Stored path costs remain unchanged.
-			std::vector<int> ambiguous_candidates;
-			std::vector<float> candidate_dz;
-
-			ambiguous_candidates.reserve(all_paths[i].size());
-			candidate_dz.reserve(all_paths[i].size());
-
-			for (int j = 0; j < all_paths[i].size(); ++j) {
-				const int connectivity_flag = params.connectivity_matrix[params.sinks_index[i] - 1][j];
-
-				if (connectivity_flag != 2) continue;
-				if (all_paths[i][j].size() <= 1) continue;
-				if (!std::isfinite(all_distances[i][j])) continue;
-
-				ambiguous_candidates.push_back(j);
-
-				// Positive values mean that the outlet is below the inlet. Larger values
-				// represent a larger elevation drop and should therefore be less penalized.
-				const float dz = keyptssinks[i].p.z - keyptssprings[j].p.z;
-				candidate_dz.push_back(dz);
 			}
 
-			if (!ambiguous_candidates.empty()) {
-				const auto minmax_dz = std::minmax_element(candidate_dz.begin(), candidate_dz.end());
-				const float min_dz = *minmax_dz.first;
-				const float max_dz = *minmax_dz.second;
-				const float dz_range = max_dz - min_dz;
+			// -----------------------------------------------------------------
+			// Perform outlet selection for each inlet and collect every Pred
+			// contribution without modifying the graph yet.
+			//
+			// Duplicates are intentionally preserved here: if a directed edge is
+			// retained k times during the batch, its eventual reduction is Pred^k.
+			// This preserves the cumulative strength of the legacy algorithm while
+			// delaying when that reduction becomes visible.
+			// -----------------------------------------------------------------
 
-				for (int k = 0; k < ambiguous_candidates.size(); ++k) {
-					const int j = ambiguous_candidates[k];
+			std::vector<std::pair<int, int>>
+				pending_cohesion_edges;
 
-					float gradient_penalty = 0.0f;
+			for (int i = batch_begin;
+				i < batch_end;
+				++i) {
 
-					if (params.gradient_constraint_weight > 0.0f && dz_range > eps) {
-						// Penalty convention:
-						//   dz == max_dz -> 0, most favorable outlet elevation drop
-						//   dz == min_dz -> 1, least favorable outlet elevation drop
-						//   intermediate dz values are linearly interpolated.
-						gradient_penalty = (max_dz - candidate_dz[k]) / dz_range;
-						gradient_penalty = KarstNSim::Clamp(gradient_penalty, 0.0f, 1.0f);
-					}
+				bool retained_path_for_sink = false;
 
-					const float gradient_factor = 1.0f + params.gradient_constraint_weight * gradient_penalty;
-					all_selection_distances[i][j] = all_distances[i][j] * gradient_factor;
-				}
-			}
+				std::vector<int>
+					ambiguous_candidates;
 
-			float shortest_distance = std::numeric_limits<float>::infinity();
-			for (int j = 0; j < all_paths[i].size(); ++j) {
-				const int connectivity_flag = params.connectivity_matrix[params.sinks_index[i] - 1][j];
+				std::vector<float>
+					candidate_dz;
 
-				if (connectivity_flag != 2) continue;
-				if (all_paths[i][j].size() <= 1) continue;
+				ambiguous_candidates.reserve(
+					all_paths[i].size());
 
-				shortest_distance = std::min(shortest_distance, all_selection_distances[i][j]);
-			}
+				candidate_dz.reserve(
+					all_paths[i].size());
 
-			for (int j = 0; j < all_paths[i].size(); ++j) {
-				const int connectivity_flag = params.connectivity_matrix[params.sinks_index[i] - 1][j];
+				for (int j = 0;
+					j < static_cast<int>(
+						all_paths[i].size());
+					++j) {
 
-				if (all_paths[i][j].size() <= 1) continue;
+					const int connectivity_flag =
+						params.connectivity_matrix[
+							params.sinks_index[i] - 1][j];
 
-				const float outlet_selection_threshold =
-					std::isfinite(shortest_distance)
-					? shortest_distance * (params.outlet_selection_cost_factor)
-					: std::numeric_limits<float>::infinity();
-
-				if (connectivity_flag == 2 &&
-					all_selection_distances[i][j] > (outlet_selection_threshold + eps))
-				{
-					std::vector<int>().swap(all_paths[i][j]);
-					std::vector<float>().swap(all_distances_detailled[i][j]);
-					std::vector<char>().swap(all_vadose[i][j]);
-
-					new_connectivity_matrix[params.sinks_index[i] - 1][j] = 0;
-				}
-				else
-				{
-					new_connectivity_matrix[params.sinks_index[i] - 1][j] = 1;
-					retained_path_for_sink = true;
-
-					// Update edge costs for subsequent inlet iterations.
-					// Segments already karstified have their cost reduced, but only in the phreatic
-					// zone unless vadose cohesion is enabled. No shortest-path preprocessing
-					// invalidation is required here because bidirectional Dijkstra only caches the
-					// reverse topology and reads edge weights directly from adj.
-					for (int node_path = 0; node_path < all_paths[i][j].size() - 1; ++node_path)
-					{
-						const int u = all_paths[i][j][node_path];
-						const int v = all_paths[i][j][node_path + 1];
-						const int edge_slot = GetIdxNeighbor(u, v);
-
-						if (adj[u][edge_slot].target != v) {
-							throw std::runtime_error(
-								"[skeleton] Internal error: could not recover an edge while applying cohesion."
-							);
-						}
-
-						for (int cost_i = 0; cost_i < params.nb_wt; ++cost_i)
-						{
-							if (params.vadose_cohesion || samples_surf_flags(u, cost_i))
-							{
-								adj[u][edge_slot].weight[cost_i] *= fraction_karst_perm;
+							if (connectivity_flag != 2) {
+								continue;
 							}
+
+							if (all_paths[i][j].size() <= 1) {
+								continue;
+							}
+
+							if (!std::isfinite(
+								all_distances[i][j])) {
+
+								continue;
+							}
+
+							ambiguous_candidates.push_back(j);
+
+							const float dz =
+								keyptssinks[i].p.z -
+								keyptssprings[j].p.z;
+
+							candidate_dz.push_back(dz);
+				}
+
+				if (!ambiguous_candidates.empty()) {
+
+					const auto minmax_dz =
+						std::minmax_element(
+							candidate_dz.begin(),
+							candidate_dz.end());
+
+					const float min_dz =
+						*minmax_dz.first;
+
+					const float max_dz =
+						*minmax_dz.second;
+
+					const float dz_range =
+						max_dz - min_dz;
+
+					for (int k = 0;
+						k < static_cast<int>(
+							ambiguous_candidates.size());
+						++k) {
+
+						const int j =
+							ambiguous_candidates[k];
+
+						float gradient_penalty =
+							0.0f;
+
+						if (params.gradient_constraint_weight >
+							0.0f &&
+							dz_range > eps) {
+
+							gradient_penalty =
+								(max_dz -
+									candidate_dz[k]) /
+								dz_range;
+
+							gradient_penalty =
+								KarstNSim::Clamp(
+									gradient_penalty,
+									0.0f,
+									1.0f);
 						}
+
+						const float gradient_factor =
+							1.0f +
+							params.gradient_constraint_weight *
+							gradient_penalty;
+
+						all_selection_distances[i][j] =
+							all_distances[i][j] *
+							gradient_factor;
 					}
+				}
+
+				float shortest_distance =
+					std::numeric_limits<float>::infinity();
+
+				for (int j = 0;
+					j < static_cast<int>(
+						all_paths[i].size());
+					++j) {
+
+					const int connectivity_flag =
+						params.connectivity_matrix[
+							params.sinks_index[i] - 1][j];
+
+							if (connectivity_flag != 2) {
+								continue;
+							}
+
+							if (all_paths[i][j].size() <= 1) {
+								continue;
+							}
+
+							shortest_distance =
+								std::min(
+									shortest_distance,
+									all_selection_distances[i][j]);
+				}
+
+				for (int j = 0;
+					j < static_cast<int>(
+						all_paths[i].size());
+					++j) {
+
+					const int connectivity_flag =
+						params.connectivity_matrix[
+							params.sinks_index[i] - 1][j];
+
+							if (all_paths[i][j].size() <= 1) {
+								continue;
+							}
+
+							const float outlet_selection_threshold =
+								std::isfinite(shortest_distance)
+								? shortest_distance *
+								params.outlet_selection_cost_factor
+								: std::numeric_limits<float>::infinity();
+
+							if (connectivity_flag == 2 &&
+								all_selection_distances[i][j] >
+								outlet_selection_threshold + eps) {
+
+								std::vector<int>().swap(
+									all_paths[i][j]);
+
+								std::vector<float>().swap(
+									all_distances_detailled[i][j]);
+
+								std::vector<char>().swap(
+									all_vadose[i][j]);
+
+								new_connectivity_matrix[
+									params.sinks_index[i] - 1][j] = 0;
+
+									continue;
+							}
+
+							new_connectivity_matrix[
+								params.sinks_index[i] - 1][j] = 1;
+
+								retained_path_for_sink = true;
+
+								for (int node_path = 0;
+									node_path <
+									static_cast<int>(
+										all_paths[i][j].size()) - 1;
+									++node_path) {
+
+									const int u =
+										all_paths[i][j][node_path];
+
+									const int v =
+										all_paths[i][j][node_path + 1];
+
+									const int edge_slot =
+										GetIdxNeighbor(u, v);
+
+									if (adj[u][edge_slot].target != v) {
+
+										throw std::runtime_error(
+											"[skeleton] Internal error: could not recover an edge "
+											"while queuing cohesion."
+										);
+									}
+
+									pending_cohesion_edges.push_back({
+										u,
+										edge_slot
+										});
+								}
+				}
+
+				if (!retained_path_for_sink) {
+
+					std::cout
+						<< "[skeleton][warn] No valid outlet could be retained for inlet "
+						<< params.sinks_index[i]
+						<< ". All candidate outlets were disconnected, located above "
+						"the inlet, or unreachable."
+						<< std::endl;
 				}
 			}
 
-			if (!retained_path_for_sink) {
-				std::cout << "[skeleton][warn] No valid outlet could be retained for inlet "
-					<< params.sinks_index[i]
-					<< ". All candidate outlets were disconnected, located above the inlet, or unreachable."
-					<< std::endl;
+			// -----------------------------------------------------------------
+			// Commit Pred once at the end of the batch.
+			//
+			// Sorting lets us group repeated use of the same directed edge.
+			// An edge selected k times receives fraction_karst_perm^k, exactly
+			// preserving the cumulative cohesion strength that k immediate legacy
+			// updates would have produced.
+			// -----------------------------------------------------------------
+
+			if (!pending_cohesion_edges.empty() &&
+				fraction_karst_perm < 1.0f) {
+
+				std::sort(
+					pending_cohesion_edges.begin(),
+					pending_cohesion_edges.end());
+
+				std::size_t first = 0;
+
+				while (first <
+					pending_cohesion_edges.size()) {
+
+					std::size_t last =
+						first + 1;
+
+					while (last <
+						pending_cohesion_edges.size() &&
+						pending_cohesion_edges[last] ==
+						pending_cohesion_edges[first]) {
+
+						++last;
+					}
+
+					const int occurrence_count =
+						static_cast<int>(last - first);
+
+					const int u =
+						pending_cohesion_edges[first].first;
+
+					const int edge_slot =
+						pending_cohesion_edges[first].second;
+
+					const float cumulative_pred_factor =
+						static_cast<float>(
+							std::pow(
+								static_cast<double>(
+									fraction_karst_perm),
+								occurrence_count));
+
+					for (int cost_i = 0;
+						cost_i < params.nb_wt;
+						++cost_i) {
+
+						if (params.vadose_cohesion ||
+							samples_surf_flags(
+								u,
+								cost_i)) {
+
+							adj[u][edge_slot]
+								.weight[cost_i] *=
+								cumulative_pred_factor;
+						}
+					}
+
+					first = last;
+				}
 			}
 
-			clock_t time9 = clock();
-			step7 += float(time9 - time8) / CLOCKS_PER_SEC;
-			step_sink = float(time9 - time_sink) / CLOCKS_PER_SEC;
+			// No numerical shortest-path field is reused beyond this point:
+			// Pred may just have changed edge weights. The reverse adjacency itself
+			// remains valid because it stores topology only and reads current adj[]
+			// weights on the next Dijkstra computation.
 
-			const int completed_sinks = i + 1;
-			const int completed_percent = static_cast<int>(
-				100.0f * static_cast<float>(completed_sinks) / static_cast<float>(std::max(1, total_sinks))
-				);
+			const int completed_sinks =
+				batch_end;
 
-			if (completed_percent >= next_progress_percent) {
-				int logged_progress_percent = next_progress_percent;
+			const int completed_percent =
+				static_cast<int>(
+					100.0f *
+					static_cast<float>(
+						completed_sinks) /
+					static_cast<float>(
+						std::max(
+							1,
+							total_sinks)));
 
-				while (next_progress_percent <= 100 && completed_percent >= next_progress_percent) {
-					logged_progress_percent = next_progress_percent;
+			if (completed_percent >=
+				next_progress_percent) {
+
+				int logged_progress_percent =
+					next_progress_percent;
+
+				while (next_progress_percent <= 100 &&
+					completed_percent >=
+					next_progress_percent) {
+
+					logged_progress_percent =
+						next_progress_percent;
+
 					next_progress_percent += 10;
 				}
 
-				std::cout << "Skeleton progress: "
-					<< completed_sinks << " / " << total_sinks
+				const float batch_time =
+					static_cast<float>(
+						clock() -
+						batch_start_time) /
+					CLOCKS_PER_SEC;
+
+				std::cout
+					<< "Skeleton progress: "
+					<< completed_sinks
+					<< " / "
+					<< total_sinks
 					<< " inlets processed ("
-					<< logged_progress_percent << "%), last inlet time = "
-					<< step_sink << " s"
+					<< logged_progress_percent
+					<< "%), last shared-cost batch time = "
+					<< batch_time
+					<< " s"
 					<< std::endl;
 			}
 		}
-		// Path pruning based on an anisotropic empty region criterion
 
-		clock_t time10 = clock();
-		for (int i = 0; i < all_paths.size(); i++)
-		{
-			for (int j = 0; j < all_paths[i].size(); j++)
-			{
-				if (all_paths[i][j].size() <= 1)
+		// ---------------------------------------------------------------------
+		// Path pruning based on the anisotropic empty-region criterion.
+		// Existing gamma-graph pruning remains disabled exactly as before.
+		// ---------------------------------------------------------------------
+
+		for (int i = 0;
+			i < static_cast<int>(all_paths.size());
+			++i) {
+
+			for (int j = 0;
+				j < static_cast<int>(
+					all_paths[i].size());
+					++j) {
+
+				if (all_paths[i][j].size() <= 1) {
 					continue;
-				// Second, check if there is a cheaper path from nodes[i] going through a node[k] to arrive at nodes[j]
-				// float d_ij = KarstNSim::Pow(all_distances[i][j], params.gamma);
-				bool keep = true;
-				//for (int k = 0; k < all_paths[i].size(); k++)
-				//{
-				//	if (i == k || j == k)			 continue;
-				//	if (all_paths[i][k].size() <= 1) continue;
-				//	if (all_paths[k][j].size() <= 1) continue;
+				}
 
-				//	float d_ik = KarstNSim::Pow(all_distances[i][k], params.gamma);
-				//	float d_kj = KarstNSim::Pow(all_distances[k][j], params.gamma);
-				//	if (d_ik + d_kj < d_ij)
-				//	{
-				//		//keep = false; // uncomment to enable gamma-graph constraint (use at your own risk)
-				//		break;
-				//	}
-				//}
+				bool keep = true;
+
+				// Gamma-graph pruning remains intentionally disabled.
+				//
+				// float d_ij =
+				//     KarstNSim::Pow(
+				//         all_distances[i][j],
+				//         params.gamma);
+				//
+				// ...
+
 				if (keep) {
-					pathsFinal.push_back(std::move(all_paths[i][j]));
-					costsFinal.push_back(std::move(all_distances_detailled[i][j]));
-					vadoseFinal.push_back(std::move(all_vadose[i][j]));
+
+					pathsFinal.push_back(
+						std::move(
+							all_paths[i][j]));
+
+					costsFinal.push_back(
+						std::move(
+							all_distances_detailled[i][j]));
+
+					vadoseFinal.push_back(
+						std::move(
+							all_vadose[i][j]));
+
 					springidxFinal.push_back(j);
 				}
 			}
 		}
 
 		if (save_new_connectivity_matrix) {
-			std::string full_dir_name = params.directoryname + "/outputs";
-			std::string full_name = params.scenename + "_connectivity_matrix.txt";
-			save_connectivity_matrix(full_name, full_dir_name, new_connectivity_matrix);
-		}
 
-		clock_t time11 = clock();
-		step8 += float(time11 - time10) / CLOCKS_PER_SEC;
+			const std::string full_dir_name =
+				params.directoryname +
+				"/outputs";
+
+			const std::string full_name =
+				params.scenename +
+				"_connectivity_matrix.txt";
+
+			save_connectivity_matrix(
+				full_name,
+				full_dir_name,
+				new_connectivity_matrix);
+		}
 
 		if (K_CLEAR_SHORTEST_PATH_PREPROCESSING_AFTER_SKELETON) {
 			ClearShortestPathPreprocessing();

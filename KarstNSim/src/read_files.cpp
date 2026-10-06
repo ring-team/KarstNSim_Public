@@ -58,7 +58,7 @@ namespace KarstNSim {
 			}
 
 			std::istringstream data_stream(line);
-			int index = 0;
+			float index = 0.0f;
 			float x = 0.0f;
 			float y = 0.0f;
 			float z = 0.0f;
@@ -143,7 +143,7 @@ namespace KarstNSim {
 			data_stream >> tag;
 
 			if (tag == "VRTX") {
-				int index = 0;
+				float index = 0.0f;
 				float x = 0.0f;
 				float y = 0.0f;
 				float z = 0.0f;
@@ -175,7 +175,7 @@ namespace KarstNSim {
 				properties.push_back(std::move(vertex_properties));
 			}
 			else if (tag == "TRGL") {
-				int index = 0;
+				float index = 0.0f;
 				int id1 = 0;
 				int id2 = 0;
 				int id3 = 0;
@@ -278,7 +278,7 @@ namespace KarstNSim {
 			}
 
 			std::istringstream data_stream(line);
-			int index = 0;
+			float index = 0.0f;
 			float x = 0.0f;
 			float y = 0.0f;
 			float z = 0.0f;
@@ -365,7 +365,7 @@ namespace KarstNSim {
 			}
 
 			std::istringstream data_stream(line);
-			int index = 0;
+			float index = 0.0f;
 			float x = 0.0f;
 			float y = 0.0f;
 			float z = 0.0f;
@@ -569,7 +569,7 @@ namespace KarstNSim {
 			}
 
 			std::istringstream iss(line);
-			int idx = -1;
+			float idx = -1.0f;
 			std::vector<float> prop(static_cast<size_t>(prop_size), 0.0f);
 
 			if (!(iss >> idx)) {
