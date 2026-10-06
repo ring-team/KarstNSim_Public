@@ -59,7 +59,7 @@
         "https://visualstudio.microsoft.com/",
         "https://doxygen.nl/"
     ],
-    "version": "2.1",
+    "version": "2.2",
     "codemeta:contIntegration": {
         "id": "https://github.com/ring-team/KarstNSim_Public/actions"
     },
