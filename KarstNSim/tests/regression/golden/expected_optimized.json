@@ -1,0 +1,246 @@
+{
+ "binary_sha256": "da488944d2e04d67e9dfa8918961c6fa0d2772957e1da37a6b02502e5345b255",
+ "bug_fix_overrides": {
+  "c05_import_graph/c05_0_nghb_graph.txt": {
+   "corrected_reference": {
+    "bytes": 7335548,
+    "lines": 124733,
+    "sha256": "247327bd7ef044826d3f134ebb32c2db3522d229f3607eb326e719a124aecb89"
+   },
+   "original_baseline": {
+    "bytes": 10597064,
+    "lines": 186041,
+    "sha256": "069624c90bac583bc2d822bc501f711f102a502508d05ab86dcb4fb789339d09"
+   }
+  },
+  "c07_const_density_loops_deadends/c07_10_nghb_graph.txt": {
+   "corrected_reference": {
+    "bytes": 11280754,
+    "lines": 378509,
+    "sha256": "143509a04b75a4f59b111986a21903021c57bf67ef3b139db38680b2cc37d1d9"
+   },
+   "original_baseline": {
+    "bytes": 11655204,
+    "lines": 391561,
+    "sha256": "dd18581ab77fe0a37b4f75c8803e55c781fe8bbba8a7205b8074c2b8e91736ce"
+   }
+  }
+ },
+ "cases": {
+  "c01_base_coarse": {
+   "exit_code": 0,
+   "outputs": {
+    "c01_0_connectivity_matrix.txt": {
+     "bytes": 20,
+     "lines": 5,
+     "sha256": "d591c1244229448e6a468d14dde467e37d90529a1d030b4d639ed069eaeaf123"
+    },
+    "c01_0_karst.txt": {
+     "bytes": 17244,
+     "lines": 301,
+     "sha256": "7ec81fd50aa7c2c3b6c80cc0de29e8911473dbd559499dd97aa21853040f1c9c"
+    },
+    "c01_0_pts.txt": {
+     "bytes": 708043,
+     "lines": 24279,
+     "sha256": "25614e0bd7c0a0f40e2c9aa9550d1befeb508ca2c033d35b8bbc84d2459a166d"
+    },
+    "c01_0_s_pts.txt": {
+     "bytes": 127260,
+     "lines": 4468,
+     "sha256": "d8e3e224bfa91509380cbe1252bd36a9f5875e97790158e09200d3be8f2a8822"
+    },
+    "c01_1_connectivity_matrix.txt": {
+     "bytes": 20,
+     "lines": 5,
+     "sha256": "d591c1244229448e6a468d14dde467e37d90529a1d030b4d639ed069eaeaf123"
+    },
+    "c01_1_karst.txt": {
+     "bytes": 16778,
+     "lines": 293,
+     "sha256": "f3c7c7f781dd98a6606bf9a1c5a4add38f4c16038a33d3d4f670044ff128cecc"
+    },
+    "c01_1_pts.txt": {
+     "bytes": 711368,
+     "lines": 24391,
+     "sha256": "794150ffae7033634d6e790b7d38eeb13c146056050ceccd188cf1c2e2aa7963"
+    },
+    "c01_1_s_pts.txt": {
+     "bytes": 127260,
+     "lines": 4468,
+     "sha256": "d8e3e224bfa91509380cbe1252bd36a9f5875e97790158e09200d3be8f2a8822"
+    }
+   }
+  },
+  "c02_gradient_noise_waypoints": {
+   "exit_code": 0,
+   "outputs": {
+    "c02_6_connectivity_matrix.txt": {
+     "bytes": 20,
+     "lines": 5,
+     "sha256": "e58dbe05d3731ba08d1e4f96bf08bd67d3abdd7ce287128765f7269740cda8ed"
+    },
+    "c02_6_karst.txt": {
+     "bytes": 16293,
+     "lines": 273,
+     "sha256": "70218e16e91f3368282805aebedc295fe5d567de066bb6e885dede5f90a967c7"
+    },
+    "c02_6_pts.txt": {
+     "bytes": 442974,
+     "lines": 10523,
+     "sha256": "a9509af1ba9bb06f21c3e5e1eb8033dd0818c4a9c18f5121e00ebc29cf1d03e1"
+    },
+    "c02_6_s_pts.txt": {
+     "bytes": 127260,
+     "lines": 4468,
+     "sha256": "d8e3e224bfa91509380cbe1252bd36a9f5875e97790158e09200d3be8f2a8822"
+    }
+   }
+  },
+  "c03_multi_wt_random_outlet": {
+   "exit_code": 0,
+   "outputs": {
+    "c03_2_connectivity_matrix.txt": {
+     "bytes": 20,
+     "lines": 5,
+     "sha256": "7229fa631d80da2658204a95b7a737479956b42936212dfa6352fb8734436026"
+    },
+    "c03_2_karst.txt": {
+     "bytes": 81129,
+     "lines": 1335,
+     "sha256": "2c64c536d2ea13e9184ce66c9b21975ad1a2a113f28c084f034d9eb939dc28a0"
+    },
+    "c03_2_pts.txt": {
+     "bytes": 860945,
+     "lines": 29418,
+     "sha256": "c7ca886b01d7afa14d97b3efc093e599a2eda8c1ec00c1f8807cc910df493e36"
+    },
+    "c03_2_s_pts.txt": {
+     "bytes": 127260,
+     "lines": 4468,
+     "sha256": "d8e3e224bfa91509380cbe1252bd36a9f5875e97790158e09200d3be8f2a8822"
+    }
+   }
+  },
+  "c04_polyphasic_amplified_sections": {
+   "exit_code": 0,
+   "outputs": {
+    "c04_0_connectivity_matrix.txt": {
+     "bytes": 20,
+     "lines": 5,
+     "sha256": "d591c1244229448e6a468d14dde467e37d90529a1d030b4d639ed069eaeaf123"
+    },
+    "c04_0_karst.txt": {
+     "bytes": 109881,
+     "lines": 1865,
+     "sha256": "403c092c81a4d49d68db01b8f84cbf77953f514db928c6118f43c48f6d8be4ad"
+    },
+    "c04_0_pts.txt": {
+     "bytes": 1266476,
+     "lines": 29613,
+     "sha256": "0d8abb29d17b968e5e47da807119fef52f2a11591e992220e981303e7074fdfb"
+    },
+    "c04_0_s_pts.txt": {
+     "bytes": 127260,
+     "lines": 4468,
+     "sha256": "d8e3e224bfa91509380cbe1252bd36a9f5875e97790158e09200d3be8f2a8822"
+    }
+   }
+  },
+  "c05_import_graph": {
+   "exit_code": 0,
+   "outputs": {
+    "c05_0_connectivity_matrix.txt": {
+     "bytes": 20,
+     "lines": 5,
+     "sha256": "d591c1244229448e6a468d14dde467e37d90529a1d030b4d639ed069eaeaf123"
+    },
+    "c05_0_karst.txt": {
+     "bytes": 9238,
+     "lines": 161,
+     "sha256": "56d451041d6a26cbc388daeeb3a9e4f976b818eb36764a2d89a4a50b849e8af7"
+    },
+    "c05_0_nghb_graph.txt": {
+     "bytes": 7335548,
+     "lines": 124733,
+     "sha256": "247327bd7ef044826d3f134ebb32c2db3522d229f3607eb326e719a124aecb89"
+    },
+    "c05_0_pts.txt": {
+     "bytes": 130864,
+     "lines": 4652,
+     "sha256": "8a3e121883ddf662fecf4752e2846dbca7ca731162d81aa0c61f4f07b1e72222"
+    }
+   }
+  },
+  "c06_sections_only": {
+   "exit_code": 0,
+   "outputs": {
+    "c06_0_karst.txt": {
+     "bytes": 99829,
+     "lines": 1835,
+     "sha256": "dea7f2098fb1b36ddcbc88e8487bd89a87e35c8654c2cf5fbdb9155d9f8ac8ca"
+    }
+   }
+  },
+  "c07_const_density_loops_deadends": {
+   "exit_code": 0,
+   "outputs": {
+    "c07_10_connectivity_matrix.txt": {
+     "bytes": 20,
+     "lines": 5,
+     "sha256": "d591c1244229448e6a468d14dde467e37d90529a1d030b4d639ed069eaeaf123"
+    },
+    "c07_10_karst.txt": {
+     "bytes": 18224,
+     "lines": 333,
+     "sha256": "8b9d47c55e27bea23668ae48a24ddbbe9b7f39a7f2ad4d874e08a1d4b57d5f49"
+    },
+    "c07_10_nghb_graph.txt": {
+     "bytes": 11280754,
+     "lines": 378509,
+     "sha256": "143509a04b75a4f59b111986a21903021c57bf67ef3b139db38680b2cc37d1d9"
+    },
+    "c07_10_pts.txt": {
+     "bytes": 184101,
+     "lines": 6527,
+     "sha256": "142cc6c2e42ab24b69323e1f763de6aaeef226cba014e344a3b20cb72ef82198"
+    }
+   }
+  },
+  "c08_base_medium": {
+   "exit_code": 0,
+   "outputs": {
+    "c08_0_connectivity_matrix.txt": {
+     "bytes": 20,
+     "lines": 5,
+     "sha256": "d591c1244229448e6a468d14dde467e37d90529a1d030b4d639ed069eaeaf123"
+    },
+    "c08_0_karst.txt": {
+     "bytes": 17482,
+     "lines": 305,
+     "sha256": "eec943808106e693132a211fa51c601e57286b84b11383f661e32420b7e1e294"
+    },
+    "c08_0_pts.txt": {
+     "bytes": 2144004,
+     "lines": 72786,
+     "sha256": "fc2e1545effee4a3090ed1c17acabaeedf6ede86e97c31dc3bde632664833184"
+    },
+    "c08_0_s_pts.txt": {
+     "bytes": 127260,
+     "lines": 4468,
+     "sha256": "d8e3e224bfa91509380cbe1252bd36a9f5875e97790158e09200d3be8f2a8822"
+    }
+   }
+  }
+ },
+ "generated_inputs": {
+  "box_coarse.txt": "71d79e39e9c3bd70471b173a3ac3aff0a13cbc698e6b0ae28065cbea04155d8b",
+  "box_gradient.txt": "95389a2f6518a4a470bf2e607d2069d3326c8cebfc1755b3f5370f1aeba880f2",
+  "box_medium.txt": "343d39b7554aa63ab962fcf1dfc25de7053777530ede514c24835ff82dde2264",
+  "graph_pts.txt": "a7f48252d7e4a3b0587cdbd8b4a42d0cf3f5dabe22fb27278c984667c6473e0a",
+  "input_graph.txt": "ac0ea1c5ff1d8d274e8d0226ef039a3c4a93119a7ccf9d5c2380cccb44f26708"
+ },
+ "note": "Expected hashes for the optimized build. Identical to baseline_ff55d39.json EXCEPT the two neighbour-graph exports listed in bug_fix_overrides. Those are NOT identical to the original export: they are a BUG FIX. Upstream save_nghb_graph (ff55d39) wrote a segment for every unused adjacency slot (target -1, reading samples[-1] out of bounds; ASan heap-buffer-overflow at graph_operations.cpp:591) and misaligned cost properties. The corrected hashes come from an independent reference build: ff55d39 + only save_nghb_graph_unused_slot_guard.patch, GCC 13.3 Release -O3, not from the optimized binary.",
+ "reference_binary_sha256": "fd3e956839758eab1e29bf6acaf2bb9e60cf3d985d8bbdab7bd23620f2da5555",
+ "reference_patch_sha256": "09f62649d4afd83942b7b02f087d0bfcc91adfe7ab842c4edad166963ee08aeb"
+}

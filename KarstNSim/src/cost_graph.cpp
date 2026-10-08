@@ -14,6 +14,8 @@ If you use this code, please cite : Paris et al., 2021, Computer Graphic Forum.
 
 #include "KarstNSim/graph.h"
 
+#include <type_traits>
+
 namespace {
 	struct DijkstraQueueNode {
 		float distance;
@@ -33,7 +35,10 @@ namespace KarstNSim {
 	*/
 	CostGraph::CostGraph(int n)
 	{
-		adj.resize(n);
+		if (n < 0) {
+			throw std::invalid_argument("Graph node count must not be negative.");
+		}
+		adj.reset(static_cast<std::size_t>(n), 0, 0);
 	}
 
 	void CostGraph::NormalizeWeights() {
@@ -42,7 +47,7 @@ namespace KarstNSim {
 		for (int i = 0; i < adj.size(); i++) {
 			for (int j = 0; j < adj[i].size(); j++) {
 				if (adj[i][j].target >= 0) { // avoid empty neighbors (when n<N) 
-					std::vector<float> weight_itr = adj[i][j].weight;
+					const auto weight_itr = adj[i][j].weight;
 					for (int k = 0; k < weight_itr.size(); k++) {
 						if (max < weight_itr[k]) max = weight_itr[k];
 						if (min > weight_itr[k]) min = weight_itr[k];
@@ -65,19 +70,20 @@ namespace KarstNSim {
 	void CostGraph::SetEdge(const int& s, const int& neigh, const int& t, const std::vector<float>& w, const std::vector<bool>& ff)
 	{
 		InvalidateShortestPathPreprocessing();
-		adj[s][neigh] = GraphEdge(t, w, ff);
+		(void)ff; // Deprecated flags never affected routing; fracture costs are in w.
+		adj.set(s, neigh, t, w);
 	}
 
 	void CostGraph::SetEdge(const int& s, const int& neigh, const int& t, const std::vector<float>& w)
 	{
 		InvalidateShortestPathPreprocessing();
-		adj[s][neigh] = GraphEdge(t, w);
+		adj.set(s, neigh, t, w);
 	}
 
 	void CostGraph::UpdateEdgeWeight(const int& s, const int& t, const std::vector<float>& w)
 	{
 		InvalidateShortestPathPreprocessing();
-		adj[s][t].weight = w;
+		adj.set_weights(s, t, w);
 	}
 
 	int CostGraph::GetIdxNeighbor(const int& s, const int& t)
@@ -96,9 +102,10 @@ namespace KarstNSim {
 	void CostGraph::ClearShortestPathPreprocessing() const
 	{
 		reverse_adjacency_ready_ = false;
+		reverse_edges_wide_ = false;
 		std::vector<std::size_t>().swap(reverse_offsets_);
-		std::vector<int>().swap(reverse_sources_);
-		std::vector<std::uint16_t>().swap(reverse_edge_slots_);
+		std::vector<std::uint32_t>().swap(reverse_edges32_);
+		std::vector<std::uint64_t>().swap(reverse_edges64_);
 	}
 
 	void CostGraph::InvalidateShortestPathPreprocessing() const
@@ -118,10 +125,10 @@ namespace KarstNSim {
 			return inf;
 		}
 
-		const int n2 = int(adj.row(0).size());
+		const std::size_t n2 = adj.cols();
 
-		for (int i = 0; i < n2; ++i) {
-			const GraphEdge& edge = adj(source, i);
+		for (std::size_t i = 0; i < n2; ++i) {
+			const auto edge = adj(source, i);
 
 			if (edge.target != target) {
 				continue;
@@ -149,23 +156,21 @@ namespace KarstNSim {
 			return;
 		}
 
-		const int n2 = int(adj.row(0).size());
+		const std::size_t n2 = adj.cols();
 
-		if (n2 > int(std::numeric_limits<std::uint16_t>::max())) {
-			throw std::runtime_error(
-				"[dijkstra] Cannot build reverse adjacency: the local edge slot exceeds uint16_t capacity."
-			);
-		}
-
-		reverse_adjacency_ready_ = false;
-		reverse_offsets_.assign(std::size_t(n + 1), 0);
+		ClearShortestPathPreprocessing();
+		reverse_offsets_.assign(std::size_t(n) + 1, 0);
 
 		for (int u = 0; u < n; ++u) {
-			for (int k = 0; k < n2; ++k) {
+			for (std::size_t k = 0; k < n2; ++k) {
 				const int v = adj(u, k).target;
 
+				if (v >= n) {
+					throw std::runtime_error("[dijkstra] Cannot build reverse adjacency: edge target out of range.");
+				}
+
 				if (v >= 0) {
-					++reverse_offsets_[std::size_t(v + 1)];
+					++reverse_offsets_[std::size_t(v) + 1];
 				}
 			}
 		}
@@ -175,23 +180,32 @@ namespace KarstNSim {
 		}
 
 		const std::size_t edge_count = reverse_offsets_[std::size_t(n)];
-		reverse_sources_.assign(edge_count, -1);
-		reverse_edge_slots_.assign(edge_count, 0);
-
 		std::vector<std::size_t> cursor = reverse_offsets_;
 
-		for (int u = 0; u < n; ++u) {
-			for (int k = 0; k < n2; ++k) {
-				const int v = adj(u, k).target;
+		// Rows are visited in order, so each incoming list keeps ascending forward-edge order.
+		auto fill = [&](auto& edges) {
+			using Index = typename std::decay_t<decltype(edges)>::value_type;
+			edges.assign(edge_count, 0);
+			for (int u = 0; u < n; ++u) {
+				for (std::size_t k = 0; k < n2; ++k) {
+					const int v = adj(u, k).target;
 
-				if (v < 0) {
-					continue;
+					if (v < 0) {
+						continue;
+					}
+
+					edges[cursor[std::size_t(v)]++] = static_cast<Index>(std::size_t(u) * n2 + k);
 				}
-
-				const std::size_t pos = cursor[std::size_t(v)]++;
-				reverse_sources_[pos] = u;
-				reverse_edge_slots_[pos] = static_cast<std::uint16_t>(k);
 			}
+		};
+
+		reverse_edges_wide_ = !ReverseEdgeIndexFitsUint32(std::size_t(n), n2);
+
+		if (reverse_edges_wide_) {
+			fill(reverse_edges64_);
+		}
+		else {
+			fill(reverse_edges32_);
 		}
 
 		reverse_adjacency_ready_ = true;
@@ -450,7 +464,7 @@ namespace KarstNSim {
 
 		BuildReverseAdjacency();
 
-		const int n2 = int(adj.row(0).size());
+		const std::size_t n2 = adj.cols();
 
 		std::vector<float> dist_forward(std::size_t(n), inf);
 		std::vector<float> dist_backward(std::size_t(n), inf);
@@ -498,8 +512,8 @@ namespace KarstNSim {
 					meeting_node = u;
 				}
 
-				for (int i = 0; i < n2; ++i) {
-					const GraphEdge& edge = adj(u, i);
+				for (std::size_t i = 0; i < n2; ++i) {
+					const auto edge = adj(u, i);
 					const int v = edge.target;
 
 					if (v < 0) {
@@ -554,9 +568,9 @@ namespace KarstNSim {
 					pos < reverse_offsets_[std::size_t(u + 1)];
 					++pos) {
 
-					const int pred = reverse_sources_[pos];
-					const int edge_slot = int(reverse_edge_slots_[pos]);
-					const GraphEdge& reverse_edge = adj(pred, edge_slot);
+					const std::size_t forward_edge = ReverseEdgeAt(pos);
+					const int pred = int(forward_edge / n2);
+					const auto reverse_edge = adj(std::size_t(pred), forward_edge % n2);
 
 					if (outlet_count < 0 || outlet_count >= int(reverse_edge.weight.size())) {
 						continue;
@@ -638,7 +652,7 @@ namespace KarstNSim {
 	{
 		constexpr float max_weight = std::numeric_limits<float>::infinity();
 		size_t n = adj.size();
-		size_t n2 = adj.row(0).size();
+		size_t n2 = adj.cols();
 		distance.resize(n, max_weight);
 		distance[source] = 0;
 		previous.resize(n, -1);
@@ -660,7 +674,7 @@ namespace KarstNSim {
 			for (int i = 0; i < n2; ++i)
 			{
 				if (adj(u, i).target >= 0) { // avoid empty neighbors (when n<N) 
-					const GraphEdge& neighbor(adj(u, i));
+					const auto neighbor = adj(u, i);
 					int v = neighbor.target;
 					float weight = neighbor.weight[outlet_count];
 					float distance_through_u = dist + weight;
@@ -714,7 +728,7 @@ namespace KarstNSim {
 
 		BuildReverseAdjacency();
 
-		const int n2 = int(adj.row(0).size());
+		const std::size_t n2 = adj.cols();
 
 		std::vector<float> dist_forward(std::size_t(n), inf);
 		std::vector<float> dist_backward(std::size_t(n), inf);
@@ -788,8 +802,8 @@ namespace KarstNSim {
 					best_surface_node = surface_root[std::size_t(u)];
 				}
 
-				for (int i = 0; i < n2; ++i) {
-					const GraphEdge& edge = adj(u, i);
+				for (std::size_t i = 0; i < n2; ++i) {
+					const auto edge = adj(u, i);
 					const int v = edge.target;
 
 					if (v < 0) {
@@ -846,9 +860,9 @@ namespace KarstNSim {
 					pos < reverse_offsets_[std::size_t(u + 1)];
 					++pos) {
 
-					const int pred = reverse_sources_[pos];
-					const int edge_slot = int(reverse_edge_slots_[pos]);
-					const GraphEdge& reverse_edge = adj(pred, edge_slot);
+					const std::size_t forward_edge = ReverseEdgeAt(pos);
+					const int pred = int(forward_edge / n2);
+					const auto reverse_edge = adj(std::size_t(pred), forward_edge % n2);
 
 					if (outlet_count >= int(reverse_edge.weight.size())) {
 						continue;
@@ -938,7 +952,7 @@ namespace KarstNSim {
 	{
 		constexpr float max_weight = std::numeric_limits<float>::infinity();
 		size_t n = adj.size();
-		size_t n2 = adj.row(0).size();
+		size_t n2 = adj.cols();
 		distance.resize(n, max_weight);
 		distance[source] = 0;
 		previous.resize(n, -1);
@@ -966,7 +980,7 @@ namespace KarstNSim {
 			{
 				if (adj(u, i).target >= 0) { // avoid empty neighbors (when n<N)
 
-					const GraphEdge& neighbor(adj(u, i));
+					const auto neighbor = adj(u, i);
 					int v = neighbor.target;
 					float weight = neighbor.weight[outlet_count];
 					float distance_through_u = dist + weight;

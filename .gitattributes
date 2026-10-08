@@ -1,0 +1,2 @@
+# Unified patches have a leading context marker before the source indentation.
+KarstNSim/tests/regression/golden/*.patch whitespace=-space-before-tab

@@ -1,0 +1,18 @@
+{
+  "case": "full",
+  "binary_sha256": "13cc6e26b7a055614aaa27a4e507c5cf85327476029ed4ce2bfafebc09efce51",
+  "exit_code": 0,
+  "wall_seconds": 24.316613500996027,
+  "peak_rss_bytes": 721985536,
+  "exports_match": true,
+  "support_points": 549999,
+  "exports": {
+    "base_0_connectivity_matrix.txt": "d591c1244229448e6a468d14dde467e37d90529a1d030b4d639ed069eaeaf123",
+    "base_0_karst.txt": "c345582d7df7a1e78684f3ebb562499667f9a579f583b075cba468afe90fa096",
+    "base_0_pts.txt": "3e64fae90bb99eca74ae743a350d970df4f7c208b51e256ca0c51691b6bca73c",
+    "base_0_s_pts.txt": "d8e3e224bfa91509380cbe1252bd36a9f5875e97790158e09200d3be8f2a8822"
+  },
+  "date": "2026-09-24",
+  "cpu": "AMD Ryzen 7 5800X3D",
+  "compiler": "GCC 13.3.0, CMake Release, C++17"
+}
