@@ -1254,7 +1254,6 @@ namespace KarstNSim {
 		(void)network_name;
 
 		constexpr float NO_DATA_VALUE = -99999.0f;
-		constexpr float EPSILON_COST = 1e-10f;
 
 		KarstNetworkResult result;
 
@@ -1312,21 +1311,41 @@ namespace KarstNSim {
 					);
 				}
 
-				auto it_spring = std::find_if(
-					nodes[i].cost.begin(),
-					nodes[i].cost.end(),
-					[EPSILON_COST](float c)
-				{
-					return std::isfinite(c) && std::fabs(c) > EPSILON_COST;
-				}
-				);
 
 				int index_spring = -1;
-				if (it_spring != nodes[i].cost.end()) {
-					index_spring = static_cast<int>(
-						std::distance(nodes[i].cost.begin(), it_spring)
-						);
+
+				// Prefer a cost channel defined and positive at both endpoints.
+				const std::size_t common_channels = std::min(
+					nodes[i].cost.size(),
+					nodes[dest].cost.size());
+
+				for (std::size_t k = 0; k < common_channels; ++k) {
+					const float c_start = nodes[i].cost[k];
+					const float c_end = nodes[dest].cost[k];
+
+					if (std::isfinite(c_start) && c_start > 0.0f &&
+						std::isfinite(c_end) && c_end > 0.0f) {
+						index_spring = static_cast<int>(k);
+						break;
+					}
 				}
+
+				// Preserve the previous selection behavior when no common
+				// positive cost channel is available.
+				if (index_spring < 0) {
+					auto it_spring = std::find_if(
+						nodes[i].cost.begin(),
+						nodes[i].cost.end(),
+						[](float c) {
+						return std::isfinite(c) && c > 0.0f;
+					});
+
+					if (it_spring != nodes[i].cost.end()) {
+						index_spring = static_cast<int>(
+							std::distance(nodes[i].cost.begin(), it_spring));
+					}
+				}
+
 
 				float start_cost = 0.0f;
 				float end_cost = 0.0f;

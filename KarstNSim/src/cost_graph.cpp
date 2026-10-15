@@ -369,9 +369,11 @@ namespace KarstNSim {
 
 		path.push_back(source);
 
-		// Keep the same convention as the existing path-cost vectors: the first
-		// node has no incoming edge and therefore receives a zero cost.
+		// The source node has no incoming edge. Its cost is initialized as a
+		// placeholder and replaced by the first traversed edge weight.
+		// A zero-length path (source == target) legitimately retains zero.
 		path_cost.push_back(0.0f);
+
 
 		if (source == target) {
 			total_cost = 0.0f;
@@ -407,8 +409,15 @@ namespace KarstNSim {
 				return std::make_pair(path, path_cost);
 			}
 
+
+			// Assign the first traversed edge cost to the initial path node.
+			if (path.size() == 1u) {
+				path_cost.front() = edge_weight;
+			}
+
 			path.push_back(next);
 			path_cost.push_back(edge_weight);
+
 
 			if (next == target) {
 				total_cost =

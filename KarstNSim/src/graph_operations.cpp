@@ -2152,11 +2152,20 @@ namespace KarstNSim {
 											continue;
 										}
 
+
+										// If the inlet already lies on the water table, the vadose path
+										// contains a single node and no traversed edge. Assign the cost
+										// of the first effective phreatic edge to this initial node.
+										if (path_full.size() == 1u) {
+											path_cost_full.front() = path_cost_phreatic[1];
+										}
+
 										// Avoid duplicating the reached water-table node.
 										path_full.insert(
 											path_full.end(),
 											path_phreatic.begin() + 1,
 											path_phreatic.end());
+
 
 										path_cost_full.insert(
 											path_cost_full.end(),
