@@ -1,0 +1,668 @@
+{
+  "date": "2026-09-24",
+  "platform": "Linux x86_64",
+  "cpu": "AMD Ryzen 7 5800X3D",
+  "compiler": "GCC 13.3, CMake Release, C++17",
+  "optimized_cpp_commit": "e88f7cf47fb5f7a9aa0a912096df0d331f33e354",
+  "upstream_reference_commit": "ff55d3969842f456908a6946c8bc8160a5d65965",
+  "timing_method": "GNU time elapsed; serial single observations on a shared host; nice 5",
+  "measurement_limits": {
+    "address_space_bytes": 5368709120,
+    "single_file_bytes": 4294967296,
+    "wall_seconds": 600,
+    "host_memory_reserve_bytes": 2147483648
+  },
+  "cases": [
+    {
+      "case": {
+        "name": "base_control"
+      },
+      "parameter_updates": {
+        "main_repository": ".",
+        "nghb_count": "100"
+      },
+      "binary_sha256": "13cc6e26b7a055614aaa27a4e507c5cf85327476029ed4ce2bfafebc09efce51",
+      "status": "completed",
+      "exit_code": 0,
+      "peak_rss_bytes": 722644992,
+      "support_points": [
+        549999
+      ],
+      "output_bytes": 16883553,
+      "exports": {
+        "base_0_connectivity_matrix.txt": {
+          "sha256": "d591c1244229448e6a468d14dde467e37d90529a1d030b4d639ed069eaeaf123",
+          "bytes": 20
+        },
+        "base_0_karst.txt": {
+          "sha256": "c345582d7df7a1e78684f3ebb562499667f9a579f583b075cba468afe90fa096",
+          "bytes": 32980
+        },
+        "base_0_pts.txt": {
+          "sha256": "3e64fae90bb99eca74ae743a350d970df4f7c208b51e256ca0c51691b6bca73c",
+          "bytes": 16723293
+        },
+        "base_0_s_pts.txt": {
+          "sha256": "d8e3e224bfa91509380cbe1252bd36a9f5875e97790158e09200d3be8f2a8822",
+          "bytes": 127260
+        }
+      },
+      "wall_seconds": 19.01,
+      "wall_time_source": "GNU time elapsed wall clock",
+      "input_sha256": {
+        "connectivity_matrix.txt": "bd1e3565ba2f6e614150364fa9109b09db77add9f749f67d3472f827d7a0bdea",
+        "instructions.txt": "fc047a4c7709ce64da6445be58ee7537a62908ae3fe656aee0cb94477e44c76f"
+      },
+      "stage_cpu_seconds": {
+        "-> STEP 1 completed: Cost graph generated": 17.417,
+        "-> STEP 2 completed: Skeleton computed": 1.259
+      }
+    },
+    {
+      "case": {
+        "name": "neighbors_200",
+        "neighbors": 200
+      },
+      "parameter_updates": {
+        "main_repository": ".",
+        "nghb_count": "200"
+      },
+      "binary_sha256": "13cc6e26b7a055614aaa27a4e507c5cf85327476029ed4ce2bfafebc09efce51",
+      "status": "completed",
+      "exit_code": 0,
+      "peak_rss_bytes": 1382539264,
+      "support_points": [
+        549999
+      ],
+      "output_bytes": 16875471,
+      "exports": {
+        "base_0_connectivity_matrix.txt": {
+          "sha256": "d591c1244229448e6a468d14dde467e37d90529a1d030b4d639ed069eaeaf123",
+          "bytes": 20
+        },
+        "base_0_karst.txt": {
+          "sha256": "d3604245f9b0c1d8505a2544b47d461b469fadec26353c3b2abe6b5aab43c80d",
+          "bytes": 24898
+        },
+        "base_0_pts.txt": {
+          "sha256": "3e64fae90bb99eca74ae743a350d970df4f7c208b51e256ca0c51691b6bca73c",
+          "bytes": 16723293
+        },
+        "base_0_s_pts.txt": {
+          "sha256": "d8e3e224bfa91509380cbe1252bd36a9f5875e97790158e09200d3be8f2a8822",
+          "bytes": 127260
+        }
+      },
+      "wall_seconds": 31.26,
+      "wall_time_source": "GNU time elapsed wall clock",
+      "input_sha256": {
+        "connectivity_matrix.txt": "bd1e3565ba2f6e614150364fa9109b09db77add9f749f67d3472f827d7a0bdea",
+        "instructions.txt": "3b8400b6fc20a2d253dc5d40f892d717eb3238e0a244cdee16ff2e41ed4d866a"
+      },
+      "stage_cpu_seconds": {
+        "-> STEP 1 completed: Cost graph generated": 28.714,
+        "-> STEP 2 completed: Skeleton computed": 2.2
+      }
+    },
+    {
+      "case": {
+        "name": "two_water_tables",
+        "water_tables": true
+      },
+      "parameter_updates": {
+        "main_repository": ".",
+        "nghb_count": "100",
+        "springs": "springs-wt12.txt",
+        "surf_wat_table": "Input_files/1_base/example_watertable_surf1.txt Input_files/1_base/example_watertable_surf2.txt"
+      },
+      "binary_sha256": "13cc6e26b7a055614aaa27a4e507c5cf85327476029ed4ce2bfafebc09efce51",
+      "status": "completed",
+      "exit_code": 0,
+      "peak_rss_bytes": 954765312,
+      "support_points": [
+        555068
+      ],
+      "output_bytes": 17056610,
+      "exports": {
+        "base_0_connectivity_matrix.txt": {
+          "sha256": "14dd2e325d89f4e6ff72c754270b9548648ce639378ec8096506070db38dedea",
+          "bytes": 20
+        },
+        "base_0_karst.txt": {
+          "sha256": "ac15eac188cb2a6a09b6330b90010d47c19b739a410888fe368cde32c44e9283",
+          "bytes": 50160
+        },
+        "base_0_pts.txt": {
+          "sha256": "9d0a258adfa60a3a3fe9ff538a021db927e29d14cdf3e91f5bfa513660215b4f",
+          "bytes": 16879170
+        },
+        "base_0_s_pts.txt": {
+          "sha256": "d8e3e224bfa91509380cbe1252bd36a9f5875e97790158e09200d3be8f2a8822",
+          "bytes": 127260
+        }
+      },
+      "wall_seconds": 22.39,
+      "wall_time_source": "GNU time elapsed wall clock",
+      "input_sha256": {
+        "connectivity_matrix.txt": "14dd2e325d89f4e6ff72c754270b9548648ce639378ec8096506070db38dedea",
+        "instructions.txt": "35f9ff3ee9f6012f0b746fafa40c7f6274c3feffae4de028ecc8490e419e8fd5",
+        "springs-wt12.txt": "8156f85f78cc4f74b2cc90d743a6ea74f921ea8a06d97c3f7ad243f48dd2980e"
+      },
+      "stage_cpu_seconds": {
+        "-> STEP 1 completed: Cost graph generated": 20.364,
+        "-> STEP 2 completed: Skeleton computed": 1.673
+      }
+    },
+    {
+      "case": {
+        "name": "combined_features_full",
+        "features": true
+      },
+      "parameter_updates": {
+        "main_repository": ".",
+        "nghb_count": "100",
+        "springs": "springs-wt12.txt",
+        "surf_wat_table": "Input_files/1_base/example_watertable_surf1.txt Input_files/1_base/example_watertable_surf2.txt",
+        "use_waypoints": "true",
+        "use_previous_networks": "true",
+        "previous_networks": "Input_files/3_amplification/base_0_karst.txt Input_files/3_amplification/polyphasic_0_karst.txt",
+        "fraction_old_karst_perm": "0.5",
+        "use_deadend_points": "true",
+        "nb_deadend_points": "20",
+        "max_distance_of_deadend_pts": "150",
+        "use_cycle_amplification": "true",
+        "max_distance_amplification": "300",
+        "nb_cycles": "30",
+        "use_noise": "true",
+        "use_noise_on_all": "false",
+        "simulate_sections": "true"
+      },
+      "binary_sha256": "13cc6e26b7a055614aaa27a4e507c5cf85327476029ed4ce2bfafebc09efce51",
+      "status": "completed",
+      "exit_code": 0,
+      "peak_rss_bytes": 979030016,
+      "support_points": [
+        555333
+      ],
+      "output_bytes": 24685328,
+      "exports": {
+        "base_0_connectivity_matrix.txt": {
+          "sha256": "14dd2e325d89f4e6ff72c754270b9548648ce639378ec8096506070db38dedea",
+          "bytes": 20
+        },
+        "base_0_karst.txt": {
+          "sha256": "c23a3f0d9b7600b3716f87846157f63891eda430d6a8c9918e228676ff2036fd",
+          "bytes": 174656
+        },
+        "base_0_pts.txt": {
+          "sha256": "b56a7f2c14afa19f61b45270857a7248327364717ef1e8cfe7d1639dd6a493cd",
+          "bytes": 24383392
+        },
+        "base_0_s_pts.txt": {
+          "sha256": "d8e3e224bfa91509380cbe1252bd36a9f5875e97790158e09200d3be8f2a8822",
+          "bytes": 127260
+        }
+      },
+      "wall_seconds": 63.02,
+      "wall_time_source": "GNU time elapsed wall clock",
+      "input_sha256": {
+        "connectivity_matrix.txt": "14dd2e325d89f4e6ff72c754270b9548648ce639378ec8096506070db38dedea",
+        "instructions.txt": "1d6453a5729f38636cea1895847ca5e87f7f609bb92d2bf78d16435b5b982581",
+        "springs-wt12.txt": "8156f85f78cc4f74b2cc90d743a6ea74f921ea8a06d97c3f7ad243f48dd2980e"
+      },
+      "stage_cpu_seconds": {
+        "-> STEP 1 completed: Cost graph generated": 21.423,
+        "-> STEP 2 completed: Skeleton computed": 1.825,
+        "-> STEP 3 completed: Network amplified": 39.341,
+        "-> STEP 4 completed: Conduit sections generated": 0.023
+      }
+    },
+    {
+      "case": {
+        "name": "denser_080",
+        "radius_scale": 0.8
+      },
+      "parameter_updates": {
+        "main_repository": ".",
+        "nghb_count": "100",
+        "domain": "density-box.txt"
+      },
+      "binary_sha256": "13cc6e26b7a055614aaa27a4e507c5cf85327476029ed4ce2bfafebc09efce51",
+      "status": "completed",
+      "exit_code": 0,
+      "peak_rss_bytes": 1390796800,
+      "support_points": [
+        1068440
+      ],
+      "output_bytes": 32830362,
+      "exports": {
+        "base_0_connectivity_matrix.txt": {
+          "sha256": "d591c1244229448e6a468d14dde467e37d90529a1d030b4d639ed069eaeaf123",
+          "bytes": 20
+        },
+        "base_0_karst.txt": {
+          "sha256": "c7f80592fac13f5daceba03f858342407f3f46766984caf6b7e3dd344fe7a44e",
+          "bytes": 42712
+        },
+        "base_0_pts.txt": {
+          "sha256": "886f37674106041a1ef3f7358326405c98bc426be7d16228535dc442b0e8d7d6",
+          "bytes": 32660370
+        },
+        "base_0_s_pts.txt": {
+          "sha256": "d8e3e224bfa91509380cbe1252bd36a9f5875e97790158e09200d3be8f2a8822",
+          "bytes": 127260
+        }
+      },
+      "wall_seconds": 46.43,
+      "wall_time_source": "GNU time elapsed wall clock",
+      "input_sha256": {
+        "connectivity_matrix.txt": "bd1e3565ba2f6e614150364fa9109b09db77add9f749f67d3472f827d7a0bdea",
+        "instructions.txt": "06a6529388ceff6e9d5bc79ee2a6b1c39896974c36ce443fc50ea1220b5bb9bd",
+        "density-box.txt": "ec7a365c93d01756b260b299b53e52851c8a524534a3a8092ded71a1b53ecf1d"
+      },
+      "stage_cpu_seconds": {
+        "-> STEP 1 completed: Cost graph generated": 42.883,
+        "-> STEP 2 completed: Skeleton computed": 3.022
+      }
+    },
+    {
+      "case": {
+        "name": "denser_060",
+        "radius_scale": 0.6
+      },
+      "parameter_updates": {
+        "main_repository": ".",
+        "nghb_count": "100",
+        "domain": "density-box.txt"
+      },
+      "binary_sha256": "13cc6e26b7a055614aaa27a4e507c5cf85327476029ed4ce2bfafebc09efce51",
+      "status": "completed",
+      "exit_code": 0,
+      "peak_rss_bytes": 3187089408,
+      "support_points": [
+        2519423
+      ],
+      "output_bytes": 78708423,
+      "exports": {
+        "base_0_connectivity_matrix.txt": {
+          "sha256": "d591c1244229448e6a468d14dde467e37d90529a1d030b4d639ed069eaeaf123",
+          "bytes": 20
+        },
+        "base_0_karst.txt": {
+          "sha256": "b329eb556feaa525d29cbba5dbfcc7679ecd79152531e4df545482198edaa7b4",
+          "bytes": 56070
+        },
+        "base_0_pts.txt": {
+          "sha256": "8dd656d9df94e7a5a69fcb1fbb583e1bf761907c1938aaff1f937e10e899a84e",
+          "bytes": 78525073
+        },
+        "base_0_s_pts.txt": {
+          "sha256": "d8e3e224bfa91509380cbe1252bd36a9f5875e97790158e09200d3be8f2a8822",
+          "bytes": 127260
+        }
+      },
+      "wall_seconds": 129.15,
+      "wall_time_source": "GNU time elapsed wall clock",
+      "input_sha256": {
+        "connectivity_matrix.txt": "bd1e3565ba2f6e614150364fa9109b09db77add9f749f67d3472f827d7a0bdea",
+        "instructions.txt": "06a6529388ceff6e9d5bc79ee2a6b1c39896974c36ce443fc50ea1220b5bb9bd",
+        "density-box.txt": "d8713a114efe6d47b270ed78035e669640146556eeb20c425824193b72676148"
+      },
+      "stage_cpu_seconds": {
+        "-> STEP 1 completed: Cost graph generated": 116.636,
+        "-> STEP 2 completed: Skeleton computed": 11.503
+      }
+    },
+    {
+      "case": {
+        "name": "denser_features_080",
+        "radius_scale": 0.8,
+        "neighbors": 150,
+        "features": true
+      },
+      "parameter_updates": {
+        "main_repository": ".",
+        "nghb_count": "150",
+        "domain": "density-box.txt",
+        "springs": "springs-wt12.txt",
+        "surf_wat_table": "Input_files/1_base/example_watertable_surf1.txt Input_files/1_base/example_watertable_surf2.txt",
+        "use_waypoints": "true",
+        "use_previous_networks": "true",
+        "previous_networks": "Input_files/3_amplification/base_0_karst.txt Input_files/3_amplification/polyphasic_0_karst.txt",
+        "fraction_old_karst_perm": "0.5",
+        "use_deadend_points": "true",
+        "nb_deadend_points": "20",
+        "max_distance_of_deadend_pts": "150",
+        "use_cycle_amplification": "true",
+        "max_distance_amplification": "300",
+        "nb_cycles": "30",
+        "use_noise": "true",
+        "use_noise_on_all": "false",
+        "simulate_sections": "true"
+      },
+      "binary_sha256": "13cc6e26b7a055614aaa27a4e507c5cf85327476029ed4ce2bfafebc09efce51",
+      "status": "completed",
+      "exit_code": 0,
+      "peak_rss_bytes": 2678960128,
+      "support_points": [
+        1073773
+      ],
+      "output_bytes": 47634373,
+      "exports": {
+        "base_0_connectivity_matrix.txt": {
+          "sha256": "14dd2e325d89f4e6ff72c754270b9548648ce639378ec8096506070db38dedea",
+          "bytes": 20
+        },
+        "base_0_karst.txt": {
+          "sha256": "fc154c31c0aae12524f67b59c675953735e8164d5574c2baca2ca6f5ce0c7835",
+          "bytes": 182137
+        },
+        "base_0_pts.txt": {
+          "sha256": "577e4410eddb9958cd80da58f225af22e156049ea226fcd9935b64c8d99437ff",
+          "bytes": 47324956
+        },
+        "base_0_s_pts.txt": {
+          "sha256": "d8e3e224bfa91509380cbe1252bd36a9f5875e97790158e09200d3be8f2a8822",
+          "bytes": 127260
+        }
+      },
+      "wall_seconds": 174.65,
+      "wall_time_source": "GNU time elapsed wall clock",
+      "input_sha256": {
+        "connectivity_matrix.txt": "14dd2e325d89f4e6ff72c754270b9548648ce639378ec8096506070db38dedea",
+        "instructions.txt": "c7e771a44109998a2d961689bb33389197fc25da75ca91b6d66d365aae37d6f5",
+        "springs-wt12.txt": "8156f85f78cc4f74b2cc90d743a6ea74f921ea8a06d97c3f7ad243f48dd2980e",
+        "density-box.txt": "ec7a365c93d01756b260b299b53e52851c8a524534a3a8092ded71a1b53ecf1d"
+      },
+      "stage_cpu_seconds": {
+        "-> STEP 1 completed: Cost graph generated": 65.588,
+        "-> STEP 2 completed: Skeleton computed": 6.911,
+        "-> STEP 3 completed: Network amplified": 100.292,
+        "-> STEP 4 completed: Conduit sections generated": 0.022
+      }
+    },
+    {
+      "case": {
+        "name": "full_graph_export_costs",
+        "graph_export": true
+      },
+      "parameter_updates": {
+        "main_repository": ".",
+        "nghb_count": "100",
+        "create_nghb_graph": "true",
+        "create_nghb_graph_property": "true"
+      },
+      "binary_sha256": "13cc6e26b7a055614aaa27a4e507c5cf85327476029ed4ce2bfafebc09efce51",
+      "status": "allocation_failed_under_5_gib_address_space_limit",
+      "exit_code": 1,
+      "peak_rss_bytes": 4019417088,
+      "support_points": [
+        549999
+      ],
+      "output_bytes": 16850553,
+      "exports": {
+        "base_0_pts.txt": {
+          "sha256": "3e64fae90bb99eca74ae743a350d970df4f7c208b51e256ca0c51691b6bca73c",
+          "bytes": 16723293
+        },
+        "base_0_s_pts.txt": {
+          "sha256": "d8e3e224bfa91509380cbe1252bd36a9f5875e97790158e09200d3be8f2a8822",
+          "bytes": 127260
+        }
+      },
+      "wall_seconds": 31.95,
+      "wall_time_source": "GNU time elapsed wall clock",
+      "input_sha256": {
+        "connectivity_matrix.txt": "bd1e3565ba2f6e614150364fa9109b09db77add9f749f67d3472f827d7a0bdea",
+        "instructions.txt": "c9e7d94bcd41a1cf313a8897fad2e4cd8a911d538071cd3188656848dca177e0"
+      },
+      "stage_cpu_seconds": {}
+    },
+    {
+      "case": {
+        "name": "feature_parity_reference",
+        "radius_scale": 1.5,
+        "features": true,
+        "reference": true
+      },
+      "parameter_updates": {
+        "main_repository": ".",
+        "nghb_count": "100",
+        "domain": "density-box.txt",
+        "springs": "springs-wt12.txt",
+        "surf_wat_table": "Input_files/1_base/example_watertable_surf1.txt Input_files/1_base/example_watertable_surf2.txt",
+        "use_waypoints": "true",
+        "use_previous_networks": "true",
+        "previous_networks": "Input_files/3_amplification/base_0_karst.txt Input_files/3_amplification/polyphasic_0_karst.txt",
+        "fraction_old_karst_perm": "0.5",
+        "use_deadend_points": "true",
+        "nb_deadend_points": "20",
+        "max_distance_of_deadend_pts": "150",
+        "use_cycle_amplification": "true",
+        "max_distance_amplification": "300",
+        "nb_cycles": "30",
+        "use_noise": "true",
+        "use_noise_on_all": "false",
+        "simulate_sections": "true"
+      },
+      "binary_sha256": "da488944d2e04d67e9dfa8918961c6fa0d2772957e1da37a6b02502e5345b255",
+      "status": "completed",
+      "exit_code": 0,
+      "peak_rss_bytes": 2461896704,
+      "support_points": [
+        171571
+      ],
+      "output_bytes": 7730306,
+      "exports": {
+        "base_0_connectivity_matrix.txt": {
+          "sha256": "14dd2e325d89f4e6ff72c754270b9548648ce639378ec8096506070db38dedea",
+          "bytes": 20
+        },
+        "base_0_karst.txt": {
+          "sha256": "e644cbe5ebcd2b9ec11706c841e72ca12c8564f44b68c3206273dc78fdf88ffc",
+          "bytes": 145576
+        },
+        "base_0_pts.txt": {
+          "sha256": "020de9decc0cdb13dbd36e422a33282c996d901fe7e2421f4480a871696157f5",
+          "bytes": 7457450
+        },
+        "base_0_s_pts.txt": {
+          "sha256": "d8e3e224bfa91509380cbe1252bd36a9f5875e97790158e09200d3be8f2a8822",
+          "bytes": 127260
+        }
+      },
+      "wall_seconds": 35.63,
+      "wall_time_source": "GNU time elapsed wall clock",
+      "input_sha256": {
+        "connectivity_matrix.txt": "14dd2e325d89f4e6ff72c754270b9548648ce639378ec8096506070db38dedea",
+        "instructions.txt": "a85aeb22c0701dc028e1048a63545daa808cd7a6dc99ea4dd026a721c87300a1",
+        "springs-wt12.txt": "8156f85f78cc4f74b2cc90d743a6ea74f921ea8a06d97c3f7ad243f48dd2980e",
+        "density-box.txt": "d11cf4e3982c145919d49d33f4aa884185ead9f8b3465837a196d8a84e3e9226"
+      },
+      "stage_cpu_seconds": {
+        "-> STEP 1 completed: Cost graph generated": 14.932,
+        "-> STEP 2 completed: Skeleton computed": 1.415,
+        "-> STEP 3 completed: Network amplified": 18.094,
+        "-> STEP 4 completed: Conduit sections generated": 0.017
+      }
+    },
+    {
+      "case": {
+        "name": "feature_parity_optimized",
+        "radius_scale": 1.5,
+        "features": true
+      },
+      "parameter_updates": {
+        "main_repository": ".",
+        "nghb_count": "100",
+        "domain": "density-box.txt",
+        "springs": "springs-wt12.txt",
+        "surf_wat_table": "Input_files/1_base/example_watertable_surf1.txt Input_files/1_base/example_watertable_surf2.txt",
+        "use_waypoints": "true",
+        "use_previous_networks": "true",
+        "previous_networks": "Input_files/3_amplification/base_0_karst.txt Input_files/3_amplification/polyphasic_0_karst.txt",
+        "fraction_old_karst_perm": "0.5",
+        "use_deadend_points": "true",
+        "nb_deadend_points": "20",
+        "max_distance_of_deadend_pts": "150",
+        "use_cycle_amplification": "true",
+        "max_distance_amplification": "300",
+        "nb_cycles": "30",
+        "use_noise": "true",
+        "use_noise_on_all": "false",
+        "simulate_sections": "true"
+      },
+      "binary_sha256": "13cc6e26b7a055614aaa27a4e507c5cf85327476029ed4ce2bfafebc09efce51",
+      "status": "completed",
+      "exit_code": 0,
+      "peak_rss_bytes": 319606784,
+      "support_points": [
+        171571
+      ],
+      "output_bytes": 7730306,
+      "exports": {
+        "base_0_connectivity_matrix.txt": {
+          "sha256": "14dd2e325d89f4e6ff72c754270b9548648ce639378ec8096506070db38dedea",
+          "bytes": 20
+        },
+        "base_0_karst.txt": {
+          "sha256": "e644cbe5ebcd2b9ec11706c841e72ca12c8564f44b68c3206273dc78fdf88ffc",
+          "bytes": 145576
+        },
+        "base_0_pts.txt": {
+          "sha256": "020de9decc0cdb13dbd36e422a33282c996d901fe7e2421f4480a871696157f5",
+          "bytes": 7457450
+        },
+        "base_0_s_pts.txt": {
+          "sha256": "d8e3e224bfa91509380cbe1252bd36a9f5875e97790158e09200d3be8f2a8822",
+          "bytes": 127260
+        }
+      },
+      "wall_seconds": 19.02,
+      "wall_time_source": "GNU time elapsed wall clock",
+      "input_sha256": {
+        "connectivity_matrix.txt": "14dd2e325d89f4e6ff72c754270b9548648ce639378ec8096506070db38dedea",
+        "instructions.txt": "a85aeb22c0701dc028e1048a63545daa808cd7a6dc99ea4dd026a721c87300a1",
+        "springs-wt12.txt": "8156f85f78cc4f74b2cc90d743a6ea74f921ea8a06d97c3f7ad243f48dd2980e",
+        "density-box.txt": "d11cf4e3982c145919d49d33f4aa884185ead9f8b3465837a196d8a84e3e9226"
+      },
+      "stage_cpu_seconds": {
+        "-> STEP 1 completed: Cost graph generated": 5.951,
+        "-> STEP 2 completed: Skeleton computed": 0.454,
+        "-> STEP 3 completed: Network amplified": 12.279,
+        "-> STEP 4 completed: Conduit sections generated": 0.017
+      }
+    },
+    {
+      "case": {
+        "name": "export_control_medium",
+        "radius_scale": 2.0
+      },
+      "parameter_updates": {
+        "main_repository": ".",
+        "nghb_count": "100",
+        "domain": "density-box.txt"
+      },
+      "binary_sha256": "13cc6e26b7a055614aaa27a4e507c5cf85327476029ed4ce2bfafebc09efce51",
+      "status": "completed",
+      "exit_code": 0,
+      "peak_rss_bytes": 111022080,
+      "support_points": [
+        72785
+      ],
+      "output_bytes": 2288766,
+      "exports": {
+        "base_0_connectivity_matrix.txt": {
+          "sha256": "d591c1244229448e6a468d14dde467e37d90529a1d030b4d639ed069eaeaf123",
+          "bytes": 20
+        },
+        "base_0_karst.txt": {
+          "sha256": "eec943808106e693132a211fa51c601e57286b84b11383f661e32420b7e1e294",
+          "bytes": 17482
+        },
+        "base_0_pts.txt": {
+          "sha256": "fc2e1545effee4a3090ed1c17acabaeedf6ede86e97c31dc3bde632664833184",
+          "bytes": 2144004
+        },
+        "base_0_s_pts.txt": {
+          "sha256": "d8e3e224bfa91509380cbe1252bd36a9f5875e97790158e09200d3be8f2a8822",
+          "bytes": 127260
+        }
+      },
+      "wall_seconds": 2.47,
+      "wall_time_source": "GNU time elapsed wall clock",
+      "input_sha256": {
+        "connectivity_matrix.txt": "bd1e3565ba2f6e614150364fa9109b09db77add9f749f67d3472f827d7a0bdea",
+        "instructions.txt": "06a6529388ceff6e9d5bc79ee2a6b1c39896974c36ce443fc50ea1220b5bb9bd",
+        "density-box.txt": "343d39b7554aa63ab962fcf1dfc25de7053777530ede514c24835ff82dde2264"
+      },
+      "stage_cpu_seconds": {
+        "-> STEP 1 completed: Cost graph generated": 2.053,
+        "-> STEP 2 completed: Skeleton computed": 0.127
+      }
+    },
+    {
+      "case": {
+        "name": "export_costs_medium",
+        "radius_scale": 2.0,
+        "graph_export": true
+      },
+      "parameter_updates": {
+        "main_repository": ".",
+        "nghb_count": "100",
+        "domain": "density-box.txt",
+        "create_nghb_graph": "true",
+        "create_nghb_graph_property": "true"
+      },
+      "binary_sha256": "13cc6e26b7a055614aaa27a4e507c5cf85327476029ed4ce2bfafebc09efce51",
+      "status": "completed",
+      "exit_code": 0,
+      "peak_rss_bytes": 2704633856,
+      "support_points": [
+        72785
+      ],
+      "output_bytes": 867276543,
+      "exports": {
+        "base_0_connectivity_matrix.txt": {
+          "sha256": "d591c1244229448e6a468d14dde467e37d90529a1d030b4d639ed069eaeaf123",
+          "bytes": 20
+        },
+        "base_0_karst.txt": {
+          "sha256": "eec943808106e693132a211fa51c601e57286b84b11383f661e32420b7e1e294",
+          "bytes": 17482
+        },
+        "base_0_nghb_graph.txt": {
+          "sha256": "61d0e1f6f99c700569bfb4d48a81a69c6d29cd77920387d73901f9c106a97177",
+          "bytes": 864987777
+        },
+        "base_0_pts.txt": {
+          "sha256": "fc2e1545effee4a3090ed1c17acabaeedf6ede86e97c31dc3bde632664833184",
+          "bytes": 2144004
+        },
+        "base_0_s_pts.txt": {
+          "sha256": "d8e3e224bfa91509380cbe1252bd36a9f5875e97790158e09200d3be8f2a8822",
+          "bytes": 127260
+        }
+      },
+      "wall_seconds": 293.05,
+      "wall_time_source": "GNU time elapsed wall clock",
+      "input_sha256": {
+        "connectivity_matrix.txt": "bd1e3565ba2f6e614150364fa9109b09db77add9f749f67d3472f827d7a0bdea",
+        "instructions.txt": "d10ef297dfd5a97db9240c8ff256e03d8e2e364878065871ed7c01855daf2499",
+        "density-box.txt": "343d39b7554aa63ab962fcf1dfc25de7053777530ede514c24835ff82dde2264"
+      },
+      "stage_cpu_seconds": {
+        "-> STEP 1 completed: Cost graph generated": 289.271,
+        "-> STEP 2 completed: Skeleton computed": 0.259
+      }
+    }
+  ],
+  "comparisons": {
+    "full_control_matches_original_exports": true,
+    "feature_pair_inputs_byte_identical": true,
+    "feature_pair_exports_byte_identical": true,
+    "feature_pair_peak_rss_reduction_percent": 87.01786376817864,
+    "medium_export_preserves_common_outputs": true,
+    "larger_optimized_only_cases_compared_to_upstream": false
+  }
+}

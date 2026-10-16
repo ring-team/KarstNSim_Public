@@ -1,0 +1,36 @@
+{
+  "date": "2026-09-24",
+  "platform": "Linux x86_64",
+  "compiler": "GCC 13.3.0",
+  "baseline_commit": "ff55d3969842f456908a6946c8bc8160a5d65965",
+  "builds": {
+    "release": {
+      "ctest_passed": 4,
+      "ctest_failed": 0,
+      "scientific_scenarios": 8,
+      "exports_matched": 33,
+      "binary_sha256": "13cc6e26b7a055614aaa27a4e507c5cf85327476029ed4ce2bfafebc09efce51"
+    },
+    "sanitize": {
+      "ctest_passed": 4,
+      "ctest_failed": 0,
+      "scientific_scenarios": 8,
+      "exports_matched": 33,
+      "binary_sha256": "eafa627651fec057f4ebcc250dc4ffa4200a26798c42166e743115fc1671475e"
+    }
+  },
+  "sanitizers": {
+    "asan_leak_detection": true,
+    "ubsan_halt_on_error": true,
+    "disabled_checks": []
+  },
+  "export_reference": {
+    "unchanged_upstream_exports": 31,
+    "neighbor_graph_exports_from_independent_one_line_fix": 2
+  },
+  "full_resolution_example": {
+    "exports_matched": 4,
+    "support_points": 549999,
+    "peak_rss_bytes": 721985536
+  }
+}
